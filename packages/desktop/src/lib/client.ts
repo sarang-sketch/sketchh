@@ -45,6 +45,9 @@ export interface SketchClient {
   /** Score eval cases through the harness. */
   eval(cases: EvalCase[]): Promise<EvalResult[]>
 
+  /** Capture run as eval case. */
+  captureEval?(params: { run: Partial<RunResult>; want?: { checks?: unknown[] }; evalsPath?: string }): Promise<EvalCase>
+
   /**
    * Attach a handler to the engine's event stream. Called for every event from
    * every run, in emission order. Subscribing mid-run yields only subsequent

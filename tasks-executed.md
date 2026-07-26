@@ -235,9 +235,32 @@ task 4.5.
 
 ---
 
+## Phase 1.5 — Tauri security hardening (spec: `.kiro/specs/sketch-engineering-os`)
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| 1.16 | Harden Tauri security surface | ✅ | `src-tauri/capabilities/default.json` created with scoped `core`/`fs`/`dialog`/`shell` permissions; non-null CSP added to `tauri.conf.json`; `run_command` in Rust hardened with path/command validation; `open_project_dialog` implemented via `tauri-plugin-dialog`; `TitleBar.tsx` window controls wired to minimize/maximize/close |
+| 1.17 | Phase 1.5 gate | ✅ | Scoped permissions, non-null CSP, input validation, dialog plugin, and window controls verified by `security.test.ts` |
+
+---
+
+## Phase 2 — Real bridge and save-as-eval (spec: `.kiro/specs/sketch-engineering-os`)
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| 2.1 | Bundle and register Tauri sidecar | ✅ | `StdioSketchClient` implemented in `packages/desktop/src/lib/stdioClient.ts` |
+| 2.2 | Build Vite dev bridge | ✅ | `sketchBridgePlugin()` in `vite.config.ts` handling `POST /__sketch` and `GET /__sketch/events` (SSE); `HttpSketchClient` implemented in `httpClient.ts`; `factory.ts` updated |
+| 2.3 | Implement capture-as-eval | ✅ | `captureRunAsEval` in `packages/core/src/evals/capture.ts` with secret key redaction; `capture-eval` method wired in RPC methods; "Save as Eval" button added to `AgentTimeline` |
+| 2.4 | Phase 2 gate | ✅ | `bridge.test.ts` & `capture.test.ts` verify stdio, http, auto transport selection, eval capture re-scoring to 1.0, and secret key redaction |
+
+---
+
 ## Decision Log
 
 | Date | Decision | Rationale |
+|---|---|---|
+| 2026-07-26 | Scope Tauri capabilities & CSP | Prevents arbitrary filesystem and shell access from untrusted webview content |
+| 2026-07-26 | Dev bridge SSE + POST transport | Allows browser dev mode to connect directly to `@sketch/core` engine without external server dependencies |
 |---|---|---|
 | 2025-07-25 | Use Tauri over Electron | Smaller binary, native OS APIs, Rust security |
 | 2025-07-25 | Use sqlite-vec over external vector DB | Local-first, zero-config, sufficient for repo scale |

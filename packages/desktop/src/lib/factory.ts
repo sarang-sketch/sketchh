@@ -9,6 +9,8 @@
 
 import type { SketchClient, TransportKind } from './client'
 import { MockSketchClient, type MockClientOptions } from './mockClient'
+import { StdioSketchClient } from './stdioClient'
+import { HttpSketchClient } from './httpClient'
 
 /** Values accepted in `VITE_BRIDGE`. */
 export type BridgeSetting = TransportKind | 'auto'
@@ -28,12 +30,13 @@ const VALID: readonly BridgeSetting[] = ['mock', 'stdio', 'http', 'auto']
  * - `VITE_BRIDGE=mock|stdio|http` selects explicitly and always wins.
  * - `VITE_BRIDGE=auto` picks the real transport for the host: sidecar inside
  *   Tauri, dev HTTP bridge in a plain browser.
- * - Unset falls back to 'mock'.
+ * - Unset behaves as `auto`.
  *
- * Unset resolves to 'mock' *for this phase only*. The real transports do not
- * exist until tasks 2.1 and 2.2, so defaulting to them would mean a shell that
- * cannot start. Once the sidecar ships, the default becomes 'auto' and Req 13.7
- * (no mock reachable on a real path) is enforced by that switch.
+ * THE DEFAULT IS A REAL TRANSPORT. It used to be 'mock', which meant an app
+ * started without `VITE_BRIDGE` set silently ran on fabricated data — the exact
+ * thing Requirement 13.7 forbids. Now both real transports exist, so the mock is
+ * reachable only by asking for it: `VITE_BRIDGE=mock`. A missing engine surfaces
+ * as an error state, which is information; a mock in its place is not.
  */
 export function resolveTransport({ bridge, hasTauri }: ResolveInput): TransportKind {
   const setting = (bridge ?? '').trim().toLowerCase()
@@ -45,8 +48,8 @@ export function resolveTransport({ bridge, hasTauri }: ResolveInput): TransportK
   }
 
   if (setting === 'mock' || setting === 'stdio' || setting === 'http') return setting
-  if (setting === 'auto') return hasTauri ? 'stdio' : 'http'
-  return 'mock'
+  // 'auto' and unset are the same rule.
+  return hasTauri ? 'stdio' : 'http'
 }
 
 export interface CreateClientOptions {
@@ -76,17 +79,9 @@ export function createSketchClient(options: CreateClientOptions = {}): SketchCli
       return new MockSketchClient(options.mock)
 
     case 'stdio':
-      // TODO(task 2.1): StdioSketchClient over the esbuild-bundled CLI sidecar.
-      throw new Error(
-        'StdioSketchClient is not implemented yet (task 2.1 — bundle and register the Tauri sidecar). ' +
-          'Unset VITE_BRIDGE to use the mock client.',
-      )
+      return new StdioSketchClient()
 
     case 'http':
-      // TODO(task 2.2): HttpSketchClient over POST /__sketch + GET /__sketch/events.
-      throw new Error(
-        'HttpSketchClient is not implemented yet (task 2.2 — Vite dev bridge). ' +
-          'Unset VITE_BRIDGE to use the mock client.',
-      )
+      return new HttpSketchClient()
   }
 }

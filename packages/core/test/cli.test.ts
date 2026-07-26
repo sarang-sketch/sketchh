@@ -507,26 +507,75 @@ describeCli(`parse-skill (Requirement 12.2)${CLI_SKIP_NOTE}`, () => {
 
 // ── 6. capture-eval ──────────────────────────────────────────────────────────
 
-describeCli(`capture-eval is declared but not implemented (Requirement 12.2)${CLI_SKIP_NOTE}`, () => {
-  it('answers ok: false with code not_implemented, naming task 2.3', async () => {
-    // PINNING THE STUB. `capture-eval` is registered so a client gets a stable,
-    // distinguishable answer instead of `unknown_method`; the body lands with
-    // `captureRunAsEval` in task 2.3. When that task implements it, this test is
-    // the one that must change — deliberately.
-    const t = await session([request('cap', 'capture-eval', { run: {}, want: 'anything' })])
+describeCli(`capture-eval implementation (Requirement 12.2, Task 2.3)${CLI_SKIP_NOTE}`, () => {
+  it('executes capture-eval method successfully over stdio', async () => {
+    // `task` is part of the params because verify commands exist nowhere else:
+    // a RunResult records VerifyResult, which carries no `cmd`.
+    const root = await makeTmp()
+    const evalsPath = join(root, 'evals.jsonl')
+    const task = { id: 'task_cli_capture', prompt: 'go', verify: [NOISY_PASS] }
+    const run = {
+      runId: 'run_cli_capture',
+      ok: true,
+      finalText: 'CLI capture test',
+      iterations: 1,
+      verify: [{ name: NOISY_PASS.name, ok: true, exitCode: 0, stdout: '', stderr: '', durationMs: 1 }],
+      events: [],
+    }
+    const t = await session([
+      request('cap', 'capture-eval', {
+        run,
+        task,
+        evalsPath,
+        want: { checks: [{ kind: 'verify-pass' }] },
+      }),
+    ])
 
     const frame = responseFor(t, 'cap')
-    expect(frame.ok).toBe(false)
-    if (frame.ok === false) {
-      expect(frame.code).toBe('not_implemented')
-      expect(frame.code).not.toBe('unknown_method')
-      expect(frame.error).toContain('capture-eval is not implemented yet')
-      expect(frame.error).toContain('task 2.3')
+    expect(frame.ok).toBe(true)
+    if (frame.ok === true) {
+      const result = frame.result as { id: string; checks: unknown[]; task: { verify: unknown[] } }
+      expect(result.id).toMatch(/^eval_/)
+      expect(result.checks).toEqual([{ kind: 'verify-pass' }])
+      // The stored command is the real executable, never the result's name.
+      expect(result.task.verify).toEqual([NOISY_PASS])
     }
+    expect(readFileSync(evalsPath, 'utf8').trim().split('\n')).toHaveLength(1)
     expect(t.exitCode).toBe(0)
   }, 30_000)
 
-  it('is nonetheless a known method, so all five of Requirement 12.2 are present', () => {
+  it('refuses to capture a verify-pass case it cannot replay, instead of inventing commands', async () => {
+    const root = await makeTmp()
+    const evalsPath = join(root, 'evals.jsonl')
+    const run = {
+      runId: 'run_cli_capture_no_task',
+      ok: true,
+      finalText: 'CLI capture test',
+      iterations: 1,
+      verify: [{ name: 'unit', ok: true, exitCode: 0, stdout: '', stderr: '', durationMs: 1 }],
+      events: [],
+    }
+    const t = await session([
+      request('cap-bad', 'capture-eval', {
+        run,
+        evalsPath,
+        want: { checks: [{ kind: 'verify-pass' }] },
+      }),
+      request('after', 'ping'),
+    ])
+
+    const frame = responseFor(t, 'cap-bad')
+    expect(frame.ok).toBe(false)
+    if (frame.ok === false) {
+      expect(frame.error).toContain('no verify commands are available to replay')
+    }
+    expect(existsSync(evalsPath)).toBe(false)
+    // ...and the process stays available.
+    expect(responseFor(t, 'after').ok).toBe(true)
+    expect(t.exitCode).toBe(0)
+  }, 30_000)
+
+  it('is a known method, so all five of Requirement 12.2 are present', () => {
     expect([...METHOD_NAMES].sort()).toEqual(
       ['capture-eval', 'eval', 'parse-skill', 'ping', 'run'].sort(),
     )

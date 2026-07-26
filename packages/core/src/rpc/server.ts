@@ -75,11 +75,19 @@ function codeFor(err: unknown): ErrorCode {
  * depth, so `{ provider: { apiKey } }` is covered without the handler having to
  * remember. Handlers additionally register keys explicitly; both paths feed the
  * same set.
+ *
+ * Exported because a second transport (the Vite dev bridge, Requirement 13.5)
+ * has to collect exactly the same values before dispatching, and a divergent
+ * second copy of this walk is precisely how a key leaks on one transport only.
  */
-function collectSecrets(value: unknown, into: (secret: string) => void, depth = 0): void {
+export function collectParamSecrets(
+  value: unknown,
+  into: (secret: string) => void,
+  depth = 0,
+): void {
   if (depth > 8 || value === null || typeof value !== 'object') return
   if (Array.isArray(value)) {
-    for (const item of value) collectSecrets(item, into, depth + 1)
+    for (const item of value) collectParamSecrets(item, into, depth + 1)
     return
   }
   for (const [key, inner] of Object.entries(value as Record<string, unknown>)) {
@@ -87,8 +95,74 @@ function collectSecrets(value: unknown, into: (secret: string) => void, depth = 
       if (isSensitiveKeyName(key) && inner.length >= MIN_SECRET_LENGTH) into(inner)
       continue
     }
-    collectSecrets(inner, into, depth + 1)
+    collectParamSecrets(inner, into, depth + 1)
   }
+}
+
+/**
+ * What a {@link MethodContext} needs from its transport. The stdio server below
+ * supplies stdout and stderr; the dev bridge supplies an HTTP response and an SSE
+ * fan-out. Nothing else differs, which is why both build their context through
+ * {@link createMethodContext} rather than each inventing one.
+ */
+export interface MethodContextIO {
+  /**
+   * Deliver one frame produced by a handler — in practice always an event frame.
+   * The callee is responsible for sanitation; use {@link sanitizeFrame}.
+   */
+  writeFrame(frame: Frame): void
+  /** Diagnostics. Never the protocol channel (Requirement 12.5). */
+  writeErr(line: string): void
+  env: NodeJS.ProcessEnv
+  cwd: () => string
+  /**
+   * Credential values seen so far, MUTATED by `rememberSecret`. Shared across
+   * requests on one transport so a key seen in request 1 is still redacted out of
+   * request 2's frames.
+   */
+  secrets: Set<string>
+}
+
+/**
+ * The one construction of a handler context. Both transports call this; neither
+ * has its own copy of the emit/log/remember trio.
+ */
+export function createMethodContext(requestId: FrameId, io: MethodContextIO): MethodContext {
+  return {
+    emitEvent: (event) => {
+      io.writeFrame({
+        kind: 'event',
+        runId: event.runId,
+        requestId,
+        event,
+      })
+    },
+    log: (message) => io.writeErr(message),
+    rememberSecret: (value) => {
+      if (typeof value === 'string' && value.length >= MIN_SECRET_LENGTH) {
+        io.secrets.add(value)
+      }
+    },
+    secrets: () => [...envSecrets(io.env), ...io.secrets],
+    env: io.env,
+    cwd: io.cwd,
+  }
+}
+
+/**
+ * Scrub a frame against the environment's credential-shaped values plus every
+ * value remembered during this transport's lifetime. Applied to EVERY outgoing
+ * frame — response, error, and event alike — on every transport.
+ */
+export function sanitizeFrame(
+  frame: Frame,
+  env: NodeJS.ProcessEnv,
+  secrets: Iterable<string>,
+): Frame {
+  return sanitizePayload(frame as unknown as Record<string, unknown>, [
+    ...envSecrets(env),
+    ...secrets,
+  ]) as unknown as Frame
 }
 
 export class ProtocolServer {
@@ -158,7 +232,7 @@ export class ProtocolServer {
       return
     }
 
-    collectSecrets(request.params, (secret) => this.#secrets.add(secret))
+    collectParamSecrets(request.params, (secret) => this.#secrets.add(secret))
 
     try {
       const result = await handler(request.params, this.#contextFor(request))
@@ -170,25 +244,13 @@ export class ProtocolServer {
   }
 
   #contextFor(request: RequestFrame): MethodContext {
-    return {
-      emitEvent: (event) => {
-        this.#write({
-          kind: 'event',
-          runId: event.runId,
-          requestId: request.id,
-          event,
-        })
-      },
-      log: (message) => this.#io.writeErr(message),
-      rememberSecret: (value) => {
-        if (typeof value === 'string' && value.length >= MIN_SECRET_LENGTH) {
-          this.#secrets.add(value)
-        }
-      },
-      secrets: () => [...envSecrets(this.#env), ...this.#secrets],
+    return createMethodContext(request.id, {
+      writeFrame: (frame) => this.#write(frame),
+      writeErr: (message) => this.#io.writeErr(message),
       env: this.#env,
       cwd: this.#cwd,
-    }
+      secrets: this.#secrets,
+    })
   }
 
   #error(id: FrameId, code: ErrorCode, error: string): void {
@@ -197,11 +259,7 @@ export class ProtocolServer {
 
   /** The ONE stdout write. Sanitizes, serializes, and terminates the line. */
   #write(frame: Frame): void {
-    const safe = sanitizePayload(
-      frame as unknown as Record<string, unknown>,
-      [...envSecrets(this.#env), ...this.#secrets],
-    ) as unknown as Frame
-    this.#io.writeOut(encodeFrame(safe))
+    this.#io.writeOut(encodeFrame(sanitizeFrame(frame, this.#env, this.#secrets)))
   }
 }
 

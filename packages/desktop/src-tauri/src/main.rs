@@ -3,6 +3,8 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod command_policy;
+
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
@@ -79,10 +81,10 @@ fn write_file(path: String, content: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn open_project_dialog(window: tauri::Window) -> Result<Option<String>, String> {
-    // In production, use tauri dialog plugin. For now, return None.
-    let _ = window;
-    Ok(None)
+async fn open_project_dialog<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let folder = app.dialog().file().blocking_pick_folder();
+    Ok(folder.map(|p| p.to_string()))
 }
 
 // ── Git Commands ────────────────────────────────────────────────────────────
@@ -138,21 +140,31 @@ fn git_diff(project_root: String, file: Option<String>) -> Result<String, String
 
 // ── Shell Commands ──────────────────────────────────────────────────────────
 
+/// The terminal tool. A program from an allowlist, an argument VECTOR, a working
+/// directory contained in the open project, and an explicit confirmation — no
+/// shell anywhere in the path. The policy lives in `command_policy` so it is unit
+/// testable without a webview; see that module for why a denylist was removed
+/// rather than extended (Requirement 22.6).
 #[tauri::command]
-fn run_command(cwd: String, command: String) -> Result<CommandOutput, String> {
-    let output = if cfg!(target_os = "windows") {
-        std::process::Command::new("cmd")
-            .args(["/C", &command])
-            .current_dir(&cwd)
-            .output()
-    } else {
-        std::process::Command::new("sh")
-            .args(["-c", &command])
-            .current_dir(&cwd)
-            .output()
-    };
+fn run_command(
+    project_root: String,
+    cwd: String,
+    program: String,
+    args: Vec<String>,
+    confirmed: bool,
+) -> Result<CommandOutput, String> {
+    command_policy::require_confirmation(confirmed)?;
 
-    let output = output.map_err(|e| e.to_string())?;
+    let executable = command_policy::resolve_program(&program)?;
+    command_policy::check_args(&args)?;
+    let working_dir = command_policy::resolve_cwd(&project_root, &cwd)?;
+
+    // No shell: metacharacters in `args` reach the child as literal bytes.
+    let output = std::process::Command::new(&executable)
+        .args(&args)
+        .current_dir(&working_dir)
+        .output()
+        .map_err(|e| format!("failed to start '{}': {}", executable, e))?;
 
     Ok(CommandOutput {
         exit_code: output.status.code().unwrap_or(-1),
@@ -161,12 +173,23 @@ fn run_command(cwd: String, command: String) -> Result<CommandOutput, String> {
     })
 }
 
+/// What the terminal UI may offer. Exposed so a panel does not hardcode its own
+/// copy of the list and drift from what the backend actually permits.
+#[tauri::command]
+fn allowed_programs() -> Vec<String> {
+    command_policy::ALLOWED_PROGRAMS
+        .iter()
+        .map(|p| (*p).to_string())
+        .collect()
+}
+
 // ── Main ────────────────────────────────────────────────────────────────────
 
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             read_dir,
             read_file,
@@ -175,6 +198,7 @@ fn main() {
             git_status,
             git_diff,
             run_command,
+            allowed_programs,
         ])
         .run(tauri::generate_context!())
         .expect("error running Sketch");

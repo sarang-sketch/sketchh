@@ -25,7 +25,7 @@ import { dirname, join, resolve } from 'node:path'
 
 import { JsonlEventStore, MemoryEventStore, secretsFromEnv } from '../events/index.js'
 import type { EventStore } from '../events/index.js'
-import { runEvalSet, meanScore } from '../evals/index.js'
+import { runEvalSet, meanScore, captureRunAsEval } from '../evals/index.js'
 import type { EvalDeps } from '../evals/index.js'
 import { runTask } from '../loop/index.js'
 import { DiskFileWriter } from '../orchestrator/file-writer.js'
@@ -43,6 +43,7 @@ import type {
   EvalCase,
   ProviderConfig,
   ProviderKind,
+  RunResult,
   Skill,
   SketchEvent,
   Task,
@@ -441,25 +442,28 @@ async function parseSkill(params: Record<string, unknown>, _ctx: MethodContext):
 }
 
 /**
- * `capture-eval` — DECLARED, NOT YET IMPLEMENTED.
+ * Capture a run as an eval case (Requirement 8.1).
  *
- * Requirement 12.2 lists the method, so it is registered and answers with a
- * stable `not_implemented` code rather than looking like a typo'd method name
- * (`unknown_method`). A client can wire the call site now and branch on the code.
- *
- * It is not implemented HERE because the thing it wraps does not exist yet:
- * `captureRunAsEval(run, want)` is task 2.3, and it owns two contracts this
- * method would otherwise have to invent — how a `want` becomes `Check[]`, and the
- * exact `.sketch/evals/evals.jsonl` record shape that must re-score to 1.0
- * (Requirements 8.1, 8.2). Guessing either one here would put a wrong contract on
- * the wire that task 2.3 then has to break.
+ * `task` is part of the wire shape because verify commands exist nowhere else: a
+ * `RunResult` records `VerifyResult`, which has no `cmd`. A caller with no task
+ * sends none and gets a case with no `verify-pass` check — or an error when that
+ * leaves nothing to assert. See `evals/capture.ts` for why fabricating commands
+ * is not on the table.
  */
-async function captureEval(): Promise<unknown> {
-  throw new NotImplementedError(
-    'capture-eval is not implemented yet: it wraps captureRunAsEval(run, want), which ' +
-      'lands in task 2.3 (Requirements 8.1, 8.2). The method is registered so a client ' +
-      'can branch on code "not_implemented" rather than "unknown_method".',
-  )
+async function captureEval(params: unknown): Promise<unknown> {
+  const p = (params ?? {}) as {
+    run?: RunResult
+    task?: Task | null
+    want?: { checks?: Check[] }
+    evalsPath?: string
+  }
+  if (!p.run) {
+    throw new Error('capture-eval requires a "run" parameter')
+  }
+  return captureRunAsEval(p.run, p.task ?? null, {
+    checks: p.want?.checks,
+    evalsPath: p.evalsPath,
+  })
 }
 
 /** The method table. Requirement 12.2, exactly. */

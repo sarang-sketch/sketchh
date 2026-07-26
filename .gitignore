@@ -10,6 +10,10 @@ build/
 target/
 packages/desktop/src-tauri/gen/
 
+# Generated engine sidecar (rebuilt by `npm run build:sidecar`)
+packages/desktop/src-tauri/binaries/
+packages/desktop/src-tauri/resources/
+
 # Vite caches
 .vite/
 **/.vite/

@@ -4,14 +4,17 @@ import { describe, it, expect } from 'vitest'
 import { createSketchClient, resolveTransport } from './factory'
 
 describe('client factory', () => {
-  it('returns the mock client under the default environment', () => {
-    const client = createSketchClient({ bridge: undefined, hasTauri: false })
-    expect(client.transport).toBe('mock')
+  it('defaults to a real transport, never the mock', () => {
+    // Requirement 13.7: the mock is reachable only when it is asked for by name.
+    expect(createSketchClient({ bridge: undefined, hasTauri: false }).transport).toBe('http')
+    expect(createSketchClient({ bridge: undefined, hasTauri: true }).transport).toBe('stdio')
+    expect(createSketchClient({ bridge: 'mock', hasTauri: false }).transport).toBe('mock')
   })
 
   it('resolves the transport from VITE_BRIDGE', () => {
-    expect(resolveTransport({ bridge: undefined, hasTauri: false })).toBe('mock')
-    expect(resolveTransport({ bridge: '', hasTauri: true })).toBe('mock')
+    expect(resolveTransport({ bridge: undefined, hasTauri: false })).toBe('http')
+    expect(resolveTransport({ bridge: undefined, hasTauri: true })).toBe('stdio')
+    expect(resolveTransport({ bridge: '', hasTauri: true })).toBe('stdio')
     expect(resolveTransport({ bridge: 'mock', hasTauri: true })).toBe('mock')
     expect(resolveTransport({ bridge: 'stdio', hasTauri: false })).toBe('stdio')
     expect(resolveTransport({ bridge: 'http', hasTauri: false })).toBe('http')
@@ -24,8 +27,11 @@ describe('client factory', () => {
     expect(() => resolveTransport({ bridge: 'grpc', hasTauri: false })).toThrow(/not a transport/)
   })
 
-  it('names the task that will implement each unbuilt transport', () => {
-    expect(() => createSketchClient({ bridge: 'stdio', hasTauri: true })).toThrow(/task 2\.1/)
-    expect(() => createSketchClient({ bridge: 'http', hasTauri: false })).toThrow(/task 2\.2/)
+  it('instantiates real clients for stdio and http transports', () => {
+    const stdioClient = createSketchClient({ bridge: 'stdio', hasTauri: true })
+    expect(stdioClient.transport).toBe('stdio')
+
+    const httpClient = createSketchClient({ bridge: 'http', hasTauri: false })
+    expect(httpClient.transport).toBe('http')
   })
 })

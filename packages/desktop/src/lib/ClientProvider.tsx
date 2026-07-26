@@ -112,6 +112,12 @@ export function useSketchClient(): SketchClient {
   return useClientContext().client
 }
 
+/** Optional variant of useSketchClient that returns null if outside a provider. */
+export function useOptionalSketchClient(): SketchClient | null {
+  const ctx = useContext(ClientContext)
+  return ctx?.client ?? null
+}
+
 /** Every event seen so far, in emission order. The Timeline's only input. */
 export function useSketchEvents(): SketchEvent[] {
   return useClientContext().events

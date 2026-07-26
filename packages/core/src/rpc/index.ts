@@ -22,8 +22,17 @@ export type {
   ParseResult,
 } from './frames.js'
 
-export { ProtocolServer, createServer, main } from './server.js'
-export type { ServerIO } from './server.js'
+export {
+  ProtocolServer,
+  createServer,
+  main,
+  // Shared transport seams. The stdio server and the Vite dev bridge build their
+  // handler context and scrub their frames through these same three functions.
+  createMethodContext,
+  sanitizeFrame,
+  collectParamSecrets,
+} from './server.js'
+export type { ServerIO, MethodContextIO } from './server.js'
 
 export {
   METHODS,

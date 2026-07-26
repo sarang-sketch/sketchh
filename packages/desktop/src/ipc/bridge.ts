@@ -82,8 +82,42 @@ export async function cancelTask(taskId: string): Promise<void> {
 
 // ── Terminal ────────────────────────────────────────────────────────────────
 
-export async function runCommand(cwd: string, command: string): Promise<{ exitCode: number; stdout: string; stderr: string }> {
-  return invoke<{ exitCode: number; stdout: string; stderr: string }>('run_command', { cwd, command })
+export interface CommandOutput {
+  exitCode: number
+  stdout: string
+  stderr: string
+}
+
+export interface RunCommandRequest {
+  /** The open project. The backend refuses any cwd outside it. */
+  projectRoot: string
+  /** Absolute or project-relative. Empty means the project root itself. */
+  cwd?: string
+  /** An allowlisted program name. Not a shell line — see `allowedPrograms()`. */
+  program: string
+  /** Passed to the child verbatim. There is no shell, so nothing is re-parsed. */
+  args?: string[]
+  /**
+   * Must be true. The UI asks the user first (the terminal panel owns that
+   * prompt); the backend refuses an unconfirmed call regardless, so forgetting to
+   * ask cannot execute anything (Requirement 22.6).
+   */
+  confirmed: boolean
+}
+
+export async function runCommand(request: RunCommandRequest): Promise<CommandOutput> {
+  return invoke<CommandOutput>('run_command', {
+    projectRoot: request.projectRoot,
+    cwd: request.cwd ?? '',
+    program: request.program,
+    args: request.args ?? [],
+    confirmed: request.confirmed,
+  })
+}
+
+/** The programs the backend will start. The source of truth is the Rust allowlist. */
+export async function allowedPrograms(): Promise<string[]> {
+  return invoke<string[]>('allowed_programs')
 }
 
 // ── Git ─────────────────────────────────────────────────────────────────────

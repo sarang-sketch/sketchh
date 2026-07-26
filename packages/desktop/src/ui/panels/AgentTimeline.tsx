@@ -11,7 +11,7 @@
 
 import { useState } from 'react'
 import type { SketchEvent } from '../../lib/contracts'
-import { useEngineStatus, useSketchEvents } from '../../lib/ClientProvider'
+import { useEngineStatus, useSketchEvents, useOptionalSketchClient } from '../../lib/ClientProvider'
 import styles from './AgentTimeline.module.css'
 
 export interface AgentTimelineProps {
@@ -83,6 +83,7 @@ function summarize(event: SketchEvent): string {
 
 export function AgentTimeline({ events, transportLabel }: AgentTimelineProps) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const client = useOptionalSketchClient()
 
   const toggle = (id: string) =>
     setExpanded((prev) => {
@@ -91,6 +92,27 @@ export function AgentTimeline({ events, transportLabel }: AgentTimelineProps) {
       else next.add(id)
       return next
     })
+
+  const handleCaptureRun = async (run: RunGroup) => {
+    if (!client || typeof client.captureEval !== 'function') return
+    try {
+      const promptEvent = run.events.find(e => e.kind === 'run_started')
+      const prompt = typeof promptEvent?.payload?.prompt === 'string' ? promptEvent.payload.prompt : 'Captured run'
+      await client.captureEval({
+        run: {
+          runId: run.runId,
+          ok: runOutcome(run.events) === 'completed',
+          finalText: prompt,
+          iterations: run.events.length,
+          verify: [],
+          events: run.events,
+        },
+        want: { checks: [{ kind: 'verify-pass' }] },
+      })
+    } catch {
+      // capture error handler
+    }
+  }
 
   const runs = groupByRun(events)
 
@@ -123,6 +145,16 @@ export function AgentTimeline({ events, transportLabel }: AgentTimelineProps) {
                 <header className={styles.runHeader}>
                   <span className={styles.runId}>{run.runId}</span>
                   <span className={`${styles.outcome} ${styles[outcome]}`}>{outcome}</span>
+                  {outcome !== 'running' && (
+                    <button 
+                      type="button" 
+                      className={styles.captureBtn}
+                      title="Save run as evaluation case"
+                      onClick={() => handleCaptureRun(run)}
+                    >
+                      Save as Eval
+                    </button>
+                  )}
                 </header>
 
                 <ol className={styles.events}>

@@ -30,3 +30,39 @@ export * as loop from './loop/index.js'
 // The eval harness: `evals.runEvalSet(cases, deps)` and `evals.meanScore(results)`.
 // Built before the things it judges — every lift claim is measured through it.
 export * as evals from './evals/index.js'
+
+// RPC method handlers plus the transport seams a second transport needs.
+//
+// The Vite dev bridge (packages/desktop/vite.config.ts) is a real transport for
+// this protocol: it parses requests with `parseRequest`, builds its handler
+// context with `createMethodContext`, and scrubs every outgoing frame with
+// `sanitizeFrame`. Exporting these keeps it from growing its own copies, which is
+// how the two transports drifted in the first place.
+export {
+  METHODS,
+  METHOD_NAMES,
+  InvalidParamsError,
+  NotImplementedError,
+} from './rpc/methods.js'
+export type { MethodContext, MethodHandler } from './rpc/methods.js'
+
+export {
+  parseRequest,
+  encodeFrame,
+  isEventFrame,
+  isResponseFrame,
+  ERROR_CODES,
+} from './rpc/frames.js'
+export type {
+  Frame,
+  FrameId,
+  ErrorCode,
+  RequestFrame,
+  ResponseFrame,
+  EventFrame,
+  ParseResult,
+} from './rpc/frames.js'
+
+export { createMethodContext, sanitizeFrame, collectParamSecrets } from './rpc/server.js'
+export type { MethodContextIO } from './rpc/server.js'
+

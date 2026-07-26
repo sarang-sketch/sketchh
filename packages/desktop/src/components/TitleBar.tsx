@@ -35,6 +35,41 @@ export function TitleBar() {
     </div>
   );
 
+  const handleMinimize = async () => {
+    try {
+      const { getCurrentWindow } = await import('@tauri-apps/api/window');
+      await getCurrentWindow().minimize();
+    } catch {
+      // Browser fallback
+    }
+  };
+
+  const handleMaximize = async () => {
+    try {
+      const { getCurrentWindow } = await import('@tauri-apps/api/window');
+      await getCurrentWindow().toggleMaximize();
+    } catch {
+      // Browser fallback
+    }
+  };
+
+  const handleClose = async () => {
+    try {
+      const { getCurrentWindow } = await import('@tauri-apps/api/window');
+      await getCurrentWindow().close();
+    } catch {
+      // Browser fallback
+    }
+  };
+
+  const renderWindowControls = () => (
+    <div className={styles.windowControls}>
+      <button className={styles.winBtn} title="Minimize" onClick={handleMinimize}>—</button>
+      <button className={styles.winBtn} title="Maximize" onClick={handleMaximize}>☐</button>
+      <button className={styles.winBtnClose} title="Close" onClick={handleClose}>✕</button>
+    </div>
+  );
+
   return (
     <div className={`${styles.titleBar} ${isIde ? styles.ideTitleBar : styles.agentTitleBar}`} data-tauri-drag-region>
       {isIde ? (
@@ -80,11 +115,7 @@ export function TitleBar() {
             </div>
             
             {/* Window controls */}
-            <div className={styles.windowControls}>
-              <span className={styles.winBtn}>—</span>
-              <span className={styles.winBtn}>☐</span>
-              <span className={styles.winBtnClose}>✕</span>
-            </div>
+            {renderWindowControls()}
           </div>
         </>
       ) : (
@@ -119,11 +150,8 @@ export function TitleBar() {
               <span>What's new</span>
             </button>
             
-            <div className={styles.windowControls}>
-              <span className={styles.winBtn}>—</span>
-              <span className={styles.winBtn}>☐</span>
-              <span className={styles.winBtnClose}>✕</span>
-            </div>
+            {/* Window controls */}
+            {renderWindowControls()}
           </div>
         </>
       )}

@@ -6,12 +6,13 @@
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",
-    "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "npm run build"
+    "beforeDevCommand": "npm run build:sidecar && npm run dev",
+    "beforeBuildCommand": "npm run build:sidecar && npm run build"
   },
   "app": {
     "windows": [
       {
+        "name": "main",
         "title": "Sketch",
         "width": 1280,
         "height": 800,
@@ -22,23 +23,20 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' ws: http: https:;"
     }
+  },
+  "bundle": {
+    "externalBin": ["binaries/sketch-engine"],
+    "resources": ["resources/sketch-engine.mjs"]
   },
   "plugins": {
     "shell": {
       "open": true,
-      "scope": [
-        {
-          "name": "run-command",
-          "cmd": "",
-          "args": true,
-          "sidecar": false
-        }
-      ]
+      "scope": []
     },
     "fs": {
-      "scope": ["**"]
+      "scope": ["$APPDIR/*", "$DESKTOP/*", "$DOCUMENT/*", "$DOWNLOAD/*"]
     }
   }
 }
