@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "sketch-desktop",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["vite", "--host", "--port", "1420"],
+      "port": 1420,
+      "cwd": "packages/desktop"
+    }
+  ]
+}

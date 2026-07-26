@@ -1,0 +1,179 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 16px;
+  height: 32px;
+}
+
+.title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: 0.5px;
+}
+
+.actions {
+  display: flex;
+  gap: 4px;
+}
+
+.actionBtn {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  transition: all 0.2s ease;
+}
+
+.actionBtn:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.emptyIcon {
+  margin-bottom: 16px;
+  color: var(--text-muted);
+}
+
+.openBtn {
+  margin-top: 16px;
+  background: linear-gradient(135deg, var(--accent), var(--purple));
+  color: #fff;
+  border: none;
+  border-radius: var(--radius);
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+}
+
+.openBtn:hover {
+  opacity: 0.9;
+}
+
+.treeContainer {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.projectName {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+  text-transform: uppercase;
+}
+
+.tree {
+  padding-bottom: 16px;
+}
+
+.treeNodeWrapper {
+  position: relative;
+}
+
+.childrenWrapper {
+  position: relative;
+}
+
+.indentLine {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  border-left: 1px dashed var(--border);
+  z-index: 0;
+}
+
+.treeNode {
+  display: flex;
+  align-items: center;
+  padding: 4px 8px;
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+  z-index: 1;
+  transition: background-color 0.1s ease;
+}
+
+.treeNode:hover {
+  background-color: var(--bg-hover);
+}
+
+.treeNode.active {
+  background-color: var(--accent-subtle);
+  color: var(--accent);
+}
+
+.chevron {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  margin-right: 4px;
+  transition: transform 0.15s ease;
+}
+
+.chevron.open {
+  transform: rotate(90deg);
+}
+
+.fileIconSpacer {
+  margin-left: 18px;
+  margin-right: 6px;
+  display: flex;
+  align-items: center;
+}
+
+.iconFolder {
+  color: var(--text-secondary);
+  margin-right: 6px;
+}
+
+.nodeName {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* File type colors */
+.iconTs { color: var(--accent); }
+.iconCss { color: var(--purple); }
+.iconJson { color: var(--warning); }
+.iconMd { color: var(--success); }
+.iconRust { color: var(--error); }
+.iconPython { color: var(--accent-hover); }
+.iconDefault { color: var(--text-secondary); }

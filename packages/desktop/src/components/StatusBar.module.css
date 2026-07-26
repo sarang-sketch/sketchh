@@ -1,0 +1,54 @@
+.statusBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 22px;
+  background-color: #121212;
+  border-top: 1px solid #262626;
+  padding: 0 10px;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  color: #737373;
+  user-select: none;
+}
+
+.left, .right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.statusDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #10b981;
+}
+
+.error { color: #f43f5e; display: flex; align-items: center; gap: 2px; }
+.warning { color: #f59e0b; display: flex; align-items: center; gap: 2px; }
+.zap { color: #f97316; }
+
+.badge {
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.badgeAgent {
+  background-color: rgba(249, 115, 22, 0.2);
+  color: #f97316;
+}
+
+.badgeIde {
+  background-color: rgba(249, 115, 22, 0.2);
+  color: #f97316;
+}
+

@@ -1,0 +1,13 @@
+{
+  // Emit config: src only. rootDir keeps dist/ mirroring src/ exactly, so no test
+  // file can ever land in the published output.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "declaration": true
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist", "test"]
+}

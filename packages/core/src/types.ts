@@ -1,0 +1,45 @@
+// Canonical contracts for @sketch/core.
+//
+// This file is THE contract. It is reproduced verbatim from the "Core contracts"
+// section of .kiro/specs/sketch-engineering-os/design.md. Every type here is
+// serializable — no classes, no functions on data, no non-JSON values.
+//
+// Changing anything in this file requires a spec update first. Do not extend,
+// reorder, or "improve" these declarations locally.
+//
+// Naming note: the pre-existing verifier aggregate was renamed `VerifySummary`
+// and the pre-existing orchestrator result was renamed `OrchestratorRunResult`
+// so that `VerifyResult` and `RunResult` below can hold the canonical names.
+
+export type EventKind =
+  | "run_started" | "plan_written" | "skill_loaded" | "context_loaded" | "context_assembled"
+  | "llm_request" | "llm_response" | "think"
+  | "verify_started" | "verify_result"
+  | "edit_proposed" | "edit_accepted" | "edit_rejected"
+  | "tool_called" | "tool_denied"
+  | "budget_exceeded" | "cache_hit" | "strategy_selected"
+  | "memory_retrieved" | "memory_superseded" | "diagram_updated"
+  | "run_completed" | "run_failed" | "eval_scored";
+
+export interface SketchEvent { id: string; ts: number; runId: string; kind: EventKind; payload: Record<string, unknown>; }
+export interface Skill { name: string; description: string; body: string; source: string; capabilities?: string[]; }
+export interface ProjectContext { agents: string; claude: string; }
+export interface Message { role: "system" | "user" | "assistant" | "tool"; content: string; }
+export interface Usage { in: number; out: number; }
+export interface ChatAdapter {
+  readonly id: string;
+  chat(m: Message[], o?: { signal?: AbortSignal }): Promise<{ text: string; usage?: Usage }>;
+}
+export type ProviderKind = "openai-compatible" | "anthropic-messages";
+export interface ProviderConfig {
+  id: string; kind: ProviderKind; baseUrl: string; model: string;
+  apiKey?: string; headers?: Record<string, string>;
+}
+export interface VerifyCommand { name: string; cmd: string; args?: string[]; cwd?: string; timeoutMs?: number; }
+export interface VerifyResult { name: string; ok: boolean; exitCode: number; stdout: string; stderr: string; durationMs: number; }
+export interface Task { id: string; prompt: string; verify: VerifyCommand[]; skillNames?: string[]; }
+export interface RunResult { runId: string; ok: boolean; finalText: string; iterations: number; verify: VerifyResult[]; events: SketchEvent[]; }
+export type Check = { kind: "verify-pass" } | { kind: "contains"; text: string } | { kind: "not-contains"; text: string };
+export interface EvalCase { id: string; task: Task; checks: Check[]; }
+export interface EvalResult { caseId: string; score: number; passed: boolean; passedChecks: number; totalChecks: number; detail: string; }
+export interface SecretStore { get(id: string): Promise<string | null>; set(id: string, v: string): Promise<void>; del(id: string): Promise<void>; }

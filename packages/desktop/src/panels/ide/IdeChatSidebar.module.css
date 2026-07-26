@@ -1,0 +1,244 @@
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 340px;
+  background-color: #121212;
+  border-left: 1px solid #262626;
+  font-family: var(--font-sans);
+  user-select: none;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 36px;
+  padding: 0 12px;
+  background-color: #171717;
+  border-bottom: 1px solid #262626;
+}
+
+.agentTab {
+  color: #f8fafc;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.headerControls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #737373;
+}
+
+.hdrBtn {
+  background: transparent;
+  border: none;
+  color: #737373;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  transition: all 0.15s ease;
+}
+
+.hdrBtn:hover {
+  color: #ffffff;
+  background-color: #262626;
+}
+
+.mainCanvas {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 20px 14px;
+  overflow-y: auto;
+}
+
+.brandWatermark {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.sparkleLogo {
+  color: #f97316;
+}
+
+.watermarkTitle {
+  color: #ffffff;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+}
+
+.messagesList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+}
+
+.messageRow {
+  display: flex;
+  width: 100%;
+}
+
+.userRow {
+  justify-content: flex-end;
+}
+
+.agentRow {
+  justify-content: flex-start;
+}
+
+.messageBubble {
+  max-width: 90%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background-color: #1e1e1e;
+  border: 1px solid #262626;
+}
+
+.roleLabel {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: #f97316;
+  margin-bottom: 4px;
+}
+
+.msgText {
+  color: #e5e5e5;
+  font-size: 13px;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.thinkingWrapper {
+  margin-top: 8px;
+}
+
+.bottomCardContainer {
+  padding: 12px;
+  background-color: #171717;
+  border-top: 1px solid #262626;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.promptBoxCard {
+  background-color: #1e1e1e;
+  border: 1px solid #262626;
+  border-radius: 12px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.promptInput {
+  width: 100%;
+  background: transparent;
+  border: none;
+  color: #ffffff;
+  font-size: 13px;
+  resize: none;
+  outline: none;
+  font-family: var(--font-sans);
+  margin-bottom: 12px;
+}
+
+.promptInput::placeholder {
+  color: #737373;
+}
+
+.promptCardControls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.plusBtn {
+  background: transparent;
+  border: none;
+  color: #a3a3a3;
+  cursor: pointer;
+  padding: 3px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+}
+
+.plusBtn:hover {
+  color: #ffffff;
+}
+
+.modelPillBtn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background-color: #262626;
+  border: 1px solid #333333;
+  color: #d4d4d4;
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.modelPillBtn:hover {
+  background-color: #303030;
+  color: #ffffff;
+}
+
+.mcpWarningBadge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background-color: rgba(234, 179, 8, 0.15);
+  border: 1px solid rgba(234, 179, 8, 0.4);
+  color: #eab308;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 3px 8px;
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.warnIcon {
+  color: #eab308;
+}
+
+.sendArrowBtn {
+  margin-left: auto;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background-color: #262626;
+  border: none;
+  color: #737373;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.15s ease;
+}
+
+.sendArrowBtn.sendActive {
+  background-color: #ea580c;
+  color: #ffffff;
+}
+
+.disclaimerText {
+  color: #737373;
+  font-size: 10px;
+  text-align: center;
+}
+

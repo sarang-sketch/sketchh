@@ -1,0 +1,480 @@
+// The five protocol methods (Requirement 12.2): ping, run, eval, parse-skill,
+// capture-eval.
+//
+// Every handler is a plain async function of `(params, ctx)`. Nothing here reads
+// `process.stdin`, writes `process.stdout`, or knows what a frame looks like —
+// that is `server.ts`. The split is what makes dispatch unit-testable without a
+// child process.
+//
+// PARAMS ARRIVE FROM A PIPE, SO THEY ARE VALIDATED, NOT TRUSTED. Anything an
+// unvalidated field reaches is a path (`root`, `parse-skill.path`), a spawned
+// process (`task.verify[].cmd`), or a network call (`provider.baseUrl`). Each
+// reader below fails with an `InvalidParamsError` naming the exact field, which
+// the server turns into `{ ok: false, code: "invalid_params" }`.
+//
+// THE PLAN GATE IS NOT RE-IMPLEMENTED HERE. `run` builds a `PlanWriter` rooted at
+// the project and hands it to `runTask`; the gate lives in the loop and asks the
+// filesystem (Requirement 6.5). There is deliberately no parameter that disables
+// it, skips it, or pre-seeds a plan — a CLI-driven run gets exactly the same
+// refusal an in-process one does.
+//
+// Validates: Requirements 12.2, 12.5, 6.5
+
+import { stat } from 'node:fs/promises'
+import { dirname, join, resolve } from 'node:path'
+
+import { JsonlEventStore, MemoryEventStore, secretsFromEnv } from '../events/index.js'
+import type { EventStore } from '../events/index.js'
+import { runEvalSet, meanScore } from '../evals/index.js'
+import type { EvalDeps } from '../evals/index.js'
+import { runTask } from '../loop/index.js'
+import { DiskFileWriter } from '../orchestrator/file-writer.js'
+import { PlanWriter } from '../plan/index.js'
+import { fakeProviderEnabled, resolveAdapter } from '../providers/index.js'
+import {
+  loadProjectContext,
+  loadSkillFile,
+  loadSkillFolder,
+  loadSkills,
+} from '../skills/index.js'
+import type {
+  ChatAdapter,
+  Check,
+  EvalCase,
+  ProviderConfig,
+  ProviderKind,
+  Skill,
+  SketchEvent,
+  Task,
+  VerifyCommand,
+} from '../types.js'
+import { StreamingEventStore } from './streaming-store.js'
+import { ENGINE_NAME, ENGINE_VERSION, PROTOCOL_VERSION } from './version.js'
+
+/** `params` did not satisfy the method. Becomes `code: "invalid_params"`. */
+export class InvalidParamsError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'InvalidParamsError'
+  }
+}
+
+/** A declared method whose body lands in a later task. `code: "not_implemented"`. */
+export class NotImplementedError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'NotImplementedError'
+  }
+}
+
+/** What a handler is given besides its params. */
+export interface MethodContext {
+  /** Stream one persisted event to the caller as an event frame. */
+  emitEvent(event: SketchEvent): void
+  /** Diagnostics. Goes to stderr — never stdout (Requirement 12.5). */
+  log(message: string): void
+  /**
+   * Register a credential VALUE seen in params so every subsequent outgoing frame
+   * redacts it, whatever path it would otherwise have taken to stdout.
+   */
+  rememberSecret(value: string): void
+  /** Known secret values: the environment's, plus everything remembered. */
+  secrets(): readonly string[]
+  env: NodeJS.ProcessEnv
+  cwd(): string
+}
+
+export type MethodHandler = (
+  params: Record<string, unknown>,
+  ctx: MethodContext,
+) => Promise<unknown>
+
+// ── param readers ────────────────────────────────────────────────────────────
+
+function asObject(value: unknown, field: string): Record<string, unknown> {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new InvalidParamsError(`${field} must be an object`)
+  }
+  return value as Record<string, unknown>
+}
+
+function readString(source: Record<string, unknown>, key: string, field: string): string {
+  const value = source[key]
+  if (typeof value !== 'string' || value.trim() === '') {
+    throw new InvalidParamsError(`${field} must be a non-empty string`)
+  }
+  return value
+}
+
+function optionalString(
+  source: Record<string, unknown>,
+  key: string,
+  field: string,
+): string | undefined {
+  const value = source[key]
+  if (value === undefined || value === null) return undefined
+  if (typeof value !== 'string' || value.trim() === '') {
+    throw new InvalidParamsError(`${field} must be a non-empty string when present`)
+  }
+  return value
+}
+
+function optionalNumber(
+  source: Record<string, unknown>,
+  key: string,
+  field: string,
+): number | undefined {
+  const value = source[key]
+  if (value === undefined || value === null) return undefined
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new InvalidParamsError(`${field} must be a finite number when present`)
+  }
+  return value
+}
+
+function optionalStringArray(value: unknown, field: string): string[] | undefined {
+  if (value === undefined || value === null) return undefined
+  if (!Array.isArray(value)) throw new InvalidParamsError(`${field} must be an array of strings`)
+  return value.map((entry, index) => {
+    if (typeof entry !== 'string') {
+      throw new InvalidParamsError(`${field}[${index}] must be a string`)
+    }
+    return entry
+  })
+}
+
+function readVerifyCommands(value: unknown, field: string): VerifyCommand[] {
+  // Absent means "no verification configured", which the loop already has a
+  // defined meaning for (Requirement 5.8). It is not an error.
+  if (value === undefined || value === null) return []
+  if (!Array.isArray(value)) throw new InvalidParamsError(`${field} must be an array`)
+
+  return value.map((entry, index) => {
+    const item = asObject(entry, `${field}[${index}]`)
+    const command: VerifyCommand = {
+      name: readString(item, 'name', `${field}[${index}].name`),
+      // `cmd` is spawned with shell: false by the verify runner, so it is an
+      // executable name and never a shell line.
+      cmd: readString(item, 'cmd', `${field}[${index}].cmd`),
+    }
+    const args = optionalStringArray(item['args'], `${field}[${index}].args`)
+    if (args) command.args = args
+    const cwd = optionalString(item, 'cwd', `${field}[${index}].cwd`)
+    if (cwd) command.cwd = cwd
+    const timeoutMs = optionalNumber(item, 'timeoutMs', `${field}[${index}].timeoutMs`)
+    if (timeoutMs !== undefined) command.timeoutMs = timeoutMs
+    return command
+  })
+}
+
+function readTask(value: unknown, field: string): Task {
+  const source = asObject(value, field)
+  const task: Task = {
+    id: readString(source, 'id', `${field}.id`),
+    prompt: readString(source, 'prompt', `${field}.prompt`),
+    verify: readVerifyCommands(source['verify'], `${field}.verify`),
+  }
+  const skillNames = optionalStringArray(source['skillNames'], `${field}.skillNames`)
+  if (skillNames) task.skillNames = skillNames
+  return task
+}
+
+function readCheck(value: unknown, field: string): Check {
+  const source = asObject(value, field)
+  const kind = readString(source, 'kind', `${field}.kind`)
+  switch (kind) {
+    case 'verify-pass':
+      return { kind: 'verify-pass' }
+    case 'contains':
+      return { kind: 'contains', text: readString(source, 'text', `${field}.text`) }
+    case 'not-contains':
+      return { kind: 'not-contains', text: readString(source, 'text', `${field}.text`) }
+    default:
+      throw new InvalidParamsError(
+        `${field}.kind must be one of verify-pass, contains, not-contains`,
+      )
+  }
+}
+
+function readCases(value: unknown, field: string): EvalCase[] {
+  if (!Array.isArray(value)) {
+    throw new InvalidParamsError(`${field} must be an array of eval cases`)
+  }
+  return value.map((entry, index) => {
+    const source = asObject(entry, `${field}[${index}]`)
+    const checks = source['checks']
+    if (checks !== undefined && checks !== null && !Array.isArray(checks)) {
+      throw new InvalidParamsError(`${field}[${index}].checks must be an array`)
+    }
+    return {
+      id: readString(source, 'id', `${field}[${index}].id`),
+      task: readTask(source['task'], `${field}[${index}].task`),
+      checks: ((checks ?? []) as unknown[]).map((check, at) =>
+        readCheck(check, `${field}[${index}].checks[${at}]`),
+      ),
+    }
+  })
+}
+
+const PROVIDER_KINDS: readonly ProviderKind[] = ['openai-compatible', 'anthropic-messages']
+
+/**
+ * The offline config used when no provider was supplied and
+ * `SKETCH_FAKE_PROVIDER=1` is set. `resolveAdapter` ignores every field of it in
+ * that mode and hands back the fake; it exists only to satisfy the signature.
+ */
+const OFFLINE_CONFIG: ProviderConfig = {
+  id: 'fake',
+  kind: 'openai-compatible',
+  baseUrl: '',
+  model: 'fake',
+}
+
+function readProviderConfig(value: unknown, ctx: MethodContext): ProviderConfig {
+  const source = asObject(value, 'params.provider')
+  const kind = readString(source, 'kind', 'params.provider.kind')
+  if (!PROVIDER_KINDS.includes(kind as ProviderKind)) {
+    throw new InvalidParamsError(
+      `params.provider.kind must be one of ${PROVIDER_KINDS.join(', ')}`,
+    )
+  }
+
+  const config: ProviderConfig = {
+    id: readString(source, 'id', 'params.provider.id'),
+    kind: kind as ProviderKind,
+    // Empty is legal: `resolveAdapter` fills it from the catalog default.
+    baseUrl: typeof source['baseUrl'] === 'string' ? source['baseUrl'] : '',
+    model: readString(source, 'model', 'params.provider.model'),
+  }
+
+  const apiKey = optionalString(source, 'apiKey', 'params.provider.apiKey')
+  if (apiKey !== undefined) {
+    // THE KEY STOPS HERE. Registering it means every outgoing frame — response,
+    // error, and event alike — has this value scrubbed out of it before it
+    // reaches stdout.
+    ctx.rememberSecret(apiKey)
+    config.apiKey = apiKey
+  }
+
+  const headers = source['headers']
+  if (headers !== undefined && headers !== null) {
+    const record = asObject(headers, 'params.provider.headers')
+    const out: Record<string, string> = {}
+    for (const [name, headerValue] of Object.entries(record)) {
+      if (typeof headerValue !== 'string') {
+        throw new InvalidParamsError(`params.provider.headers.${name} must be a string`)
+      }
+      // A header value is credential material as often as `apiKey` is.
+      ctx.rememberSecret(headerValue)
+      out[name] = headerValue
+    }
+    config.headers = out
+  }
+
+  return config
+}
+
+/**
+ * Resolve the model seam. With no `params.provider` this requires the offline
+ * switch, so a caller can never accidentally get a silently degraded run: either
+ * it named a provider, or it asked for the fake.
+ */
+function adapterFor(params: Record<string, unknown>, ctx: MethodContext): ChatAdapter {
+  const provider = params['provider']
+  if (provider === undefined || provider === null) {
+    if (!fakeProviderEnabled(ctx.env)) {
+      throw new InvalidParamsError(
+        'params.provider is required; set SKETCH_FAKE_PROVIDER=1 to run against the offline provider instead',
+      )
+    }
+    return resolveAdapter(OFFLINE_CONFIG, ctx.env)
+  }
+  return resolveAdapter(readProviderConfig(provider, ctx), ctx.env)
+}
+
+/**
+ * Skills for a run. Selection is EXPLICIT: with no `skillNames` on the task or
+ * the params, nothing is loaded and the skills directory is not even read. A CLI
+ * caller that wants a skill in the prompt says so — silently injecting every
+ * skill found on disk would change a run's cost and behavior invisibly.
+ */
+async function loadRequestedSkills(
+  root: string,
+  params: Record<string, unknown>,
+  task: Task,
+  ctx: MethodContext,
+): Promise<Skill[]> {
+  const names =
+    task.skillNames ?? optionalStringArray(params['skillNames'], 'params.skillNames')
+  if (names === undefined || names.length === 0) return []
+
+  const dir = optionalString(params, 'skillsDir', 'params.skillsDir') ?? join(root, '.sketch', 'skills')
+  const { skills, diagnostics } = await loadSkills(dir)
+  for (const diagnostic of diagnostics) ctx.log(`skill diagnostic: ${diagnostic}`)
+
+  const selected: Skill[] = []
+  for (const name of names) {
+    const found = skills.find((skill) => skill.name === name)
+    if (found) selected.push(found)
+    // A missing skill is a diagnostic, not a failed run: the task still has its
+    // prompt, and killing the run over a renamed skill file is worse.
+    else ctx.log(`skill not found in ${dir}: ${name}`)
+  }
+  return selected
+}
+
+// ── methods ──────────────────────────────────────────────────────────────────
+
+/**
+ * Liveness plus identity. No filesystem, no network, no credentials — this is the
+ * startup call for both transports and it must succeed offline (Requirement 13.6).
+ */
+async function ping(_params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
+  return {
+    ok: true,
+    engine: ENGINE_NAME,
+    version: ENGINE_VERSION,
+    protocol: PROTOCOL_VERSION,
+    node: process.version,
+    pid: process.pid,
+    /** True when every provider resolution in this process returns the fake. */
+    fakeProvider: fakeProviderEnabled(ctx.env),
+  }
+}
+
+/**
+ * Run one task to completion, streaming events as they are persisted.
+ *
+ * The event store is the JSONL one rooted at the project, so a CLI run leaves the
+ * same durable log a desktop run does, and the tee streams exactly what it wrote.
+ */
+async function run(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
+  const task = readTask(params['task'], 'params.task')
+  const root = resolve(optionalString(params, 'root', 'params.root') ?? ctx.cwd())
+  const adapter = adapterFor(params, ctx)
+  const maxIterations = optionalNumber(params, 'maxIterations', 'params.maxIterations')
+
+  const events = new StreamingEventStore(
+    new JsonlEventStore({ baseDir: root, secrets: () => ctx.secrets() }),
+    (event) => ctx.emitEvent(event),
+  )
+
+  const skills = await loadRequestedSkills(root, params, task, ctx)
+
+  return runTask(task, {
+    adapter,
+    events,
+    // The gate, unmodified and un-bypassable from here.
+    plan: new PlanWriter({ baseDir: root, events }),
+    files: new DiskFileWriter(),
+    root,
+    skills,
+    projectContext: await loadProjectContext(root),
+    ...(maxIterations !== undefined ? { maxIterations } : {}),
+  })
+}
+
+/**
+ * Score a set of eval cases.
+ *
+ * With no `root` the harness makes an isolated temp workspace per case and the
+ * events go to an in-memory store — the right default for scoring, since a scored
+ * run should not litter the user's project. Supplying `root` opts into the real
+ * project and the durable log.
+ */
+async function evalCases(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
+  const cases = readCases(params['cases'], 'params.cases')
+  const adapter = adapterFor(params, ctx)
+  const maxIterations = optionalNumber(params, 'maxIterations', 'params.maxIterations')
+  const root = optionalString(params, 'root', 'params.root')
+
+  const inner: EventStore =
+    root === undefined
+      ? new MemoryEventStore({ secrets: () => ctx.secrets() })
+      : new JsonlEventStore({ baseDir: resolve(root), secrets: () => ctx.secrets() })
+  const events = new StreamingEventStore(inner, (event) => ctx.emitEvent(event))
+
+  const deps: EvalDeps = {
+    adapter,
+    events,
+    ...(root !== undefined
+      ? { root: resolve(root), plan: new PlanWriter({ baseDir: resolve(root), events }) }
+      : {}),
+    ...(maxIterations !== undefined ? { maxIterations } : {}),
+  }
+
+  const results = await runEvalSet(cases, deps)
+  return { results, mean: meanScore(results) }
+}
+
+const SKILL_FILE = 'SKILL.md'
+const SKILL_MANIFEST = 'skill.json'
+
+/**
+ * Parse a `SKILL.md`, a `skill.json`, or a skill folder into the normalized
+ * `Skill` shape. Which of the two on-disk formats it was is not observable in the
+ * result, which is the loader's contract (Requirement 10.3).
+ */
+async function parseSkill(params: Record<string, unknown>, _ctx: MethodContext): Promise<unknown> {
+  const path = resolve(readString(params, 'path', 'params.path'))
+
+  let isDirectory: boolean
+  try {
+    isDirectory = (await stat(path)).isDirectory()
+  } catch {
+    throw new InvalidParamsError(`params.path does not exist: ${path}`)
+  }
+
+  if (!isDirectory) {
+    // A manifest path names its folder; anything else is read as a SKILL.md.
+    return path.endsWith(SKILL_MANIFEST) ? loadSkillFolder(dirname(path)) : loadSkillFile(path)
+  }
+
+  try {
+    if ((await stat(join(path, SKILL_FILE))).isFile()) {
+      return loadSkillFile(join(path, SKILL_FILE))
+    }
+  } catch {
+    // No SKILL.md — fall through to the folder layout.
+  }
+  return loadSkillFolder(path)
+}
+
+/**
+ * `capture-eval` — DECLARED, NOT YET IMPLEMENTED.
+ *
+ * Requirement 12.2 lists the method, so it is registered and answers with a
+ * stable `not_implemented` code rather than looking like a typo'd method name
+ * (`unknown_method`). A client can wire the call site now and branch on the code.
+ *
+ * It is not implemented HERE because the thing it wraps does not exist yet:
+ * `captureRunAsEval(run, want)` is task 2.3, and it owns two contracts this
+ * method would otherwise have to invent — how a `want` becomes `Check[]`, and the
+ * exact `.sketch/evals/evals.jsonl` record shape that must re-score to 1.0
+ * (Requirements 8.1, 8.2). Guessing either one here would put a wrong contract on
+ * the wire that task 2.3 then has to break.
+ */
+async function captureEval(): Promise<unknown> {
+  throw new NotImplementedError(
+    'capture-eval is not implemented yet: it wraps captureRunAsEval(run, want), which ' +
+      'lands in task 2.3 (Requirements 8.1, 8.2). The method is registered so a client ' +
+      'can branch on code "not_implemented" rather than "unknown_method".',
+  )
+}
+
+/** The method table. Requirement 12.2, exactly. */
+export const METHODS: Readonly<Record<string, MethodHandler>> = {
+  ping,
+  run,
+  eval: evalCases,
+  'parse-skill': parseSkill,
+  'capture-eval': captureEval,
+}
+
+/** Method names this build answers. */
+export const METHOD_NAMES: readonly string[] = Object.keys(METHODS)
+
+/** Environment-derived secret values, re-read per call so a late export counts. */
+export function envSecrets(env: NodeJS.ProcessEnv): string[] {
+  return secretsFromEnv(env)
+}

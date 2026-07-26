@@ -1,0 +1,39 @@
+.layout {
+  display: flex;
+  height: 100%;
+  width: 100%;
+  background-color: #121212;
+  color: var(--text-primary);
+  overflow: hidden;
+}
+
+.mainContent {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.topSection {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.editorSection {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background-color: #121212;
+}
+
+.bottomSection {
+  height: 200px;
+  border-top: 1px solid #262626;
+  background-color: #171717;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+

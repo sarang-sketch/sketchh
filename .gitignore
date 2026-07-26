@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+
+# Rust / Tauri build output
+target/
+packages/desktop/src-tauri/gen/
+
+# Vite caches
+.vite/
+**/.vite/
+
+# Sketch working directory (per project, never tracked)
+.sketch/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Environment / local secrets
+.env
+.env.*
+!.env.example
+
+# OS noise
+.DS_Store
+Thumbs.db
+
+# Local screen recordings / large media captures
+*.mp4

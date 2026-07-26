@@ -1,0 +1,44 @@
+{
+  "$schema": "https://raw.githubusercontent.com/nicholasrice/tauri-2-schema/refs/heads/main/tauri.conf.2.json",
+  "productName": "Sketch",
+  "version": "0.1.0",
+  "identifier": "dev.sketch.app",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Sketch",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 900,
+        "minHeight": 600,
+        "decorations": false,
+        "transparent": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "plugins": {
+    "shell": {
+      "open": true,
+      "scope": [
+        {
+          "name": "run-command",
+          "cmd": "",
+          "args": true,
+          "sidecar": false
+        }
+      ]
+    },
+    "fs": {
+      "scope": ["**"]
+    }
+  }
+}

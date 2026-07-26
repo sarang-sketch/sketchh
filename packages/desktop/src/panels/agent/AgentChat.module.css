@@ -1,0 +1,360 @@
+.welcomeContainer, .container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  background-color: #121212;
+  overflow-y: auto;
+  font-family: var(--font-sans);
+}
+
+.welcomeContainer {
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+}
+
+.centerCardArea {
+  width: 100%;
+  max-width: 680px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.headerTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.asteriskIcon {
+  color: #f97316;
+  font-size: 28px;
+  font-weight: bold;
+}
+
+.heroTitle {
+  font-family: var(--font-serif);
+  font-size: 32px;
+  font-weight: 500;
+  color: #f5f5f5;
+  letter-spacing: -0.5px;
+}
+
+.heroSubtitle {
+  color: #737373;
+  font-size: 13px;
+  margin-bottom: 28px;
+}
+
+.promptCard {
+  width: 100%;
+  background-color: #262626;
+  border: 1px solid #333333;
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  margin-bottom: 32px;
+  display: flex;
+  flex-direction: column;
+}
+
+.promptInput {
+  width: 100%;
+  background: transparent;
+  border: none;
+  color: #f5f5f5;
+  font-size: 15px;
+  resize: none;
+  outline: none;
+  font-family: var(--font-sans);
+  margin-bottom: 16px;
+}
+
+.promptInput::placeholder {
+  color: #737373;
+}
+
+.promptCardBottomRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #333333;
+  margin-bottom: 12px;
+}
+
+.attachBtn {
+  background: transparent;
+  border: none;
+  color: #a3a3a3;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+}
+
+.attachBtn:hover {
+  color: #ffffff;
+  background-color: #333333;
+}
+
+.promptRightActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.modelPillDropdown {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background-color: #333333;
+  color: #d4d4d4;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: 14px;
+  cursor: pointer;
+}
+
+.modelPillDropdown:hover {
+  background-color: #404040;
+  color: #ffffff;
+}
+
+.sendCircleBtn {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background-color: #404040;
+  border: none;
+  color: #737373;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sendCircleBtn.sendActive {
+  background-color: #f5f5f5;
+  color: #171717;
+}
+
+.folderContextRow {
+  display: flex;
+  align-items: center;
+}
+
+.folderPillBtn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background-color: #333333;
+  border: 1px solid #404040;
+  color: #d4d4d4;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 8px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.folderPillBtn:hover {
+  background-color: #404040;
+  color: #ffffff;
+}
+
+.suggestionsSection {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.suggestionHeaderRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #737373;
+  font-size: 13px;
+
+}
+
+.suggestionTitleLabel {
+  color: #a3a3a3;
+  font-weight: 500;
+}
+
+.suggestionCardList {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background-color: #262626;
+  border: 1px solid #333333;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.suggestionCardItem {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background-color: #1c1c1c;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.suggestionCardItem:hover {
+  background-color: #262626;
+}
+
+.cardEmoji {
+  font-size: 18px;
+}
+
+.cardText {
+  color: #e5e5e5;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.customizeFooterLink {
+  color: #737373;
+  font-size: 12px;
+  margin-top: 12px;
+  cursor: pointer;
+}
+
+.customizeFooterLink:hover {
+  color: #a3a3a3;
+}
+
+/* Chat Active Area */
+.messagesWrapper {
+  flex: 1;
+  width: 100%;
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 24px 20px 100px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.messageRow {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+}
+
+.userRow {
+  justify-content: flex-end;
+}
+
+.assistantRow {
+  justify-content: flex-start;
+}
+
+.avatarWrapper {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background-color: #262626;
+  border: 1px solid #333333;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #f97316;
+}
+
+.messageBubble {
+  max-width: 85%;
+  padding: 14px 18px;
+  border-radius: 14px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.userBubble {
+  background-color: #262626;
+  border: 1px solid #333333;
+  color: #f5f5f5;
+  border-top-right-radius: 4px;
+}
+
+.assistantBubble {
+  background-color: #1a1a1a;
+  border: 1px solid #262626;
+  color: #e5e5e5;
+  border-top-left-radius: 4px;
+}
+
+.agentName {
+  font-weight: 600;
+  color: #f97316;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+.codeBlock {
+  margin-top: 12px;
+  background-color: #0d0d0d;
+  border: 1px solid #262626;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.codeHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  background-color: #171717;
+  border-bottom: 1px solid #262626;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: #737373;
+}
+
+.copyBtn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: none;
+  color: #a3a3a3;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.codeContent {
+  padding: 12px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: #e5e5e5;
+  overflow-x: auto;
+}
+
+.activeChatInputWrapper {
+  position: fixed;
+  bottom: 30px;
+  left: calc(260px + (100% - 260px) / 2);
+  transform: translateX(-50%);
+  width: calc(100% - 300px);
+  max-width: 760px;
+}
+
+.activeChatCard {
+  background-color: #262626;
+  border: 1px solid #333333;
+  border-radius: 14px;
+  padding: 12px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+}

@@ -1,0 +1,218 @@
+// MockSketchClient — the seam's first implementation.
+//
+// It exists so the Timeline and the Agent Console can be built and demoed before
+// the sidecar lands (task 2.1). It fabricates NO panel fixtures: everything it
+// produces is a real `SketchEvent` on the real stream, shaped exactly like the
+// engine's, and every payload is derived from the task it was handed.
+//
+// It is deliberately honest about being a mock: `transport` is 'mock' and the
+// model id it reports is 'mock/echo-1', so nothing on screen can be mistaken for
+// a real provider response.
+//
+// Validates: Requirements 13.1, 13.2
+
+import type {
+  EvalCase,
+  EvalResult,
+  Message,
+  RunResult,
+  SketchEvent,
+  Task,
+  VerifyResult,
+} from './contracts'
+import { createEventBus, type EventHandler, type PingResult, type SketchClient } from './client'
+
+export interface MockClientOptions {
+  /** Delay between emitted events. Short by default; 0 in tests. */
+  stepDelayMs?: number
+  /** Injected for determinism. Defaults to `Date.now`. */
+  clock?: () => number
+  /** Injected for determinism. Defaults to a real timer. */
+  sleep?: (ms: number) => Promise<void>
+}
+
+const MOCK_MODEL = 'mock/echo-1'
+const DEFAULT_STEP_DELAY_MS = 120
+
+/** One emitted step: the kind plus the payload the engine would attach. */
+interface Step {
+  kind: SketchEvent['kind']
+  payload: Record<string, unknown>
+}
+
+function defaultSleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+export class MockSketchClient implements SketchClient {
+  readonly transport = 'mock' as const
+
+  private readonly bus = createEventBus()
+  private readonly stepDelayMs: number
+  private readonly clock: () => number
+  private readonly sleep: (ms: number) => Promise<void>
+  private runCounter = 0
+
+  constructor(options: MockClientOptions = {}) {
+    this.stepDelayMs = options.stepDelayMs ?? DEFAULT_STEP_DELAY_MS
+    this.clock = options.clock ?? (() => Date.now())
+    this.sleep = options.sleep ?? defaultSleep
+  }
+
+  async ping(): Promise<PingResult> {
+    return { ok: true, version: '0.1.0-mock', transport: this.transport }
+  }
+
+  subscribe(handler: EventHandler) {
+    return this.bus.subscribe(handler)
+  }
+
+  async run(task: Task): Promise<RunResult> {
+    const runId = this.nextRunId()
+    const startedAt = this.clock()
+    const finalText = `Applied the requested change: ${task.prompt}`
+
+    const verify: VerifyResult[] = task.verify.map((command, index) => ({
+      name: command.name,
+      ok: true,
+      exitCode: 0,
+      stdout: `[${MOCK_MODEL}] ${command.cmd} ${(command.args ?? []).join(' ')}`.trim(),
+      stderr: '',
+      durationMs: 400 + index * 150,
+    }))
+
+    const planning: Message[] = [
+      { role: 'system', content: 'You are Sketch. Write a plan before touching code.' },
+      { role: 'user', content: task.prompt },
+    ]
+    const coding: Message[] = [
+      ...planning,
+      { role: 'assistant', content: 'Plan written to .sketch/plan/. Proceeding to edits.' },
+      { role: 'user', content: 'Apply the plan.' },
+    ]
+
+    // The sequence the real agent loop produces: plan gate first, then the coding
+    // turn, then verification, then completion.
+    const steps: Step[] = [
+      {
+        kind: 'run_started',
+        payload: {
+          taskId: task.id,
+          prompt: task.prompt,
+          skillNames: task.skillNames ?? [],
+          verify: task.verify.map((v) => v.name),
+        },
+      },
+      { kind: 'llm_request', payload: { model: MOCK_MODEL, iteration: 1, messages: planning } },
+      {
+        kind: 'llm_response',
+        payload: {
+          model: MOCK_MODEL,
+          iteration: 1,
+          text: `Plan for "${task.prompt}":\n1. Locate the affected modules.\n2. Make the change.\n3. Verify.`,
+          usage: { in: estimateTokens(planning), out: 96 },
+        },
+      },
+      {
+        kind: 'plan_written',
+        payload: {
+          runId,
+          dir: `.sketch/plan/${runId}`,
+          artifacts: ['prd.md', 'architecture.md', 'components.md', 'tests.md'],
+        },
+      },
+      { kind: 'llm_request', payload: { model: MOCK_MODEL, iteration: 2, messages: coding } },
+      {
+        kind: 'llm_response',
+        payload: {
+          model: MOCK_MODEL,
+          iteration: 2,
+          text: finalText,
+          usage: { in: estimateTokens(coding), out: 142 },
+        },
+      },
+      { kind: 'verify_started', payload: { iteration: 2, commands: verify.map((v) => v.name) } },
+      ...verify.map((result): Step => ({ kind: 'verify_result', payload: { ...result } })),
+      {
+        kind: 'run_completed',
+        payload: {
+          ok: true,
+          iterations: 2,
+          finalText,
+          durationMs: this.clock() - startedAt,
+        },
+      },
+    ]
+
+    const events: SketchEvent[] = []
+    for (const [index, step] of steps.entries()) {
+      if (this.stepDelayMs > 0) await this.sleep(this.stepDelayMs)
+      const event: SketchEvent = {
+        id: `${runId}-${String(index + 1).padStart(3, '0')}`,
+        ts: this.clock(),
+        runId,
+        kind: step.kind,
+        payload: step.payload,
+      }
+      events.push(event)
+      // Emitted as it happens, not at the end — the Timeline fills in live.
+      this.bus.emit(event)
+    }
+
+    return { runId, ok: true, finalText, iterations: 2, verify, events }
+  }
+
+  async eval(cases: EvalCase[]): Promise<EvalResult[]> {
+    const results: EvalResult[] = []
+
+    for (const evalCase of cases) {
+      const run = await this.run(evalCase.task)
+      const failures: string[] = []
+      let passedChecks = 0
+
+      for (const check of evalCase.checks) {
+        const ok =
+          check.kind === 'verify-pass'
+            ? run.ok && run.verify.every((v) => v.ok)
+            : check.kind === 'contains'
+              ? run.finalText.includes(check.text)
+              : !run.finalText.includes(check.text)
+
+        if (ok) passedChecks += 1
+        else failures.push(describeCheck(check))
+      }
+
+      const totalChecks = evalCase.checks.length
+      const score = totalChecks === 0 ? 1 : passedChecks / totalChecks
+
+      results.push({
+        caseId: evalCase.id,
+        score,
+        passed: passedChecks === totalChecks,
+        passedChecks,
+        totalChecks,
+        detail:
+          failures.length === 0
+            ? `run ${run.runId}: all ${totalChecks} checks passed`
+            : `run ${run.runId}: failed ${failures.join(', ')}`,
+      })
+    }
+
+    return results
+  }
+
+  private nextRunId(): string {
+    // Time-prefixed so ids sort chronologically, matching the engine's scheme.
+    this.runCounter += 1
+    return `run-${this.clock().toString(36)}-${String(this.runCounter).padStart(3, '0')}`
+  }
+}
+
+/** Rough token count so usage numbers move with real message size. */
+function estimateTokens(messages: Message[]): number {
+  return Math.ceil(messages.reduce((sum, m) => sum + m.content.length, 0) / 4)
+}
+
+function describeCheck(check: EvalCase['checks'][number]): string {
+  return check.kind === 'verify-pass' ? 'verify-pass' : `${check.kind}("${check.text}")`
+}

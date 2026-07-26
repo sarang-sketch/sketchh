@@ -1,0 +1,229 @@
+.titleBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 36px;
+  user-select: none;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  color: var(--text-primary);
+  border-bottom: 1px solid #262626;
+  padding: 0 10px;
+}
+
+.ideTitleBar, .agentTitleBar {
+  background-color: #121212;
+}
+
+.left, .right, .center, .leftCowork, .rightCowork {
+  display: flex;
+  align-items: center;
+}
+
+.left {
+  gap: 10px;
+}
+
+.sketchLogo {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  background: linear-gradient(135deg, #f97316, #ea580c);
+  color: #ffffff;
+  font-weight: 800;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 8px rgba(249, 115, 22, 0.4);
+}
+
+/* Header Mode Switch Pill */
+.headerModePill {
+  position: relative;
+  display: flex;
+  background-color: #262626;
+  border-radius: 6px;
+  padding: 2px;
+  margin: 0 6px;
+  width: 150px;
+}
+
+.headerModeBg {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: calc(50% - 2px);
+  height: calc(100% - 4px);
+  background-color: #3b3b3b;
+  border-radius: 4px;
+  transition: transform 0.2s cubic-bezier(0.2, 0, 0, 1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.headerModeBtn {
+  flex: 1;
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  background: transparent;
+  border: none;
+  color: #a3a3a3;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 3px 0;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.headerModeBtn.activeHeaderMode {
+  color: #ffffff;
+}
+
+.menuNav {
+  display: flex;
+  gap: 14px;
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.menuNav span {
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.menuNav span:hover {
+  color: #f1f5f9;
+}
+
+.ideTitle {
+  font-weight: 500;
+  color: #94a3b8;
+  font-size: 12px;
+  letter-spacing: 0.3px;
+}
+
+.leftCowork {
+  gap: 6px;
+}
+
+.navIconBtn {
+  background: transparent;
+  border: none;
+  color: #8b949e;
+  padding: 4px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  transition: all 0.15s ease;
+}
+
+.navIconBtn:hover {
+  background-color: #21262d;
+  color: #e6edf3;
+}
+
+.navArrows {
+  display: flex;
+  gap: 2px;
+  margin-left: 4px;
+}
+
+.arrowBtn {
+  color: #6e7681;
+  font-size: 16px;
+  padding: 0 4px;
+  cursor: pointer;
+}
+
+.arrowBtn:hover {
+  color: #c9d1d9;
+}
+
+.coworkTitle {
+  font-weight: 500;
+  color: #8b949e;
+  font-size: 12px;
+}
+
+.right {
+  gap: 6px;
+}
+
+.rightCowork {
+  gap: 12px;
+}
+
+.whatsNewBtn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: transparent;
+  border: none;
+  color: #c9d1d9;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.whatsNewBtn:hover {
+  background-color: #21262d;
+}
+
+.topIconBtn {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  padding: 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  transition: all 0.15s ease;
+}
+
+.topIconBtn:hover {
+  background-color: rgba(255, 255, 255, 0.08);
+  color: #f8fafc;
+}
+
+.avatarMini {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background-color: #1e293b;
+  border: 1px solid #334155;
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 4px;
+}
+
+.windowControls {
+  display: flex;
+  gap: 10px;
+  margin-left: 8px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.winBtn, .winBtnClose {
+  cursor: pointer;
+  padding: 2px 4px;
+  transition: color 0.15s ease;
+}
+
+.winBtn:hover {
+  color: #f1f5f9;
+}
+
+.winBtnClose:hover {
+  color: #ef4444;
+}
+
