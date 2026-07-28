@@ -12,6 +12,7 @@
 
 import { createServer } from 'node:http'
 import type { Server } from 'node:http'
+import { connect } from 'node:net'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -27,7 +28,45 @@ const API_KEY = 'ZmFrZUtleTAxMjM0NTY3ODlhYmNkZWZnaGlqa2xtbm9w'
 
 let server: Server
 let base: string
+let port: number
 let root: string
+
+/**
+ * One request written straight onto a socket, so a header `fetch` refuses to forge
+ * (`Host`) can still be tested. Returns the whole raw response.
+ */
+function rawRequest(request: string): Promise<string> {
+  return new Promise((resolveRaw, rejectRaw) => {
+    const socket = connect(port, '127.0.0.1', () => socket.write(request))
+    let received = ''
+    const finish = (): void => {
+      socket.destroy()
+      resolveRaw(received)
+    }
+    socket.setTimeout(5000, () => {
+      socket.destroy()
+      rejectRaw(new Error(`raw request timed out; got: ${received}`))
+    })
+    socket.on('data', (chunk: Buffer) => {
+      received += chunk.toString('utf8')
+      // Keep-alive means the server will not close the socket, so the response has
+      // to be recognised as complete here: by Content-Length, or by the terminating
+      // zero-length chunk when it is chunked.
+      const split = received.indexOf('\r\n\r\n')
+      if (split === -1) return
+      const headers = received.slice(0, split)
+      const body = received.slice(split + 4)
+      const length = /content-length: *(\d+)/i.exec(headers)
+      if (length !== null) {
+        if (Buffer.byteLength(body) >= Number(length[1])) finish()
+      } else if (body.includes('0\r\n\r\n')) {
+        finish()
+      }
+    })
+    socket.on('end', () => resolveRaw(received))
+    socket.on('error', (err) => rejectRaw(err))
+  })
+}
 
 function listen(s: Server): Promise<number> {
   return new Promise((resolvePort) => {
@@ -51,7 +90,7 @@ beforeAll(async () => {
       res.end('not the bridge')
     })
   })
-  const port = await listen(server)
+  port = await listen(server)
   base = `http://127.0.0.1:${port}`
 })
 
@@ -296,5 +335,93 @@ describe('vite dev bridge — routing', () => {
     const res = await fetch(`${base}/index.html`)
     expect(res.status).toBe(404)
     expect(await res.text()).toBe('not the bridge')
+  })
+})
+
+// `run` writes files and spawns processes, so who can reach these endpoints is part
+// of the design. Requirement 13.8.
+describe('vite dev bridge — reachability', () => {
+  const selfOrigin = () => base
+
+  it('serves the normal same-origin path, with and without an Origin header', async () => {
+    // Absent Origin: what `EventSource` sends, and what a browser omits on many
+    // same-origin requests. This must keep working.
+    expect((await call('ping', undefined, 'no-origin')).frame.ok).toBe(true)
+
+    const withOrigin = await fetch(`${base}/__sketch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: selfOrigin() },
+      body: JSON.stringify({ id: 'same-origin', method: 'ping' }),
+    })
+    expect(withOrigin.status).toBe(200)
+    expect(((await withOrigin.json()) as Frame).ok).toBe(true)
+
+    // A Referer from the dev page itself is equally fine.
+    const withReferer = await fetch(`${base}/__sketch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Referer: `${selfOrigin()}/index.html` },
+      body: JSON.stringify({ id: 'same-referer', method: 'ping' }),
+    })
+    expect(withReferer.status).toBe(200)
+    expect(((await withReferer.json()) as Frame).ok).toBe(true)
+  })
+
+  it('refuses a cross-origin call, including one from another local port', async () => {
+    for (const origin of ['http://evil.example', 'http://127.0.0.1:5173', 'null']) {
+      const res = await fetch(`${base}/__sketch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Origin: origin },
+        body: JSON.stringify({ id: 'cross', method: 'ping' }),
+      })
+      expect(res.status).toBe(403)
+      const frame = (await res.json()) as Frame
+      expect(frame.ok).toBe(false)
+      expect(frame.error).toContain('refused')
+      // The engine never saw it: no result came back under any shape.
+      expect(frame.result).toBeUndefined()
+    }
+  })
+
+  it('refuses a cross-origin subscriber on the event stream too', async () => {
+    const res = await fetch(`${base}/__sketch/events`, {
+      headers: { Accept: 'text/event-stream', Origin: 'http://evil.example' },
+    })
+    expect(res.status).toBe(403)
+    expect(res.headers.get('content-type')).toContain('application/json')
+    await res.text()
+  })
+
+  it('refuses a Host that is not loopback', async () => {
+    // `fetch` will not send a forged Host, so the request is written on a raw socket.
+    const raw = await rawRequest(
+      ['POST /__sketch HTTP/1.1', 'Host: sketch.example.com', 'Content-Length: 0', '', ''].join(
+        '\r\n',
+      ),
+    )
+    expect(raw).toContain('403')
+    expect(raw).toContain('loopback only')
+
+    // The same call with a loopback Host is served.
+    const body = JSON.stringify({ id: 'loopback-host', method: 'ping' })
+    const ok = await rawRequest(
+      [
+        'POST /__sketch HTTP/1.1',
+        `Host: localhost:${port}`,
+        'Content-Type: application/json',
+        `Content-Length: ${Buffer.byteLength(body)}`,
+        '',
+        body,
+      ].join('\r\n'),
+    )
+    expect(ok).toContain('200')
+    expect(ok).toContain('"ok":true')
+  })
+
+  it('still lets Vite serve a non-bridge path from any Host', async () => {
+    const raw = await rawRequest(
+      ['GET /index.html HTTP/1.1', 'Host: sketch.example.com', '', ''].join('\r\n'),
+    )
+    expect(raw).toContain('404')
+    expect(raw).toContain('not the bridge')
   })
 })

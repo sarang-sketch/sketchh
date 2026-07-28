@@ -7,7 +7,6 @@ mod command_policy;
 
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::PathBuf;
 
 #[derive(Serialize, Deserialize)]
 struct FsEntry {
@@ -32,13 +31,21 @@ struct CommandOutput {
 }
 
 // ── File System Commands ────────────────────────────────────────────────────
+//
+// EVERY path that reaches the disk goes through `command_policy` first. These are
+// plain `#[tauri::command]` functions, so the `fs.scope` in tauri.conf.json does not
+// apply to them — that scope constrains `tauri-plugin-fs` APIs only. Without the
+// containment below, the webview could read any file the OS user can read and write
+// anywhere it can write, which with an `unsafe-inline` script policy turns any
+// injected script into arbitrary file access (Requirement 13.8).
+//
+// Containment is the SAME code path the terminal tool uses for its working
+// directory, generalized rather than copied: two containment checks that can
+// disagree is how one of them ends up wrong.
 
 #[tauri::command]
-fn read_dir(path: String) -> Result<Vec<FsEntry>, String> {
-    let dir = PathBuf::from(&path);
-    if !dir.is_dir() {
-        return Err(format!("Not a directory: {}", path));
-    }
+fn read_dir(project_root: String, path: String) -> Result<Vec<FsEntry>, String> {
+    let dir = command_policy::resolve_dir_within(&project_root, &path)?;
 
     let mut entries = Vec::new();
     let read = fs::read_dir(&dir).map_err(|e| e.to_string())?;
@@ -68,16 +75,21 @@ fn read_dir(path: String) -> Result<Vec<FsEntry>, String> {
 }
 
 #[tauri::command]
-fn read_file(path: String) -> Result<String, String> {
-    fs::read_to_string(&path).map_err(|e| format!("Failed to read {}: {}", path, e))
+fn read_file(project_root: String, path: String) -> Result<String, String> {
+    let file = command_policy::resolve_file_within(&project_root, &path)?;
+    // The error names the path the caller asked for, never the resolved one.
+    fs::read_to_string(&file).map_err(|e| format!("failed to read '{}': {}", path, e))
 }
 
 #[tauri::command]
-fn write_file(path: String, content: String) -> Result<(), String> {
-    if let Some(parent) = PathBuf::from(&path).parent() {
-        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+fn write_file(project_root: String, path: String, content: String) -> Result<(), String> {
+    // A file that does not exist yet cannot be canonicalized, so the write target is
+    // resolved against its deepest existing ancestor; see `resolve_write_target`.
+    let target = command_policy::resolve_write_target(&project_root, &path)?;
+    if let Some(parent) = target.parent() {
+        fs::create_dir_all(parent).map_err(|e| format!("failed to create '{}': {}", path, e))?;
     }
-    fs::write(&path, &content).map_err(|e| format!("Failed to write {}: {}", path, e))
+    fs::write(&target, &content).map_err(|e| format!("failed to write '{}': {}", path, e))
 }
 
 #[tauri::command]

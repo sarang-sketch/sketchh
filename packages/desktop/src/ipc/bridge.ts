@@ -1,12 +1,36 @@
-// IPC bridge — typed wrappers around Tauri invoke commands.
-// When running in browser dev mode (no Tauri), these fall back to mock implementations.
+// Tauri-native OS capabilities. NOT a second engine seam.
+//
+// SCOPE, deliberately narrow: engine RPC — runs, plans, providers, events — goes
+// through `SketchClient` (src/lib/client.ts) over stdio in the app and HTTP in dev.
+// This module is ONLY for the things the OS can do and the engine cannot reach from
+// a webview: a folder picker, reading and writing a file the editor has open, a
+// directory listing, git status/diff, and the confirmed terminal command.
+//
+// Every wrapper here names a command that actually exists in src-tauri/src/main.rs.
+// It previously carried wrappers for `list_providers`, `set_api_key`,
+// `remove_api_key`, `run_task`, `approve_plan`, `cancel_task` and listeners for
+// `task-event`/`file-changed` — none of which existed in Rust. A typed wrapper
+// around a command that is not there is a second source of truth that always
+// disagrees with the first, so they are gone rather than left dangling. If a
+// capability belongs to the engine, add it to `SketchClient`, not here.
+//
+// EVERY PATH TAKES A `projectRoot`. The Rust side refuses any path outside it; the
+// `fs.scope` in tauri.conf.json does not cover these custom commands, so this is
+// where containment is (Requirement 13.8).
 
 const IS_TAURI = '__TAURI_INTERNALS__' in window
 
+/**
+ * There is no fallback. Outside Tauri these commands have no implementation, and
+ * returning `null as T` used to make the type signature a lie that surfaced as an
+ * unrelated crash later. A browser dev session should reach the engine through
+ * `SketchClient`, so failing loudly here points at the real mistake.
+ */
 async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   if (!IS_TAURI) {
-    console.warn(`[IPC] No Tauri runtime, mock invoke: ${cmd}`, args)
-    return null as T
+    throw new Error(
+      `not running under Tauri: the native command '${cmd}' is unavailable. Engine calls go through SketchClient.`,
+    )
   }
   const { invoke: tauriInvoke } = await import('@tauri-apps/api/core')
   return tauriInvoke<T>(cmd, args)
@@ -20,64 +44,32 @@ export interface FsEntry {
   isDir: boolean
 }
 
-export async function readDir(path: string): Promise<FsEntry[]> {
-  return invoke<FsEntry[]>('read_dir', { path })
+/** Lists a directory inside `projectRoot`. Anything outside it is refused in Rust. */
+export async function readDir(projectRoot: string, path: string): Promise<FsEntry[]> {
+  return invoke<FsEntry[]>('read_dir', { projectRoot, path })
 }
 
-export async function readFileContent(path: string): Promise<string> {
-  return invoke<string>('read_file', { path })
+/** Reads a file inside `projectRoot`. `path` may be absolute or project-relative. */
+export async function readFileContent(projectRoot: string, path: string): Promise<string> {
+  return invoke<string>('read_file', { projectRoot, path })
 }
 
-export async function writeFileContent(path: string, content: string): Promise<void> {
-  return invoke<void>('write_file', { path, content })
+/**
+ * Writes a file inside `projectRoot`, creating missing parent directories beneath
+ * it. The target need not exist yet; the backend contains it against the deepest
+ * ancestor that does.
+ */
+export async function writeFileContent(
+  projectRoot: string,
+  path: string,
+  content: string,
+): Promise<void> {
+  return invoke<void>('write_file', { projectRoot, path, content })
 }
 
+/** The native folder picker. Returns null if the user cancelled. */
 export async function openProject(): Promise<string | null> {
   return invoke<string | null>('open_project_dialog')
-}
-
-// ── Provider ────────────────────────────────────────────────────────────────
-
-export interface ProviderInfo {
-  id: string
-  name: string
-  configured: boolean
-}
-
-export async function listProviders(): Promise<ProviderInfo[]> {
-  return invoke<ProviderInfo[]>('list_providers')
-}
-
-export async function setApiKey(providerId: string, key: string): Promise<void> {
-  return invoke<void>('set_api_key', { providerId, key })
-}
-
-export async function removeApiKey(providerId: string): Promise<void> {
-  return invoke<void>('remove_api_key', { providerId })
-}
-
-// ── Task Execution ──────────────────────────────────────────────────────────
-
-export interface TaskEvent {
-  type: string
-  taskId: string
-  message?: string
-  plan?: unknown
-  path?: string
-  passed?: boolean
-  summary?: string
-}
-
-export async function runTask(projectRoot: string, task: string, providerId: string, model: string): Promise<void> {
-  return invoke<void>('run_task', { projectRoot, task, providerId, model })
-}
-
-export async function approvePlan(taskId: string, approved: boolean): Promise<void> {
-  return invoke<void>('approve_plan', { taskId, approved })
-}
-
-export async function cancelTask(taskId: string): Promise<void> {
-  return invoke<void>('cancel_task', { taskId })
 }
 
 // ── Terminal ────────────────────────────────────────────────────────────────
@@ -135,20 +127,4 @@ export async function gitStatus(projectRoot: string): Promise<GitStatus> {
 
 export async function gitDiff(projectRoot: string, file?: string): Promise<string> {
   return invoke<string>('git_diff', { projectRoot, file })
-}
-
-// ── Events (Tauri → Frontend) ───────────────────────────────────────────────
-
-type UnlistenFn = () => void
-
-export async function onTaskEvent(handler: (event: TaskEvent) => void): Promise<UnlistenFn> {
-  if (!IS_TAURI) return () => {}
-  const { listen } = await import('@tauri-apps/api/event')
-  return listen<TaskEvent>('task-event', e => handler(e.payload))
-}
-
-export async function onFileChange(handler: (path: string) => void): Promise<UnlistenFn> {
-  if (!IS_TAURI) return () => {}
-  const { listen } = await import('@tauri-apps/api/event')
-  return listen<string>('file-changed', e => handler(e.payload))
 }

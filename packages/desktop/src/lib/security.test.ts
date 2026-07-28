@@ -158,3 +158,155 @@ describe('the terminal caller passes a vector, not a line', () => {
     expect(bridge).not.toMatch(/runCommand\(cwd: string, command: string\)/);
   });
 });
+
+describe('Requirement 13.8 — the file commands are contained, not scope-shaped', () => {
+  const tauriDir = path.resolve(__dirname, '../../src-tauri');
+  const mainRs = fs.readFileSync(path.join(tauriDir, 'src/main.rs'), 'utf8');
+  const policyRs = fs.readFileSync(path.join(tauriDir, 'src/command_policy.rs'), 'utf8');
+
+  /** The body of one `#[tauri::command] fn NAME(...) { ... }`, up to the next command. */
+  function commandBody(name: string): string {
+    const start = mainRs.indexOf(`fn ${name}(`);
+    expect(start, `${name} is not defined in main.rs`).toBeGreaterThan(-1);
+    const rest = mainRs.slice(start);
+    const next = rest.indexOf('#[tauri::command]');
+    return next === -1 ? rest : rest.slice(0, next);
+  }
+
+  it('takes a project_root on every command that touches a path', () => {
+    for (const command of ['read_dir', 'read_file', 'write_file']) {
+      expect(commandBody(command)).toMatch(/project_root:\s*String/);
+    }
+  });
+
+  it('resolves every path through command_policy before touching the disk', () => {
+    // The check is per command, not per file: a containment call somewhere in main.rs
+    // says nothing about whether THIS command uses it.
+    expect(commandBody('read_dir')).toContain('command_policy::resolve_dir_within');
+    expect(commandBody('read_file')).toContain('command_policy::resolve_file_within');
+    expect(commandBody('write_file')).toContain('command_policy::resolve_write_target');
+
+    // And none of them still hands a caller-supplied path straight to std::fs.
+    for (const command of ['read_dir', 'read_file', 'write_file']) {
+      const body = commandBody(command);
+      expect(body).not.toMatch(/fs::read_to_string\(&path\)/);
+      expect(body).not.toMatch(/fs::write\(&path/);
+      expect(body).not.toMatch(/fs::read_dir\(&PathBuf::from/);
+      expect(body).not.toMatch(/create_dir_all\(parent\).*PathBuf::from\(&path\)/s);
+    }
+  });
+
+  it('keeps one containment implementation, shared with the terminal cwd', () => {
+    // resolve_cwd delegates rather than carrying a second prefix test.
+    const cwd = /pub fn resolve_cwd[\s\S]*?\r?\n}/.exec(policyRs);
+    expect(cwd).not.toBeNull();
+    expect(cwd![0]).toContain('resolve_within');
+    expect(cwd![0]).not.toContain('starts_with');
+
+    // Exactly one place performs the prefix comparison.
+    expect(policyRs.match(/fn is_within/g)).toHaveLength(1);
+    expect(policyRs.match(/candidate\.starts_with\(root\)/g)).toHaveLength(1);
+    // And it is reached by canonical paths on both sides, which is what defeats
+    // symlinks and `..` alike.
+    expect(policyRs).toContain('canonicalize');
+  });
+
+  it('the write path resolves a target that does not exist yet', () => {
+    // `\r?\n` throughout: this repo is checked out with CRLF on Windows, and a
+    // guard that only matches LF would pass or fail by platform rather than by code.
+    const write = /pub fn resolve_write_target[\s\S]*?\r?\n}/.exec(policyRs);
+    expect(write).not.toBeNull();
+    // Existence is established with symlink_metadata, so a dangling link is not
+    // mistaken for a missing segment and followed out of the project.
+    expect(write![0]).toContain('symlink_metadata');
+    // The `..` refusal is not restated here: the write path reaches it through the
+    // same `absolutize` the read path uses, and that is the point — one rejection of
+    // `..`, applied everywhere, rather than a copy per command that can drift.
+    expect(write![0]).toContain('absolutize');
+    const absolutize = /fn absolutize[\s\S]*?\r?\n}/.exec(policyRs);
+    expect(absolutize).not.toBeNull();
+    expect(absolutize![0]).toContain('has_parent_escape');
+    expect(policyRs.match(/fn has_parent_escape/g)).toHaveLength(1);
+    // And the containment prefix test still applies to the anchor it resolved.
+    expect(write![0]).toContain('is_within(&root, &anchor)');
+  });
+
+  it('the frontend passes projectRoot on every file call', () => {
+    const bridge = fs.readFileSync(path.resolve(__dirname, '../ipc/bridge.ts'), 'utf8');
+    expect(bridge).toContain("invoke<FsEntry[]>('read_dir', { projectRoot, path })");
+    expect(bridge).toContain("invoke<string>('read_file', { projectRoot, path })");
+    expect(bridge).toContain("invoke<void>('write_file', { projectRoot, path, content })");
+  });
+});
+
+describe('the IPC bridge is one seam, for OS capabilities only', () => {
+  const bridge = fs.readFileSync(path.resolve(__dirname, '../ipc/bridge.ts'), 'utf8');
+  const mainRs = fs.readFileSync(
+    path.resolve(__dirname, '../../src-tauri/src/main.rs'),
+    'utf8',
+  );
+
+  /**
+   * The bridge with its comments removed.
+   *
+   * The "this is gone" assertions below have to read CODE, not prose. bridge.ts
+   * documents what it used to carry and why (`list_providers`, `null as T`, …), and a
+   * raw-text check cannot tell an explanation of a removal from the removal itself —
+   * it would fail on the very comment that records the fix.
+   */
+  const bridgeCode = bridge
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^[ \t]*\/\/.*$/gm, '');
+
+  it('names only commands that exist in main.rs', () => {
+    const invoked = [...bridgeCode.matchAll(/invoke<[^>]*>\('([a-z_]+)'/g)].map((m) => m[1]!);
+    expect(invoked.length).toBeGreaterThan(0);
+    for (const command of invoked) {
+      // The generic parameter list on `open_project_dialog<R: tauri::Runtime>` sits
+      // between the name and the argument list, so it has to be tolerated here.
+      expect(mainRs, `bridge.ts invokes '${command}'`).toMatch(
+        new RegExp(`fn ${command}(<[^>]*>)?\\s*\\(`),
+      );
+      expect(mainRs, `${command} is not registered`).toMatch(
+        new RegExp(`generate_handler!\\[[\\s\\S]*?${command},`),
+      );
+    }
+  });
+
+  it('carries no wrapper for a command Rust never had', () => {
+    for (const phantom of [
+      'list_providers',
+      'set_api_key',
+      'remove_api_key',
+      'run_task',
+      'approve_plan',
+      'cancel_task',
+    ]) {
+      expect(bridgeCode, `${phantom} is wrapped`).not.toContain(phantom);
+    }
+    // Nor listeners for events nothing emits.
+    expect(bridgeCode).not.toContain('task-event');
+    expect(bridgeCode).not.toContain('file-changed');
+  });
+
+  it('points engine RPC at SketchClient and fails loudly outside Tauri', () => {
+    expect(bridge).toContain('SketchClient');
+    // A silent `null as T` fallback in the invoke wrapper, not the note explaining
+    // why one is not there.
+    expect(bridgeCode).not.toContain('null as T');
+    expect(bridgeCode).toContain('not running under Tauri');
+  });
+});
+
+describe('Requirement 13.8 — the dev bridge answers loopback and same origin only', () => {
+  const viteConfig = fs.readFileSync(path.resolve(__dirname, '../../vite.config.ts'), 'utf8');
+
+  it('checks Host and Origin before dispatching either endpoint', () => {
+    expect(viteConfig).toContain('function refusalReason');
+    expect(viteConfig).toContain('req.headers.origin');
+    expect(viteConfig).toContain('req.headers.host');
+    expect(viteConfig).toContain('isLoopback');
+    // The guard runs for bridge paths before the endpoint handlers.
+    expect(viteConfig).toMatch(/if \(isBridgePath\)[\s\S]{0,200}refusalReason\(req\)/);
+  });
+});

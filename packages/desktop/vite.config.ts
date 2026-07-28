@@ -27,6 +27,19 @@
 // name on arrival (`collectParamSecrets`), handlers register their own
 // (`ctx.rememberSecret`), and both feed the one `secrets` set that every response
 // frame and every streamed event is sanitized against.
+//
+// WHO MAY CALL IT. `run` writes files and spawns processes, so reachability is part
+// of the design, not a deployment detail. Two checks, both in `refusalReason`:
+//   - the `Host` must be loopback, so `vite --host` (which overrides any `server.host`
+//     in this file) cannot expose the engine to the local network;
+//   - a present `Origin` (or, failing that, `Referer`) must be this dev server's own
+//     origin, so a page on another local port cannot drive a run in the background.
+// An ABSENT `Origin` is allowed: browsers omit it on same-origin GETs, `EventSource`
+// sends none, and the dev page's own `fetch` may not carry one either.
+// A refusal answers HTTP 403, NOT the usual 200-with-`ok:false`: nothing was parsed
+// and no method ran, so it is not an engine outcome to report as one. The body is
+// still frame-shaped so a legitimate misconfiguration reads a reason instead of a
+// bare status.
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
@@ -86,6 +99,59 @@ function readBody(req: IncomingMessage): Promise<string> {
 
 function messageOf(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
+}
+
+// ── Reachability ────────────────────────────────────────────────────────────
+
+/** Strip the port from a Host header value, keeping the IPv6 bracket form intact. */
+function hostnameOf(host: string): string {
+  const value = host.trim().toLowerCase()
+  if (value.startsWith('[')) return value.slice(0, value.indexOf(']') + 1)
+  const colon = value.indexOf(':')
+  return colon === -1 ? value : value.slice(0, colon)
+}
+
+/** `localhost`, the whole 127/8 block, and IPv6 `::1`. Nothing else is this machine. */
+function isLoopback(hostname: string): boolean {
+  const bare = hostname.replace(/^\[/, '').replace(/\]$/, '')
+  return bare === 'localhost' || bare === '::1' || /^127(\.\d{1,3}){3}$/.test(bare)
+}
+
+/** Keeps a reflected header value out of the response beyond what a reason needs. */
+function clip(value: string): string {
+  return value.length > 96 ? `${value.slice(0, 96)}…` : value
+}
+
+/**
+ * Why this request may not use the bridge, or null if it may.
+ *
+ * The `Host` header is what the caller addressed, so it is also what the same-origin
+ * comparison uses: matching `Origin` against a hardcoded port would break the moment
+ * the dev server moves.
+ */
+function refusalReason(req: IncomingMessage): string | null {
+  const host = (req.headers.host ?? '').trim()
+  if (host === '') return 'refused: request has no Host header'
+  if (!isLoopback(hostnameOf(host))) {
+    return `refused: the dev bridge answers on loopback only, not ${clip(host)}`
+  }
+
+  // `Origin` is authoritative when present. `Referer` is only consulted in its
+  // absence, and never treated as proof of anything on its own.
+  const stated = req.headers.origin ?? req.headers.referer
+  if (stated === undefined) return null
+
+  let url: URL
+  try {
+    url = new URL(stated)
+  } catch {
+    // Includes the opaque `Origin: null` a sandboxed frame or a file:// page sends.
+    return `refused: unusable Origin ${clip(stated)}`
+  }
+  if (url.host.toLowerCase() !== host.toLowerCase()) {
+    return `refused: cross-origin request from ${clip(url.origin)}`
+  }
+  return null
 }
 
 /**
@@ -258,9 +324,37 @@ export function createSketchBridge(options: SketchBridgeOptions = {}): BridgeMid
     }
   }
 
+  /**
+   * A refused caller gets 403 and a frame-shaped body. `invalid_request` is the
+   * engine's existing code for "this never became a request" — no new code is minted
+   * here, because the code vocabulary lives in core and this transport does not own
+   * it.
+   */
+  function sendRefusal(res: ServerResponse, reason: string): void {
+    if (res.writableEnded || res.destroyed) return
+    const body = JSON.stringify({ id: null, ok: false, code: 'invalid_request', error: reason })
+    res.writeHead(403, {
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(body),
+      'Cache-Control': 'no-store',
+    })
+    res.end(body)
+  }
+
   return function sketchBridge(req, res, next) {
     // `req.url` on a Connect stack is path + query; match on the path alone.
     const path = (req.url ?? '').split('?')[0]
+    const isBridgePath = path === EVENTS_PATH || path === RPC_PATH
+
+    // Checked before either endpoint, and only for them: a request Vite itself
+    // serves is none of this middleware's business.
+    if (isBridgePath) {
+      const refusal = refusalReason(req)
+      if (refusal !== null) {
+        sendRefusal(res, refusal)
+        return
+      }
+    }
 
     if (path === EVENTS_PATH && req.method === 'GET') {
       openStream(req, res)
@@ -301,6 +395,9 @@ export default defineConfig({
   plugins: [react(), sketchBridgePlugin()],
   clearScreen: false,
   server: {
+    // Stated rather than left to the default. `--host` on the command line still
+    // overrides it, which is why the bridge refuses a non-loopback Host itself.
+    host: '127.0.0.1',
     port: 1420,
     strictPort: true,
     watch: { usePolling: true },
