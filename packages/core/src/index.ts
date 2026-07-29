@@ -20,6 +20,10 @@ export * as orchestrator from './orchestrator/index.js'
 export * as verifier from './verifier/index.js'
 export * as verify from './verify/index.js'
 
+// Unified-diff parsing and per-hunk apply: `diff.parseUnifiedDiff`, `diff.applyHunks`.
+// The review surface renders these hunks; the engine applies the accepted subset.
+export * as diff from './diff/index.js'
+
 export * as events from './events/index.js'
 export * as skills from './skills/index.js'
 export * as plan from './plan/index.js'

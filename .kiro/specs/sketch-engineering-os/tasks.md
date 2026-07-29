@@ -155,7 +155,7 @@ Phase 4 numbering stays intact for anything that references it.
   - Load file content from the real filesystem through the client seam
   - When the engine writes an open file, update the model or flag a conflict — no second cache
   - _Requirements: 15.1, 15.2, 15.3, 15.4, 15.6, 14.6_
-- [ ] 3.2 Build diff review with per-hunk accept and reject
+- [-] 3.2 Build diff review with per-hunk accept and reject
   - Render `edit_proposed` payloads as a reviewable diff with per-hunk controls
   - Emit `edit_accepted` on accept and `edit_rejected` with a reason on reject
   - Rejecting every hunk leaves the file on disk unchanged
@@ -166,7 +166,7 @@ Phase 4 numbering stays intact for anything that references it.
   - Add a diff pane; reconcile the branch name shown in `StatusBar` with the real branch
   - CARRIED OVER from the Phase 2 audit: `git_status` and `git_diff` in `src-tauri/src/main.rs` take a `project_root` but never contain it, and `git_diff` forwards a caller-supplied `file` argument to `git diff` unvalidated. Route both through the same `command_policy` containment the fs commands now use, and treat `file` as a contained path rather than an opaque argument
   - _Requirements: 14.6, 27.1, 27.3, 13.8_
-- [ ] 3.4 Make Explorer, Terminal, and Debugger real
+- [x] 3.4 Make Explorer, Terminal, and Debugger real
   - Replace `FileExplorer`'s `MOCK_TREE` with real `read_dir` data and wire file clicks to open in the editor
   - Replace the static `Terminal` markup with a real input, real command execution through the scoped terminal tool, and output from state
   - Replace `SearchPanel`'s function-local `mockResults` with real search, wiring the uncontrolled input to state
