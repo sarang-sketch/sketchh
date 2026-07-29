@@ -56,6 +56,7 @@
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { isAbsolute, join, resolve, sep } from "node:path";
 import type { EventStore } from "../events/store.js";
+import { ensureStateDir } from "../workspace/state-dir.js";
 
 /**
  * The canonical twelve plan documents, in the order the design lists them.
@@ -264,10 +265,13 @@ function isBlank(text: string): boolean {
  */
 export class PlanWriter {
   readonly #root: string;
+  /** Project root, when the `.sketch/plan` convention is in use. */
+  readonly #stateBase: string | undefined;
   readonly #events: Pick<EventStore, "emit"> | undefined;
 
   constructor(options: PlanWriterOptions) {
     this.#root = resolve(options.planRoot ?? join(options.baseDir, ".sketch", "plan"));
+    this.#stateBase = options.planRoot === undefined ? options.baseDir : undefined;
     this.#events = options.events;
   }
 
@@ -323,6 +327,11 @@ export class PlanWriter {
       resolved.set(doc, stringifyContent(value));
     }
 
+    // Plans live inside the project, so `.sketch/` gets the self-ignore marker
+    // before anything lands there — otherwise the first plan of the first run
+    // shows up as an untracked change in the user's own git status. See
+    // workspace/state-dir.ts.
+    if (this.#stateBase !== undefined) await ensureStateDir(this.#stateBase);
     await mkdir(dir, { recursive: true });
 
     const documents: PlanDocument[] = [];

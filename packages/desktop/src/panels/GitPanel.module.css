@@ -10,6 +10,9 @@
 .header {
   padding: 12px 16px;
   border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .branchInfo {
@@ -18,22 +21,64 @@
   gap: 8px;
   font-size: 13px;
   font-weight: 500;
-  cursor: pointer;
   padding: 4px 8px;
   border-radius: var(--radius-sm);
   transition: background-color 0.2s ease;
-}
-
-.branchInfo:hover {
-  background-color: var(--bg-hover);
+  flex: 1;
+  min-width: 0;
 }
 
 .branchName {
-  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tracking {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-muted);
+  white-space: nowrap;
 }
 
 .chevron {
   color: var(--text-muted);
+}
+
+.iconBtn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s ease, background-color 0.2s ease;
+}
+
+.iconBtn:hover:not(:disabled) {
+  color: var(--text-primary);
+  background-color: var(--bg-hover);
+}
+
+.iconBtn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* A named failure, never drawn as an empty list (Requirement 27.5). */
+.error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 16px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--error);
+  border-bottom: 1px solid var(--border);
+  word-break: break-word;
 }
 
 .commitSection {
@@ -77,8 +122,19 @@
   transition: background-color 0.2s ease;
 }
 
-.commitBtn:hover {
+.commitBtn:hover:not(:disabled) {
   background-color: var(--accent-hover);
+}
+
+.commitBtn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Why Commit is unavailable, stated before the button is pressed. */
+.hint {
+  font-size: 11px;
+  color: var(--text-muted);
 }
 
 .changesList {
@@ -125,6 +181,10 @@
 }
 
 .fileRow:hover {
+  background-color: var(--bg-hover);
+}
+
+.fileRowSelected {
   background-color: var(--bg-hover);
 }
 
@@ -181,4 +241,71 @@
 
 .actionBtn:hover {
   color: var(--text-primary);
+}
+
+.actionBtn:disabled {
+  cursor: default;
+}
+
+/* ── empty states ────────────────────────────────────────────────────────── */
+
+.empty {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.emptyTitle {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.emptyDetail {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+/* ── diff pane ───────────────────────────────────────────────────────────── */
+
+.diffPane {
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  max-height: 45%;
+  min-height: 120px;
+  background-color: var(--bg-surface);
+}
+
+.diffHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 6px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.diffPath {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.diffBody {
+  flex: 1;
+  margin: 0;
+  padding: 8px 16px;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-primary);
+  white-space: pre;
 }

@@ -149,7 +149,7 @@ Phase 4 numbering stays intact for anything that references it.
 ## Phase 3 — Code surface
 
 - [ ] 3. Code surface: Monaco, diff review, git, and one file state
-- [-] 3.1 Integrate Monaco with a single file-state owner
+- [x] 3.1 Integrate Monaco with a single file-state owner
   - Install Monaco and render it with a `Map<path, model>` keyed by absolute path
   - Make `AppState` the single owner of `openFiles`, `activeFile`, and `files`; delete `EditorArea`'s local `hasFileOpen` and its hardcoded tabs, gutter, and fake syntax markup
   - Load file content from the real filesystem through the client seam

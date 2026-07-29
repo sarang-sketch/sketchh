@@ -201,6 +201,45 @@ export class MockSketchClient implements SketchClient {
     return results
   }
 
+  // ── git ───────────────────────────────────────────────────────────────────
+  //
+  // THE MOCK HAS NO REPOSITORY, AND SAYS SO. A fabricated `GitStatusResult` here
+  // would be a `MOCK_*` fixture wearing the seam's clothes: the Git panel cannot
+  // tell an invented branch from a real one, and Requirement 14.6 forbids a
+  // shipped panel rendering fabricated data. Every git call therefore rejects with
+  // the reason, which the panel surfaces as an error state naming the transport
+  // (Requirement 27.5). A run's events can be simulated honestly because they are
+  // labelled 'mock/echo-1'; a working tree cannot be.
+
+  private noRepository(call: string): Promise<never> {
+    return Promise.reject(
+      new Error(
+        `the mock transport has no repository behind it, so '${call}' cannot answer. ` +
+          'Start the app with VITE_BRIDGE=http or run it under Tauri to reach a real engine.',
+      ),
+    )
+  }
+
+  async gitStatus(): Promise<never> {
+    return this.noRepository('git-status')
+  }
+
+  async gitDiff(): Promise<never> {
+    return this.noRepository('git-diff')
+  }
+
+  async gitStage(): Promise<never> {
+    return this.noRepository('git-stage')
+  }
+
+  async gitUnstage(): Promise<never> {
+    return this.noRepository('git-unstage')
+  }
+
+  async gitCommit(): Promise<never> {
+    return this.noRepository('git-commit')
+  }
+
   private nextRunId(): string {
     // Time-prefixed so ids sort chronologically, matching the engine's scheme.
     this.runCounter += 1

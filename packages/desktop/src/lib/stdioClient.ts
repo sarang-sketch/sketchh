@@ -27,7 +27,14 @@
 
 import type { SketchClient, PingResult, EventHandler, Unsubscribe, TransportKind } from './client'
 import { createEventBus } from './client'
-import type { Task, RunResult, EvalCase, EvalResult, SketchEvent } from './contracts'
+import type {
+  Task,
+  RunResult,
+  EvalCase,
+  EvalResult,
+  GitStatusResult,
+  SketchEvent,
+} from './contracts'
 
 /**
  * The `externalBin` entry, exactly as written in tauri.conf.json. Tauri resolves
@@ -376,6 +383,44 @@ export class StdioSketchClient implements SketchClient {
     evalsPath?: string
   }): Promise<EvalCase> {
     return this.call<EvalCase>('capture-eval', { ...params })
+  }
+
+  // ── git ───────────────────────────────────────────────────────────────────
+  //
+  // Straight pass-through to the five `git-*` methods. The root travels in every
+  // frame because the engine requires it: this client's own `root` option is the
+  // sidecar's default for runs, not a substitute for the repository the panel is
+  // looking at.
+
+  async gitStatus(params: { root: string }): Promise<GitStatusResult> {
+    return this.call<GitStatusResult>('git-status', { root: params.root })
+  }
+
+  async gitDiff(params: { root: string; path?: string; staged?: boolean }): Promise<string> {
+    const result = await this.call<{ diff?: unknown }>('git-diff', {
+      root: params.root,
+      ...(params.path !== undefined ? { path: params.path } : {}),
+      ...(params.staged === true ? { staged: true } : {}),
+    })
+    return typeof result?.diff === 'string' ? result.diff : ''
+  }
+
+  async gitStage(params: { root: string; paths: string[] }): Promise<GitStatusResult> {
+    return this.call<GitStatusResult>('git-stage', { root: params.root, paths: params.paths })
+  }
+
+  async gitUnstage(params: { root: string; paths: string[] }): Promise<GitStatusResult> {
+    return this.call<GitStatusResult>('git-unstage', { root: params.root, paths: params.paths })
+  }
+
+  async gitCommit(params: {
+    root: string
+    message: string
+  }): Promise<{ output: string; status: GitStatusResult }> {
+    return this.call<{ output: string; status: GitStatusResult }>('git-commit', {
+      root: params.root,
+      message: params.message,
+    })
   }
 
   subscribe(handler: EventHandler): Unsubscribe {

@@ -1,6 +1,13 @@
 import type { SketchClient, PingResult, EventHandler, Unsubscribe, TransportKind } from './client'
 import { createEventBus } from './client'
-import type { Task, RunResult, EvalCase, EvalResult, SketchEvent } from './contracts'
+import type {
+  Task,
+  RunResult,
+  EvalCase,
+  EvalResult,
+  GitStatusResult,
+  SketchEvent,
+} from './contracts'
 
 export interface HttpSketchClientOptions {
   baseUrl?: string
@@ -72,6 +79,40 @@ export class HttpSketchClient implements SketchClient {
 
   async captureEval(params: { run: Partial<RunResult>; want?: { checks?: unknown[] }; evalsPath?: string }): Promise<EvalCase> {
     return this.callMethod<EvalCase>('capture-eval', params)
+  }
+
+  // ── git ───────────────────────────────────────────────────────────────────
+  //
+  // The dev bridge dispatches the same `git-*` methods the sidecar does, so the
+  // Git panel is real in the browser too. Nothing here parses porcelain: the
+  // engine already did (see packages/core/src/tools/git.ts).
+
+  async gitStatus(params: { root: string }): Promise<GitStatusResult> {
+    return this.callMethod<GitStatusResult>('git-status', { root: params.root })
+  }
+
+  async gitDiff(params: { root: string; path?: string; staged?: boolean }): Promise<string> {
+    const result = await this.callMethod<{ diff?: unknown }>('git-diff', {
+      root: params.root,
+      ...(params.path !== undefined ? { path: params.path } : {}),
+      ...(params.staged === true ? { staged: true } : {}),
+    })
+    return typeof result?.diff === 'string' ? result.diff : ''
+  }
+
+  async gitStage(params: { root: string; paths: string[] }): Promise<GitStatusResult> {
+    return this.callMethod<GitStatusResult>('git-stage', params)
+  }
+
+  async gitUnstage(params: { root: string; paths: string[] }): Promise<GitStatusResult> {
+    return this.callMethod<GitStatusResult>('git-unstage', params)
+  }
+
+  async gitCommit(params: {
+    root: string
+    message: string
+  }): Promise<{ output: string; status: GitStatusResult }> {
+    return this.callMethod<{ output: string; status: GitStatusResult }>('git-commit', params)
   }
 
   subscribe(handler: EventHandler): Unsubscribe {

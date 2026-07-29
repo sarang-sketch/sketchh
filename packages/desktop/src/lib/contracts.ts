@@ -8,6 +8,18 @@
 // bundle takes on no runtime dependency on @sketch/core. The engine is reached
 // through the SketchClient seam (see ./client.ts) and never imported directly.
 
+import type { tools } from '@sketch/core'
+
+/**
+ * The git shapes, taken from the engine's parser rather than restated.
+ *
+ * `tools` is a namespace export, so these cannot ride the flat `export type {}`
+ * below; a type alias through a type-only namespace import is still erased at
+ * compile time, so the runtime dependency rule holds (Requirement 1.x).
+ */
+export type GitStatusResult = tools.GitStatusResult
+export type GitFileChange = tools.GitFileChange
+
 export type {
   // Events — the spine the Timeline and the Agent Console read.
   EventKind,

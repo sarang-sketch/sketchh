@@ -24,6 +24,10 @@ export * as events from './events/index.js'
 export * as skills from './skills/index.js'
 export * as plan from './plan/index.js'
 
+// `<project>/.sketch/` — the engine's own state directory, and the self-ignore
+// marker that keeps the event log and the plan out of the user's `git status`.
+export * as workspace from './workspace/index.js'
+
 // The agent loop: `loop.runTask(task, deps)`.
 export * as loop from './loop/index.js'
 

@@ -7,7 +7,14 @@
 //
 // Validates: Requirements 13.1, 13.3
 
-import type { EvalCase, EvalResult, RunResult, SketchEvent, Task } from './contracts'
+import type {
+  EvalCase,
+  EvalResult,
+  GitStatusResult,
+  RunResult,
+  SketchEvent,
+  Task,
+} from './contracts'
 
 /** Which transport is live. Reported by `ping` so the UI can name it honestly. */
 export type TransportKind = 'mock' | 'stdio' | 'http'
@@ -47,6 +54,30 @@ export interface SketchClient {
 
   /** Capture run as eval case. */
   captureEval?(params: { run: Partial<RunResult>; want?: { checks?: unknown[] }; evalsPath?: string }): Promise<EvalCase>
+
+  // ── git ───────────────────────────────────────────────────────────────────
+  //
+  // Source control is an ENGINE capability on this seam, not a Tauri command, for
+  // two reasons: the porcelain parser that understands renames, quoted paths, a
+  // detached HEAD and "not a repository" lives in packages/core/src/tools/git.ts
+  // and is not duplicated; and a capability on the seam works under the browser
+  // dev bridge as well as in the app (Requirement 13.3).
+  //
+  // Every call names its repository. There is no implicit "current project" on the
+  // wire — the engine refuses a git call with no root rather than falling back to
+  // the server's cwd, which would let a mutation land in the wrong repository.
+  // Each mutation resolves to a FRESH status, so a caller cannot render a stale
+  // list after a successful stage or commit.
+
+  gitStatus(params: { root: string }): Promise<GitStatusResult>
+  /** A unified diff. `staged` compares the index against HEAD. */
+  gitDiff(params: { root: string; path?: string; staged?: boolean }): Promise<string>
+  gitStage(params: { root: string; paths: string[] }): Promise<GitStatusResult>
+  gitUnstage(params: { root: string; paths: string[] }): Promise<GitStatusResult>
+  gitCommit(params: {
+    root: string
+    message: string
+  }): Promise<{ output: string; status: GitStatusResult }>
 
   /**
    * Attach a handler to the engine's event stream. Called for every event from

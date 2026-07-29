@@ -35,6 +35,7 @@
 import { appendFile, mkdir, readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { EventKind, SketchEvent } from "../types.js";
+import { ensureStateDir } from "../workspace/state-dir.js";
 import { newEventId } from "./ids.js";
 import { sanitizePayload, secretsFromEnv } from "./redact.js";
 
@@ -167,11 +168,20 @@ export interface JsonlEventStoreOptions extends EventStoreOptions {
 /**
  * Append-only JSONL store: one JSON object per line, one file per UTC day.
  *
- * The only filesystem writes this class performs are `mkdir` (recursive, once)
- * and `appendFile`. No existing byte is ever rewritten.
+ * NO LOG BYTE IS EVER REWRITTEN. The only writes this class performs against the
+ * log are `mkdir` (recursive, once) and `appendFile`.
+ *
+ * One further write happens once, and it is not a log write: when the store uses
+ * the `<baseDir>/.sketch/events` convention it asks `ensureStateDir` to drop a
+ * self-ignore marker in `.sketch/`, so the engine's own log does not surface as an
+ * untracked change in the project's `git status` (and hence in the Git panel). See
+ * workspace/state-dir.ts. A store given an explicit `eventsDir` is somewhere of
+ * the caller's choosing and gets no marker.
  */
 export class JsonlEventStore implements EventStore {
   readonly #dir: string;
+  /** Project root, when the `.sketch/events` convention is in use. */
+  readonly #stateBase: string | undefined;
   readonly #clock: () => number;
   readonly #ids: () => string;
   readonly #secrets: EventStoreOptions["secrets"];
@@ -181,6 +191,7 @@ export class JsonlEventStore implements EventStore {
 
   constructor(options: JsonlEventStoreOptions) {
     this.#dir = options.eventsDir ?? join(options.baseDir, ".sketch", "events");
+    this.#stateBase = options.eventsDir === undefined ? options.baseDir : undefined;
     this.#clock = options.clock ?? (() => Date.now());
     this.#ids = options.ids ?? newEventId;
     this.#secrets = options.secrets ?? secretsFromEnv();
@@ -209,6 +220,8 @@ export class JsonlEventStore implements EventStore {
     };
 
     if (!this.#dirReady) {
+      // The marker first, so a project that only ever emits one event still gets it.
+      if (this.#stateBase !== undefined) await ensureStateDir(this.#stateBase);
       await mkdir(this.#dir, { recursive: true });
       this.#dirReady = true;
     }

@@ -66,6 +66,29 @@ class FakeEventClient implements SketchClient {
     return this.bus.subscribe(handler)
   }
 
+  // Source control is on the seam (the Git panel reads it) but the editor never
+  // calls it. Rejecting rather than returning a plausible status keeps a test that
+  // starts using git honest about having no repository behind it.
+  gitStatus(): Promise<never> {
+    return Promise.reject(new Error('no repository in this test'))
+  }
+
+  gitDiff(): Promise<never> {
+    return Promise.reject(new Error('no repository in this test'))
+  }
+
+  gitStage(): Promise<never> {
+    return Promise.reject(new Error('no repository in this test'))
+  }
+
+  gitUnstage(): Promise<never> {
+    return Promise.reject(new Error('no repository in this test'))
+  }
+
+  gitCommit(): Promise<never> {
+    return Promise.reject(new Error('no repository in this test'))
+  }
+
   /** What the engine's file writer produces after it writes a file. */
   editAccepted(path: string, bytes: number): void {
     this.seq += 1
