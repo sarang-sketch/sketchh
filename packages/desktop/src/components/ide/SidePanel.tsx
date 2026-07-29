@@ -8,6 +8,7 @@ import { AgentTeamPanel } from '../../panels/agent/AgentTeamPanel';
 import { SkillsMarketplace } from '../../panels/SkillsMarketplace';
 import { AgentTimelinePanel } from '../../ui/panels/AgentTimeline';
 import { AgentConsolePanel } from '../../ui/panels/AgentConsole';
+import DebuggerPanel from '../../panels/ide/DebuggerPanel';
 
 export default function SidePanel() {
   const { ideActivePanel } = useAppState();
@@ -45,9 +46,12 @@ export default function SidePanel() {
       title = 'Agent Console';
       content = <AgentConsolePanel />;
       break;
+    case 'run':
+      title = 'Run & Debug';
+      content = <DebuggerPanel />;
+      break;
     default:
-      // 'run' and 'mcp' have ActivityBar buttons but no panel yet (Run & Debug is
-      // task 3.5, MCP Tools is task 5.x). They fall through to nothing on purpose.
+      // MCP Tools has an ActivityBar button but its real panel belongs to task 7.3.
       return null;
   }
 

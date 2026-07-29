@@ -8,111 +8,95 @@
 .header {
   display: flex;
   align-items: center;
-  height: 35px;
-  background-color: var(--bg-secondary);
-  border-bottom: 1px solid var(--border);
+  justify-content: space-between;
+  min-height: 35px;
   padding: 0 8px;
+  border-bottom: 1px solid var(--border);
+  background-color: var(--bg-secondary);
 }
 
-.tabs {
-  display: flex;
-  align-items: center;
-  height: 100%;
-  gap: 4px;
-}
-
-.tab {
-  display: flex;
-  align-items: center;
-  padding: 0 12px;
-  height: 100%;
-  font-size: 11px;
-  color: var(--text-secondary);
-  cursor: pointer;
-  border-bottom: 2px solid transparent;
-}
-
-.tab:hover {
-  color: var(--text-primary);
-}
-
-.tab.active {
-  color: var(--text-primary);
-  border-bottom-color: var(--accent);
-}
+.tabs, .headerRight, .confirmActions { display: flex; align-items: center; gap: 4px; }
+.tab { padding: 9px 12px; border-bottom: 2px solid transparent; color: var(--text-secondary); font-size: 11px; }
+.tab.active { border-bottom-color: var(--accent); color: var(--text-primary); }
 
 .addBtn {
-  background: none;
-  border: none;
-  color: var(--text-secondary);
-  cursor: pointer;
   display: flex;
-  align-items: center;
-  justify-content: center;
   width: 24px;
   height: 24px;
+  align-items: center;
+  justify-content: center;
+  border: none;
   border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-secondary);
+  cursor: pointer;
 }
-
-.addBtn:hover {
-  background-color: var(--bg-hover);
-  color: var(--text-primary);
-}
+.addBtn:hover:not(:disabled) { background-color: var(--bg-hover); color: var(--text-primary); }
+.addBtn:disabled { cursor: default; opacity: .45; }
+.notSandbox { color: var(--text-muted); font-size: 10px; }
 
 .body {
   flex: 1;
-  padding: 12px;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--text-primary);
   overflow-y: auto;
-  line-height: 1.5;
+  padding: 12px;
+  color: var(--text-primary);
+  font: 12px/1.5 var(--font-mono);
 }
 
-.outputLine {
-  margin-bottom: 4px;
-}
-
-.success {
-  color: var(--success);
-}
-
-.info {
-  color: var(--accent);
-}
-
-.warning {
-  color: var(--warning);
-}
-
-.error {
-  color: var(--error);
-}
-
-.path {
-  color: var(--purple);
-}
+.run { margin-bottom: 10px; }
+.outputLine { min-height: 18px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.prompt { color: var(--success); font-weight: 700; }
+.dollar { color: var(--text-muted); }
+.muted { color: var(--text-muted); }
+.error, .stderrLine { color: var(--error); }
 
 .inputLine {
   display: flex;
   align-items: center;
   gap: 8px;
+  padding: 7px 12px;
+  border-top: 1px solid var(--border);
+  font: 12px var(--font-mono);
+}
+.input {
+  min-width: 0;
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+}
+.input:disabled { color: var(--text-muted); }
+
+.confirm {
   margin-top: 8px;
+  padding: 10px;
+  border: 1px solid var(--warning);
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-secondary);
 }
-
-.prompt {
-  color: var(--success);
-  font-weight: bold;
+.confirmText { color: var(--text-primary); }
+.confirmCommand { color: var(--accent); font-weight: 700; }
+.confirmNote { margin: 4px 0 8px; color: var(--warning); font-size: 11px; }
+.runBtn, .cancelBtn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 11px;
 }
-
-.cursor {
-  width: 8px;
-  height: 14px;
-  background-color: var(--text-primary);
-  animation: blink 1s step-end infinite;
-}
-
-@keyframes blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0; }
-}
+.runBtn { border-color: var(--accent); background: var(--accent); color: #fff; }
+.cancelBtn { background: transparent; color: var(--text-primary); }
+.ansiBlack { color: #737373; }
+.ansiRed { color: #ef4444; }
+.ansiGreen { color: #22c55e; }
+.ansiYellow { color: #eab308; }
+.ansiBlue { color: #3b82f6; }
+.ansiMagenta { color: #d946ef; }
+.ansiCyan { color: #06b6d4; }
+.ansiWhite { color: #f5f5f5; }
+.ansiBold { font-weight: 700; }
