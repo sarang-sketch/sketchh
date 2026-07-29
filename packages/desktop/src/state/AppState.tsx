@@ -1,12 +1,56 @@
 import React, { createContext, useContext, useReducer, ReactNode, Dispatch } from 'react';
+import { basename, canonicalPath, languageForPath } from '../editor/paths';
 
 // Common Interfaces
+
+/**
+ * A file the editor has open.
+ *
+ * `content` IS THE AUTHORITATIVE TEXT of that file in this app (Requirement 15.2).
+ * Monaco's model is a projection of it, reconciled in exactly one place —
+ * `ModelRegistry.sync` — and every non-keystroke change (disk read, engine write,
+ * conflict reload) lands here first. Nothing else caches file text: `openFiles`
+ * below holds PATHS, not entries, so there is one record per file and not two.
+ */
 export interface FileEntry {
+  /** Canonical absolute path (see editor/paths.ts). Also the key in `files`. */
   path: string;
   name: string;
   content: string;
   language: string;
-  isDirty?: boolean;
+  /** True when `content` differs from what is on disk. Cleared by a save. */
+  isDirty: boolean;
+  /**
+   * Set when the engine wrote this file while the buffer had unsaved edits. The
+   * user's text is kept; the marker makes the divergence visible instead of
+   * resolving it silently in either direction (Requirement 15.3).
+   */
+  conflict?: FileConflict | null;
+}
+
+export interface FileConflict {
+  detectedAt: number;
+  /** Byte count the engine reported writing, as it appeared in `edit_accepted`. */
+  engineBytes: number;
+}
+
+/** A message the editor needs a user to see. Never a silent failure. */
+export interface EditorNotice {
+  level: 'error' | 'info';
+  message: string;
+}
+
+/** Builds the one record for a file. The only place a `FileEntry` is constructed. */
+export function makeFileEntry(path: string, content: string): FileEntry {
+  const key = canonicalPath(path);
+  return {
+    path: key,
+    name: basename(key),
+    content,
+    language: languageForPath(key),
+    isDirty: false,
+    conflict: null,
+  };
 }
 
 export interface ChatMessage {
@@ -103,11 +147,14 @@ export interface AppState {
   searchQuery: string;
   searchResults: any[];
   
-  // File State
-  openFiles: FileEntry[];
+  // File State — the single owner (Requirement 15.2).
+  /** Open tabs, in tab order. PATHS only: the content lives in `files`, once. */
+  openFiles: string[];
   activeFile: string | null;
   files: Record<string, FileEntry>;
   projectRoot: string | null;
+  /** Surfaced by the editor. Set by a refused read, a failed save, a bad path. */
+  editorNotice: EditorNotice | null;
   
   // Skills State
   installedSkills: Skill[];
@@ -140,6 +187,14 @@ export type AppAction =
   | { type: 'OPEN_FILE'; payload: FileEntry }
   | { type: 'CLOSE_FILE'; payload: string }
   | { type: 'UPDATE_FILE_CONTENT'; payload: { path: string; content: string } }
+  | { type: 'FILE_SAVED'; payload: string }
+  /** The engine reported writing this path. The reducer decides update vs conflict. */
+  | { type: 'ENGINE_WROTE_FILE'; payload: { path: string; content: string; bytes?: number; at?: number } }
+  /** Explicit user choice: take what is on disk and drop my edits. */
+  | { type: 'RELOAD_FILE'; payload: { path: string; content: string } }
+  /** Explicit user choice: keep my edits; stop showing the conflict. */
+  | { type: 'DISMISS_CONFLICT'; payload: string }
+  | { type: 'SET_EDITOR_NOTICE'; payload: EditorNotice | null }
   | { type: 'ADD_MESSAGE'; payload: ChatMessage }
   | { type: 'SET_THINKING'; payload: { isThinking: boolean; stage?: string } }
   | { type: 'SET_CONVERSATION'; payload: string }
@@ -157,11 +212,9 @@ export type AppAction =
 const initialState: AppState = {
   mode: 'agent',
   agentView: 'new_task',
-  workspaces: [
-    { name: '2.0', path: 'C:\\Users\\saran\\Downloads' },
-    { name: 'blissful', path: 'C:\\Users\\saran\\Downloads' },
-    { name: 'stride', path: 'C:\\Users\\saran\\Downloads' }
-  ],
+  // No fabricated workspaces. A folder appears here once the user opens one
+  // through the real picker (Requirements 14.6, 27.3).
+  workspaces: [],
   artifacts: [
     { id: 'art1', title: 'implementation_plan.md', type: 'Markdown Plan', createdAt: Date.now() - 3600000, content: '# Dual-Mode Architecture Plan...' },
     { id: 'art2', title: 'walkthrough.md', type: 'Walkthrough', createdAt: Date.now() - 1800000, content: '# Build Walkthrough...' }
@@ -222,7 +275,10 @@ const initialState: AppState = {
   openFiles: [],
   activeFile: null,
   files: {},
-  projectRoot: 'c:/Users/saran/Downloads/sketch/desktop',
+  // No project is open until the user picks one. A hardcoded root here made every
+  // file call address a folder that may not exist on this machine.
+  projectRoot: null,
+  editorNotice: null,
   
   installedSkills: [
     { id: 's1', name: 'skillopt', description: 'Optimize your code automatically', version: '1.2.0', author: 'Sketch Team', icon: 'Zap', enabled: true, category: 'Optimization' },
@@ -272,61 +328,158 @@ const initialState: AppState = {
   totalCost: 12.45
 };
 
+/** The starting state. Exported so a test drives the real reducer, not a copy. */
+export const initialAppState: AppState = initialState;
+
 // Reducer
-function appReducer(state: AppState, action: AppAction): AppState {
+export function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
     case 'SET_MODE':
       return { ...state, mode: action.payload };
     case 'SET_AGENT_VIEW':
       return { ...state, agentView: action.payload };
-    case 'SET_PROJECT_ROOT':
-      return { 
-        ...state, 
-        projectRoot: action.payload,
-        workspaces: state.workspaces.some(w => w.path === action.payload) 
-          ? state.workspaces 
-          : [{ name: action.payload.split(/[/\\]/).pop() || 'project', path: action.payload }, ...state.workspaces]
+    case 'SET_PROJECT_ROOT': {
+      const root = canonicalPath(action.payload);
+      // Opening a different project closes its predecessor's buffers. Leaving them
+      // open would leave tabs whose paths the file layer must refuse (Req 15.6),
+      // which reads as a broken editor rather than as containment working.
+      const switched = root !== state.projectRoot;
+      return {
+        ...state,
+        projectRoot: root,
+        openFiles: switched ? [] : state.openFiles,
+        files: switched ? {} : state.files,
+        activeFile: switched ? null : state.activeFile,
+        editorNotice: switched ? null : state.editorNotice,
+        workspaces: state.workspaces.some(w => w.path === root)
+          ? state.workspaces
+          : [{ name: basename(root) || 'project', path: root }, ...state.workspaces]
       };
+    }
     case 'CLEAR_MESSAGES':
       return { ...state, chatMessages: [] };
     case 'SET_ACTIVE_PANEL':
       return { ...state, ideActivePanel: action.payload };
     case 'TOGGLE_TERMINAL':
       return { ...state, terminalOpen: !state.terminalOpen };
-    case 'SET_ACTIVE_FILE':
-      return { ...state, activeFile: action.payload };
-    case 'OPEN_FILE':
-      const exists = state.openFiles.some(f => f.path === action.payload.path);
+    case 'SET_ACTIVE_FILE': {
+      if (action.payload === null) return { ...state, activeFile: null };
+      const path = canonicalPath(action.payload);
+      // Only an open tab can be active. Anything else would render an empty editor
+      // for a file the state does not have.
+      if (!state.openFiles.includes(path)) return state;
+      return { ...state, activeFile: path };
+    }
+    case 'OPEN_FILE': {
+      const entry = action.payload;
+      const isOpen = state.openFiles.includes(entry.path);
+      // Re-opening a file that is already open only focuses its tab. Replacing the
+      // record would discard unsaved edits, which a click in the file tree must not
+      // do.
+      if (isOpen) {
+        return { ...state, activeFile: entry.path };
+      }
       return {
         ...state,
-        openFiles: exists ? state.openFiles : [...state.openFiles, action.payload],
-        activeFile: action.payload.path,
-        files: { ...state.files, [action.payload.path]: action.payload }
+        openFiles: [...state.openFiles, entry.path],
+        activeFile: entry.path,
+        files: { ...state.files, [entry.path]: entry }
       };
-    case 'CLOSE_FILE':
-      const newFiles = state.openFiles.filter(f => f.path !== action.payload);
+    }
+    case 'CLOSE_FILE': {
+      const path = canonicalPath(action.payload);
+      const index = state.openFiles.indexOf(path);
+      if (index === -1) return state;
+      const remaining = state.openFiles.filter(p => p !== path);
+      const { [path]: _closed, ...keptFiles } = state.files;
       return {
         ...state,
-        openFiles: newFiles,
-        activeFile: state.activeFile === action.payload 
-          ? (newFiles.length > 0 ? newFiles[newFiles.length - 1].path : null)
-          : state.activeFile
+        openFiles: remaining,
+        files: keptFiles,
+        // The neighbour to the right, else the one to the left, else nothing —
+        // the tab that took the closed tab's place.
+        activeFile:
+          state.activeFile === path
+            ? remaining[Math.min(index, remaining.length - 1)] ?? null
+            : state.activeFile
       };
-    case 'UPDATE_FILE_CONTENT':
+    }
+    case 'UPDATE_FILE_CONTENT': {
+      const path = canonicalPath(action.payload.path);
+      const current = state.files[path];
+      // A keystroke in a file that is not open cannot be trusted to define one.
+      if (!current) return state;
+      if (current.content === action.payload.content) return state;
       return {
         ...state,
         files: {
           ...state.files,
-          [action.payload.path]: {
-            ...state.files[action.payload.path],
-            content: action.payload.content,
-            isDirty: true
-          }
-        },
-        openFiles: state.openFiles.map(f => 
-          f.path === action.payload.path ? { ...f, content: action.payload.content, isDirty: true } : f
-        )
+          [path]: { ...current, content: action.payload.content, isDirty: true }
+        }
       };
+    }
+    case 'FILE_SAVED': {
+      const path = canonicalPath(action.payload);
+      const current = state.files[path];
+      if (!current) return state;
+      return {
+        ...state,
+        // Saved means disk now matches `content`, so the conflict marker is stale.
+        files: { ...state.files, [path]: { ...current, isDirty: false, conflict: null } }
+      };
+    }
+    case 'ENGINE_WROTE_FILE': {
+      const path = canonicalPath(action.payload.path);
+      const current = state.files[path];
+      // Not open: nothing to reconcile. The editor is not a file cache.
+      if (!current) return state;
+      if (current.isDirty) {
+        // The user's unsaved text exists nowhere else; the engine's version is
+        // safely on disk and can be re-read on demand. So keep the buffer and flag
+        // the divergence (Requirement 15.3).
+        return {
+          ...state,
+          files: {
+            ...state.files,
+            [path]: {
+              ...current,
+              conflict: {
+                detectedAt: action.payload.at ?? Date.now(),
+                engineBytes: action.payload.bytes ?? 0
+              }
+            }
+          }
+        };
+      }
+      if (current.content === action.payload.content) return state;
+      return {
+        ...state,
+        files: {
+          ...state.files,
+          [path]: { ...current, content: action.payload.content, isDirty: false, conflict: null }
+        }
+      };
+    }
+    case 'RELOAD_FILE': {
+      const path = canonicalPath(action.payload.path);
+      const current = state.files[path];
+      if (!current) return state;
+      return {
+        ...state,
+        files: {
+          ...state.files,
+          [path]: { ...current, content: action.payload.content, isDirty: false, conflict: null }
+        }
+      };
+    }
+    case 'DISMISS_CONFLICT': {
+      const path = canonicalPath(action.payload);
+      const current = state.files[path];
+      if (!current || !current.conflict) return state;
+      return { ...state, files: { ...state.files, [path]: { ...current, conflict: null } } };
+    }
+    case 'SET_EDITOR_NOTICE':
+      return { ...state, editorNotice: action.payload };
     case 'ADD_MESSAGE':
       return { ...state, chatMessages: [...state.chatMessages, action.payload] };
     case 'SET_THINKING':
@@ -365,8 +518,15 @@ function appReducer(state: AppState, action: AppAction): AppState {
 const AppStateContext = createContext<AppState | undefined>(undefined);
 const AppDispatchContext = createContext<Dispatch<AppAction> | undefined>(undefined);
 
-export const AppStateProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [state, dispatch] = useReducer(appReducer, initialState);
+export const AppStateProvider: React.FC<{
+  children: ReactNode;
+  /** Test-only seam: start from a known state instead of reaching for globals. */
+  initial?: Partial<AppState>;
+}> = ({ children, initial }) => {
+  const [state, dispatch] = useReducer(
+    appReducer,
+    initial ? { ...initialState, ...initial } : initialState
+  );
 
   return (
     <AppStateContext.Provider value={state}>

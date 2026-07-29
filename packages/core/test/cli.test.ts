@@ -46,6 +46,7 @@ import {
   ENGINE_NAME,
   ENGINE_VERSION,
   METHOD_NAMES,
+  REQUIRED_METHOD_NAMES,
   PROTOCOL_VERSION,
 } from '../src/rpc/index.js'
 import type { EventFrame, MethodHandler, ResponseFrame } from '../src/rpc/index.js'
@@ -576,7 +577,14 @@ describeCli(`capture-eval implementation (Requirement 12.2, Task 2.3)${CLI_SKIP_
   }, 30_000)
 
   it('is a known method, so all five of Requirement 12.2 are present', () => {
-    expect([...METHOD_NAMES].sort()).toEqual(
+    // A SUPERSET check, not an equality one. Requirement 12.2 names the five
+    // methods the CLI must answer; it does not cap the table, and task 3.3 added
+    // the `git-*` group the Git panel drives through this same protocol. What must
+    // never happen is one of the five going missing, which is what this asserts.
+    for (const required of REQUIRED_METHOD_NAMES) {
+      expect(METHOD_NAMES, `Requirement 12.2 requires '${required}'`).toContain(required)
+    }
+    expect([...REQUIRED_METHOD_NAMES].sort()).toEqual(
       ['capture-eval', 'eval', 'parse-skill', 'ping', 'run'].sort(),
     )
   })

@@ -100,12 +100,33 @@ async fn open_project_dialog<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Res
 }
 
 // ── Git Commands ────────────────────────────────────────────────────────────
+//
+// Both commands take a `project_root` and BOTH now resolve it through
+// `command_policy` before anything is spawned. They previously did not: the string
+// went straight to `current_dir`, so the webview could run `git` in any directory
+// the OS user can reach, and `git_diff` additionally forwarded a caller-supplied
+// `file` into git's own argument vector — where a value starting with `-` is an
+// option and `--output=<path>` is a write primitive. See
+// `command_policy::resolve_pathspec_within` for the whole shape of that problem
+// (Requirement 13.8).
+//
+// PARSING LIVES IN THE ENGINE, NOT HERE. The porcelain parser below splits on fixed
+// offsets and does not understand renames (`R  old -> new`), quoted or non-ASCII
+// paths, or a `##` line for a detached HEAD. The authoritative parser is
+// packages/core/src/tools/git.ts, which handles those cases and is what the Git
+// panel reads through the `SketchClient` seam. This command is kept for the native
+// bridge wrapper that names it, deliberately without a second parser to keep in
+// step; its shortcomings are the reason the panel does not depend on it.
 
 #[tauri::command]
 fn git_status(project_root: String) -> Result<GitStatus, String> {
+    // Canonical, existing, a directory, and refused outright when no project is
+    // open — the same root every fs command resolves against.
+    let repo = command_policy::resolve_root(&project_root)?;
+
     let output = std::process::Command::new("git")
         .args(["status", "--porcelain", "-b"])
-        .current_dir(&project_root)
+        .current_dir(&repo)
         .output()
         .map_err(|e| format!("Git not available: {}", e))?;
 
@@ -136,16 +157,36 @@ fn git_status(project_root: String) -> Result<GitStatus, String> {
 
 #[tauri::command]
 fn git_diff(project_root: String, file: Option<String>) -> Result<String, String> {
+    let repo = command_policy::resolve_root(&project_root)?;
+
     let mut args = vec!["diff".to_string()];
     if let Some(f) = file {
-        args.push(f);
+        // A contained path, not an opaque argument. `--` then terminates option
+        // parsing, so even a value this resolver admitted cannot become a flag.
+        let path = command_policy::resolve_pathspec_within(&project_root, &f)?;
+        args.push("--".to_string());
+        args.push(path.to_string_lossy().to_string());
     }
 
     let output = std::process::Command::new("git")
         .args(&args)
-        .current_dir(&project_root)
+        .current_dir(&repo)
         .output()
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format!("Git not available: {}", e))?;
+
+    if !output.status.success() {
+        // Named, with the reason, rather than an empty diff that reads as "no
+        // changes" (Requirement 27.5).
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(format!(
+            "git diff failed{}",
+            if stderr.is_empty() {
+                String::new()
+            } else {
+                format!(": {}", stderr)
+            }
+        ));
+    }
 
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }

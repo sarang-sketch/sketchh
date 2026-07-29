@@ -37,6 +37,7 @@ export type { ServerIO, MethodContextIO } from './server.js'
 export {
   METHODS,
   METHOD_NAMES,
+  REQUIRED_METHOD_NAMES,
   InvalidParamsError,
   NotImplementedError,
 } from './methods.js'

@@ -149,7 +149,7 @@ Phase 4 numbering stays intact for anything that references it.
 ## Phase 3 — Code surface
 
 - [ ] 3. Code surface: Monaco, diff review, git, and one file state
-- [ ] 3.1 Integrate Monaco with a single file-state owner
+- [-] 3.1 Integrate Monaco with a single file-state owner
   - Install Monaco and render it with a `Map<path, model>` keyed by absolute path
   - Make `AppState` the single owner of `openFiles`, `activeFile`, and `files`; delete `EditorArea`'s local `hasFileOpen` and its hardcoded tabs, gutter, and fake syntax markup
   - Load file content from the real filesystem through the client seam
@@ -164,7 +164,8 @@ Phase 4 numbering stays intact for anything that references it.
   - `tools/git.ts` in core shelling out for status, diff, branch, and stage operations
   - Replace `GitPanel`'s `MOCK_STAGED`, `MOCK_CHANGES`, and `MOCK_UNTRACKED` with real data and wire the dead stage, unstage, and commit buttons
   - Add a diff pane; reconcile the branch name shown in `StatusBar` with the real branch
-  - _Requirements: 14.6, 27.1, 27.3_
+  - CARRIED OVER from the Phase 2 audit: `git_status` and `git_diff` in `src-tauri/src/main.rs` take a `project_root` but never contain it, and `git_diff` forwards a caller-supplied `file` argument to `git diff` unvalidated. Route both through the same `command_policy` containment the fs commands now use, and treat `file` as a contained path rather than an opaque argument
+  - _Requirements: 14.6, 27.1, 27.3, 13.8_
 - [ ] 3.4 Make Explorer, Terminal, and Debugger real
   - Replace `FileExplorer`'s `MOCK_TREE` with real `read_dir` data and wire file clicks to open in the editor
   - Replace the static `Terminal` markup with a real input, real command execution through the scoped terminal tool, and output from state

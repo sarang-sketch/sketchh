@@ -27,6 +27,11 @@ export * as plan from './plan/index.js'
 // The agent loop: `loop.runTask(task, deps)`.
 export * as loop from './loop/index.js'
 
+// Tools the engine drives on the machine: `tools.GitTool`, `tools.parseStatus`.
+// The Git panel reaches these through the RPC methods below, not by importing them
+// — the desktop bundle takes no runtime dependency on this package.
+export * as tools from './tools/index.js'
+
 // The eval harness: `evals.runEvalSet(cases, deps)` and `evals.meanScore(results)`.
 // Built before the things it judges — every lift claim is measured through it.
 export * as evals from './evals/index.js'
@@ -41,6 +46,7 @@ export * as evals from './evals/index.js'
 export {
   METHODS,
   METHOD_NAMES,
+  REQUIRED_METHOD_NAMES,
   InvalidParamsError,
   NotImplementedError,
 } from './rpc/methods.js'

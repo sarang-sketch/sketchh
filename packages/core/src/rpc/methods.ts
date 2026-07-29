@@ -37,6 +37,7 @@ import {
   loadSkillFolder,
   loadSkills,
 } from '../skills/index.js'
+import { GitTool } from '../tools/index.js'
 import type {
   ChatAdapter,
   Check,
@@ -408,6 +409,93 @@ async function evalCases(params: Record<string, unknown>, ctx: MethodContext): P
   return { results, mean: meanScore(results) }
 }
 
+// ── git ──────────────────────────────────────────────────────────────────────
+//
+// The Git panel is a UI over these five methods, NOT over the Tauri `git_status`
+// command. Two reasons, both structural:
+//
+//   * the parser. `tools/git.ts` understands renames, quoted and non-ASCII paths,
+//     a detached HEAD, and "this is not a repository"; the Rust command's offset
+//     split does not. One parser, in the engine, reached the same way by both
+//     transports.
+//   * the seam. Engine capabilities belong on `SketchClient` (the note at the top
+//     of packages/desktop/src/ipc/bridge.ts says exactly this), so the panel works
+//     in the browser dev bridge as well as in the app.
+//
+// EVENTS. Mutations are recorded through the same JSONL store a run uses, so a
+// stage or a commit shows up on the Timeline. Reads are not: the panel polls
+// `git-status` on every refresh and an append-only log is the wrong home for that.
+
+/**
+ * The project a git call applies to. Required and explicit — falling back to the
+ * server's cwd for a mutation would let a caller commit in the wrong repository by
+ * omitting a field.
+ */
+function gitRoot(params: Record<string, unknown>): string {
+  return resolve(readString(params, 'root', 'params.root'))
+}
+
+function gitPaths(params: Record<string, unknown>): string[] {
+  const paths = optionalStringArray(params['paths'], 'params.paths')
+  if (paths === undefined || paths.length === 0) {
+    throw new InvalidParamsError('params.paths must be a non-empty array of paths')
+  }
+  return paths
+}
+
+/** A tool that records mutations where the run log lives. */
+function gitTool(root: string, ctx: MethodContext, record: boolean): GitTool {
+  if (!record) return new GitTool({ root })
+  const events = new StreamingEventStore(
+    new JsonlEventStore({ baseDir: root, secrets: () => ctx.secrets() }),
+    (event) => ctx.emitEvent(event),
+  )
+  return new GitTool({ root, events })
+}
+
+async function gitStatus(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
+  return gitTool(gitRoot(params), ctx, false).status()
+}
+
+async function gitDiff(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
+  const path = optionalString(params, 'path', 'params.path')
+  const staged = params['staged']
+  if (staged !== undefined && staged !== null && typeof staged !== 'boolean') {
+    throw new InvalidParamsError('params.staged must be a boolean when present')
+  }
+  const diff = await gitTool(gitRoot(params), ctx, false).diff({
+    ...(path !== undefined ? { path } : {}),
+    ...(staged === true ? { staged: true } : {}),
+  })
+  return { diff }
+}
+
+async function gitStage(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
+  const root = gitRoot(params)
+  const tool = gitTool(root, ctx, true)
+  await tool.stage(gitPaths(params))
+  // The fresh status is returned so the panel cannot render a stale list after a
+  // successful mutation.
+  return tool.status()
+}
+
+async function gitUnstage(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
+  const root = gitRoot(params)
+  const tool = gitTool(root, ctx, true)
+  await tool.unstage(gitPaths(params))
+  return tool.status()
+}
+
+async function gitCommit(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
+  const root = gitRoot(params)
+  const tool = gitTool(root, ctx, true)
+  // An empty message is refused by the tool before anything is spawned, and the
+  // refusal is recorded as `tool_denied`.
+  const message = typeof params['message'] === 'string' ? params['message'] : ''
+  const result = await tool.commit(message)
+  return { output: result.output, status: await tool.status() }
+}
+
 const SKILL_FILE = 'SKILL.md'
 const SKILL_MANIFEST = 'skill.json'
 
@@ -466,14 +554,35 @@ async function captureEval(params: unknown): Promise<unknown> {
   })
 }
 
-/** The method table. Requirement 12.2, exactly. */
+/**
+ * The method table.
+ *
+ * The first five are Requirement 12.2, and none of them may leave. The `git-*`
+ * group is task 3.3's Git panel: a UI capability that runs on the machine, so it
+ * belongs to the engine and reaches the panel through `SketchClient` on both
+ * transports rather than through a Tauri-only command.
+ */
 export const METHODS: Readonly<Record<string, MethodHandler>> = {
   ping,
   run,
   eval: evalCases,
   'parse-skill': parseSkill,
   'capture-eval': captureEval,
+  'git-status': gitStatus,
+  'git-diff': gitDiff,
+  'git-stage': gitStage,
+  'git-unstage': gitUnstage,
+  'git-commit': gitCommit,
 }
+
+/** The five the protocol contract names. Every build answers at least these. */
+export const REQUIRED_METHOD_NAMES: readonly string[] = [
+  'ping',
+  'run',
+  'eval',
+  'parse-skill',
+  'capture-eval',
+]
 
 /** Method names this build answers. */
 export const METHOD_NAMES: readonly string[] = Object.keys(METHODS)

@@ -123,6 +123,20 @@ export function useSketchEvents(): SketchEvent[] {
   return useClientContext().events
 }
 
+/**
+ * Events when there is a provider, an empty log when there is not.
+ *
+ * For a component that WATCHES the stream rather than existing to render it — the
+ * editor reconciling engine writes, for instance. Such a component is still usable
+ * (and testable) in a tree with no engine attached; it simply has nothing to
+ * reconcile. `useSketchEvents` keeps throwing, so a panel whose whole purpose is the
+ * log still fails loudly when it is mounted wrong.
+ */
+const NO_EVENTS: SketchEvent[] = []
+export function useOptionalSketchEvents(): SketchEvent[] {
+  return useContext(ClientContext)?.events ?? NO_EVENTS
+}
+
 export function useEngineStatus(): EngineStatus {
   return useClientContext().status
 }

@@ -144,7 +144,13 @@ fn has_parent_escape(path: &Path) -> bool {
 /// Canonicalizing here is half of what makes containment work — comparing a
 /// canonical candidate against a non-canonical root would fail on any machine where
 /// the root itself sits behind a symlink (`/tmp` on macOS, for one).
-fn resolve_root(project_root: &str) -> Result<PathBuf, String> {
+///
+/// PUBLIC because a command can need the root itself and no candidate under it:
+/// `git_status` spawns `git` with the project as its working directory, and it used
+/// to pass the caller's string to `current_dir` unexamined — which is how a webview
+/// could run `git` in any directory on disk. It now asks here instead, so "the open
+/// project root" means one thing everywhere (Requirement 13.8).
+pub fn resolve_root(project_root: &str) -> Result<PathBuf, String> {
     if project_root.trim().is_empty() {
         return Err("no project root is open, so no path may be used".to_string());
     }
@@ -329,6 +335,51 @@ pub fn resolve_write_target(project_root: &str, candidate: &str) -> Result<PathB
         }
     }
     Ok(target)
+}
+
+/// Resolve a caller-supplied git pathspec to a contained path.
+///
+/// ── WHY A PATHSPEC NEEDS ITS OWN DOOR ───────────────────────────────────────
+///
+/// `git_diff` used to push the caller's `file` straight into the argument vector.
+/// There is no shell in that path, so nothing could inject a command — but GIT
+/// PARSES ITS OWN ARGUMENTS, and an argument that begins with `-` is an option, not
+/// a path. `git diff --output=<file>` writes wherever it is pointed, so an
+/// unvalidated `file` was a write primitive with the same reach the fs commands were
+/// hardened against, arriving through a command that looks read-only
+/// (Requirement 13.8).
+///
+/// Two defences, and both are applied:
+///   1. anything that could be read as an option is refused BY NAME here, so the
+///      refusal says what was wrong instead of failing obscurely inside git;
+///   2. the caller puts `--` before the pathspec, so git stops option parsing
+///      whatever this function let through.
+///
+/// ── A MISSING PATH IS STILL A PATH ──────────────────────────────────────────
+///
+/// `git diff` over a DELETED file is an ordinary request, and `canonicalize` fails on
+/// something that is not on disk, so `resolve_within` alone would refuse the most
+/// interesting diff there is. A candidate that does not resolve therefore falls back
+/// to `resolve_write_target`'s nearest-existing-ancestor walk — reused, not
+/// reimplemented, so there is still exactly one prefix test under both. The fallback
+/// also owns the error when both fail: it is the branch that understands a path that
+/// is not there, so its message is the accurate one.
+pub fn resolve_pathspec_within(project_root: &str, candidate: &str) -> Result<PathBuf, String> {
+    let requested = candidate.trim();
+    if requested.is_empty() {
+        return Err("no path given".to_string());
+    }
+    if requested.starts_with('-') {
+        return Err(format!(
+            "path '{}' is refused: git would read it as an option, not a path",
+            candidate
+        ));
+    }
+
+    match resolve_within(project_root, candidate, "path") {
+        Ok(resolved) => Ok(resolved),
+        Err(_) => resolve_write_target(project_root, candidate),
+    }
 }
 
 /// Resolve the working directory for a spawned command, refusing anything outside
@@ -564,6 +615,103 @@ mod tests {
             assert!(resolve_file_within(root, &anywhere).is_err());
             assert!(resolve_write_target(root, &anywhere).is_err());
         }
+    }
+
+    // ── Requirement 13.8: the git commands are contained too ─────────────────
+
+    #[test]
+    fn git_needs_a_real_contained_project_root() {
+        let root = scratch("git-root");
+        assert_eq!(resolve_root(&s(&root)).unwrap(), root);
+
+        // No project open: nothing to run git in.
+        for empty in ["", "   "] {
+            let err = resolve_root(empty).unwrap_err();
+            assert!(err.contains("no project root is open"), "{}", err);
+        }
+
+        // A path that is not there, and a path that is a file, are both refused —
+        // `git_status` used to hand either straight to `current_dir`.
+        let missing = root.join("does-not-exist");
+        assert!(resolve_root(&s(&missing)).is_err());
+        let file = root.join("file.txt");
+        touch(&file);
+        assert!(resolve_root(&s(&file)).is_err());
+    }
+
+    #[test]
+    fn a_git_pathspec_inside_the_root_resolves() {
+        let root = scratch("git-pathspec");
+        let tracked = root.join("src").join("main.ts");
+        touch(&tracked);
+
+        assert_eq!(
+            resolve_pathspec_within(&s(&root), "src/main.ts").unwrap(),
+            tracked
+        );
+        assert_eq!(
+            resolve_pathspec_within(&s(&root), &s(&tracked)).unwrap(),
+            tracked
+        );
+        // A directory is a legal pathspec: `git diff -- src` is a normal request.
+        assert_eq!(
+            resolve_pathspec_within(&s(&root), "src").unwrap(),
+            root.join("src")
+        );
+        // A DELETED file still has a diff, so a missing path resolves rather than
+        // failing on canonicalize.
+        assert_eq!(
+            resolve_pathspec_within(&s(&root), "src/deleted.ts").unwrap(),
+            root.join("src").join("deleted.ts")
+        );
+    }
+
+    #[test]
+    fn a_git_pathspec_that_looks_like_an_option_is_refused() {
+        let root = scratch("git-option");
+
+        // The one that matters: `git diff --output=<path>` writes to that path.
+        for candidate in [
+            "--output=/tmp/pwned",
+            "--output=pwned.txt",
+            "-O/tmp/pwned",
+            "--no-index",
+            "  --output=x  ",
+        ] {
+            let err = resolve_pathspec_within(&s(&root), candidate).unwrap_err();
+            assert!(
+                err.contains("git would read it as an option"),
+                "{} -> {}",
+                candidate,
+                err
+            );
+        }
+
+        assert!(resolve_pathspec_within(&s(&root), "").is_err());
+        assert!(resolve_pathspec_within(&s(&root), "   ").is_err());
+    }
+
+    #[test]
+    fn a_git_pathspec_outside_the_root_is_refused() {
+        let root = scratch("git-escape");
+        let outside = scratch("git-escape-outside");
+        let secret = outside.join("id_rsa");
+        touch(&secret);
+
+        // `..` is refused before the disk is consulted, existing or not.
+        for candidate in ["../escape", "../git-escape-outside/id_rsa", "src/../../x"] {
+            let err = resolve_pathspec_within(&s(&root), candidate).unwrap_err();
+            assert!(err.contains("escapes the project root"), "{}", err);
+        }
+
+        // An absolute path elsewhere on disk fails containment, present or absent.
+        let err = resolve_pathspec_within(&s(&root), &s(&secret)).unwrap_err();
+        assert!(err.contains("outside the open project root"), "{}", err);
+        let err = resolve_pathspec_within(&s(&root), &s(&outside.join("nope"))).unwrap_err();
+        assert!(err.contains("outside the open project root"), "{}", err);
+
+        // And with no project open there is no pathspec at all.
+        assert!(resolve_pathspec_within("", "src/main.ts").is_err());
     }
 
     /// A symlink that lives inside the root but points outside it must not pass.
