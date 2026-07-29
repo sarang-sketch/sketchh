@@ -86,6 +86,35 @@ export function createFakeDisk(initial: Record<string, string> = {}): FakeDisk {
         }
         return content
       },
+      async readDir(root, path) {
+        refuseOutside(root, path)
+        // Derived from the same Map the reads come from, so this double cannot
+        // claim a file exists that a read would then fail to find. Mirrors the
+        // backend's ordering (folders first, then case-insensitive by name) and its
+        // skip list, because the panel is written against that shape.
+        const prefix = canonicalPath(path).replace(/\/$/, '') + '/'
+        const seen = new Map<string, boolean>()
+        for (const filePath of files.keys()) {
+          if (!filePath.startsWith(prefix)) continue
+          const rest = filePath.slice(prefix.length)
+          const slash = rest.indexOf('/')
+          const name = slash === -1 ? rest : rest.slice(0, slash)
+          if (name === '') continue
+          if (name.startsWith('.') || name === 'node_modules' || name === 'target' || name === 'dist') {
+            continue
+          }
+          seen.set(name, slash !== -1 || (seen.get(name) ?? false))
+        }
+        return [...seen.entries()]
+          .map(([name, isDir]) => ({ name, path: `${prefix}${name}`, isDir }))
+          .sort((a, b) =>
+            a.isDir === b.isDir
+              ? a.name.toLowerCase().localeCompare(b.name.toLowerCase())
+              : a.isDir
+                ? -1
+                : 1,
+          )
+      },
       async writeFile(root, path, content) {
         refuseOutside(root, path)
         if (disk.writeError) throw disk.writeError

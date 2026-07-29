@@ -13,14 +13,24 @@
 //
 // Validates: Requirements 15.4, 15.6, 27.3
 
-import { openProject, readFileContent, writeFileContent } from '../ipc/bridge'
+import { openProject, readDir, readFileContent, writeFileContent, type FsEntry } from '../ipc/bridge'
 import { basename } from './paths'
+
+/** One directory entry, as the backend reports it. Re-exported so no panel imports the bridge. */
+export type { FsEntry }
 
 export interface FileIo {
   /** UTF-8 text of a file inside `root`. Rejects for anything outside it. */
   readFile(root: string, path: string): Promise<string>
   /** Writes UTF-8 text to a file inside `root`. Rejects for anything outside it. */
   writeFile(root: string, path: string, content: string): Promise<void>
+  /**
+   * One directory's immediate children, inside `root`. Rejects for anything
+   * outside it, and does NOT recurse — the tree is expanded one directory at a
+   * time, because an eager walk of this repository's own `node_modules` would
+   * hang the window (Requirement 14.4).
+   */
+  readDir(root: string, path: string): Promise<FsEntry[]>
   /** The native folder picker. Resolves null when the user cancels. */
   pickFolder(): Promise<string | null>
 }
@@ -29,6 +39,7 @@ export interface FileIo {
 export const bridgeFileIo: FileIo = {
   readFile: (root, path) => readFileContent(root, path),
   writeFile: (root, path, content) => writeFileContent(root, path, content),
+  readDir: (root, path) => readDir(root, path),
   pickFolder: () => openProject(),
 }
 
@@ -69,13 +80,17 @@ function messageOf(err: unknown): string {
  * replacing them with something vaguer.
  */
 export function describeFileFailure(
-  operation: 'open' | 'save',
+  operation: 'open' | 'save' | 'list',
   path: string,
   err: unknown,
 ): string {
   const raw = messageOf(err)
   const name = basename(path) || path
   const lower = raw.toLowerCase()
+
+  if (lower.includes('not a directory')) {
+    return `Cannot list ${name}: that path is a file, not a directory.`
+  }
 
   if (lower.includes('outside the open project root') || lower.includes('escapes the project root')) {
     return `Cannot ${operation} ${name}: it is outside the open project, and the file layer refuses paths beyond the project root.`
@@ -161,5 +176,32 @@ export async function writeFromEditor(
     return { ok: true }
   } catch (err) {
     return { ok: false, message: describeFileFailure('save', path, err) }
+  }
+}
+
+export type ListOutcome =
+  | { ok: true; entries: FsEntry[] }
+  | { ok: false; message: string }
+
+/**
+ * List one directory for the file tree. Never throws, for the same reason
+ * `readForEditor` does not: a refusal has to reach the screen as a sentence, and
+ * the failure mode being replaced is a folder that reads as EMPTY when the real
+ * answer was "permission denied" (Requirement 27.5).
+ *
+ * The backend decides what a directory contains — it already skips dotfiles,
+ * `node_modules`, `target` and `dist` (see src-tauri/src/main.rs) and sorts folders
+ * before files. None of that is second-guessed here, because two filters that can
+ * disagree is how one of them ends up wrong.
+ */
+export async function listForExplorer(
+  io: FileIo,
+  root: string,
+  path: string,
+): Promise<ListOutcome> {
+  try {
+    return { ok: true, entries: await io.readDir(root, path) }
+  } catch (err) {
+    return { ok: false, message: describeFileFailure('list', path, err) }
   }
 }

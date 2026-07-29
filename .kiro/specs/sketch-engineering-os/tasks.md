@@ -160,7 +160,7 @@ Phase 4 numbering stays intact for anything that references it.
   - Emit `edit_accepted` on accept and `edit_rejected` with a reason on reject
   - Rejecting every hunk leaves the file on disk unchanged
   - _Requirements: 16.1, 16.2, 16.3, 16.5_
-- [ ] 3.3 Build the real Git panel
+- [x] 3.3 Build the real Git panel
   - `tools/git.ts` in core shelling out for status, diff, branch, and stage operations
   - Replace `GitPanel`'s `MOCK_STAGED`, `MOCK_CHANGES`, and `MOCK_UNTRACKED` with real data and wire the dead stage, unstage, and commit buttons
   - Add a diff pane; reconcile the branch name shown in `StatusBar` with the real branch

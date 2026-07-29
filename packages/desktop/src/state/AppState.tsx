@@ -53,6 +53,51 @@ export function makeFileEntry(path: string, content: string): FileEntry {
   };
 }
 
+/**
+ * One command the terminal ran, or refused to run.
+ *
+ * This replaced `terminalLines: string[]`, which was seeded with the two fabricated
+ * lines `Sketch Terminal v1.0.0` / `> Ready.` and appended to by a reducer case that
+ * had no caller. A flat list of strings also cannot express the states the panel has
+ * to distinguish, which is why they are fields here:
+ *
+ *   running   spawned, no outcome yet
+ *   exited    ran to completion. `exitCode` is real, and a non-zero one is shown
+ *   denied    the policy refused it — allowlist, containment, confirmation
+ *   failed    the program could not start, or there is no native backend
+ *
+ * `stdout` and `stderr` are kept RAW, exactly as the process wrote them. Escape
+ * sequences are interpreted at render time by `terminal/ansi.ts` into text nodes;
+ * nothing here is HTML, and nothing downstream turns it into HTML.
+ */
+export interface TerminalRun {
+  id: string;
+  /** Exactly what the user typed, for the echoed prompt line. */
+  line: string;
+  program: string;
+  args: string[];
+  status: 'running' | 'exited' | 'denied' | 'failed';
+  /** Null until the process exits, and for a command that never started. */
+  exitCode: number | null;
+  stdout: string;
+  stderr: string;
+  /** Why it was denied, or why it failed. Null when it ran. */
+  message: string | null;
+}
+
+/** What a settled run reports back. Only the fields an outcome actually knows. */
+export interface TerminalRunOutcome {
+  id: string;
+  status: 'exited' | 'denied' | 'failed';
+  exitCode?: number | null;
+  stdout?: string;
+  stderr?: string;
+  message?: string | null;
+}
+
+/** Scrollback cap. Bounded so a `npm ci` transcript cannot grow the state forever. */
+export const MAX_TERMINAL_RUNS = 100;
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'agent' | 'system';
@@ -143,9 +188,17 @@ export interface AppState {
     | 'mcp'
     | null;
   terminalOpen: boolean;
-  terminalLines: string[];
+  /**
+   * Real commands, oldest first. Owned here rather than in the panel so the
+   * scrollback survives the bottom panel being toggled shut and re-opened.
+   */
+  terminalHistory: TerminalRun[];
+  /**
+   * The search box's text. Owned here so the query survives switching side panels;
+   * the RESULTS are not, because they are derived from this plus the disk and a
+   * second copy of them could disagree with what the box says.
+   */
   searchQuery: string;
-  searchResults: any[];
   
   // File State — the single owner (Requirement 15.2).
   /** Open tabs, in tab order. PATHS only: the content lives in `files`, once. */
@@ -205,7 +258,11 @@ export type AppAction =
   | { type: 'SET_PROVIDER'; payload: { provider: string; model: string } }
   | { type: 'TOGGLE_SKILL'; payload: string }
   | { type: 'INSTALL_SKILL'; payload: Skill }
-  | { type: 'ADD_TERMINAL_LINE'; payload: string }
+  /** A command was just spawned, or refused before it could be. */
+  | { type: 'TERMINAL_RUN_STARTED'; payload: TerminalRun }
+  /** That command's outcome: an exit code, a denial, or a failure to start. */
+  | { type: 'TERMINAL_RUN_SETTLED'; payload: TerminalRunOutcome }
+  | { type: 'TERMINAL_CLEARED' }
   | { type: 'SET_SEARCH_QUERY'; payload: string };
 
 // Initial State with Mock Data
@@ -268,9 +325,11 @@ const initialState: AppState = {
   
   ideActivePanel: 'explorer',
   terminalOpen: false,
-  terminalLines: ['Sketch Terminal v1.0.0', '> Ready.'],
+  // Nothing has been run yet, and the panel says exactly that. The two lines that
+  // used to sit here (`Sketch Terminal v1.0.0`, `> Ready.`) were output from a
+  // program that does not exist.
+  terminalHistory: [],
   searchQuery: '',
-  searchResults: [],
   
   openFiles: [],
   activeFile: null,
@@ -505,8 +564,35 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       };
     case 'INSTALL_SKILL':
       return { ...state, installedSkills: [...state.installedSkills, action.payload] };
-    case 'ADD_TERMINAL_LINE':
-      return { ...state, terminalLines: [...state.terminalLines, action.payload] };
+    case 'TERMINAL_RUN_STARTED': {
+      const history = [...state.terminalHistory, action.payload];
+      return {
+        ...state,
+        terminalHistory:
+          history.length > MAX_TERMINAL_RUNS ? history.slice(-MAX_TERMINAL_RUNS) : history
+      };
+    }
+    case 'TERMINAL_RUN_SETTLED': {
+      const outcome = action.payload;
+      const index = state.terminalHistory.findIndex(run => run.id === outcome.id);
+      // A run that is no longer in the scrollback (cleared, or aged out) has
+      // nothing to update. Re-adding it would resurrect output the user dismissed.
+      if (index === -1) return state;
+      const current = state.terminalHistory[index];
+      const settled: TerminalRun = {
+        ...current,
+        status: outcome.status,
+        exitCode: outcome.exitCode ?? null,
+        stdout: outcome.stdout ?? '',
+        stderr: outcome.stderr ?? '',
+        message: outcome.message ?? null
+      };
+      const history = [...state.terminalHistory];
+      history[index] = settled;
+      return { ...state, terminalHistory: history };
+    }
+    case 'TERMINAL_CLEARED':
+      return { ...state, terminalHistory: [] };
     case 'SET_SEARCH_QUERY':
       return { ...state, searchQuery: action.payload };
     default:
