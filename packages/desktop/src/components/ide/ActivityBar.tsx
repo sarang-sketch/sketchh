@@ -59,7 +59,13 @@ export default function ActivityBar() {
         })}
       </div>
       <div className={styles.bottomItems}>
-        <button className={styles.iconButton} title="Settings">
+        {/* Was a dead button. It now opens Provider Settings, which is the only
+            settings surface that exists (task 4.1, Requirement 27.4). */}
+        <button
+          className={`${styles.iconButton} ${ideActivePanel === 'settings' ? styles.active : ''}`}
+          onClick={() => handleToggle('settings')}
+          title="Provider Settings"
+        >
           <div className={styles.iconWrapper}>
             <Settings size={20} />
           </div>

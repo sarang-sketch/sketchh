@@ -30,7 +30,15 @@ import type { EvalDeps } from '../evals/index.js'
 import { runTask } from '../loop/index.js'
 import { DiskFileWriter } from '../orchestrator/file-writer.js'
 import { PlanWriter } from '../plan/index.js'
-import { fakeProviderEnabled, resolveAdapter } from '../providers/index.js'
+import { describeProvider, fakeProviderEnabled, resolveAdapter } from '../providers/index.js'
+import {
+  loadProviderSettings,
+  providerMatrix,
+  providersFilePath,
+  saveProviderSettings,
+  testProviderConnection,
+} from '../settings/index.js'
+import type { ProviderTestTarget } from '../settings/index.js'
 import {
   loadProjectContext,
   loadSkillFile,
@@ -511,6 +519,76 @@ async function gitCommit(params: Record<string, unknown>, ctx: MethodContext): P
   return { output: result.output, status: await tool.status() }
 }
 
+// ── provider settings ────────────────────────────────────────────────────────
+//
+// The Provider Settings surface is a UI over these three methods, for the same two
+// reasons the Git panel is a UI over `git-*`: the provider catalog and the key-free
+// serializer live in the engine and are not duplicated, and a capability on this
+// seam works under the browser dev bridge as well as in the app.
+//
+// NO METHOD HERE ACCEPTS A KEY TO STORE. `provider-test` takes one for the duration
+// of one request (registered as a secret, so it cannot ride an outgoing frame), and
+// `provider-config-save` runs its payload through the whitelist + byte-level guard
+// that make `providers.json` key-free (Requirements 17.2, 17.4).
+
+/**
+ * Which `providers.json` a call is about. `home` (not a full path) so the filename
+ * cannot be redirected: a caller may point at a different home directory, never at
+ * an arbitrary file.
+ */
+function settingsPath(params: Record<string, unknown>): string | undefined {
+  const home = optionalString(params, 'home', 'params.home')
+  return home === undefined ? undefined : providersFilePath(resolve(home))
+}
+
+/** The full matrix from the registry, plus whatever is configured on disk. */
+async function providerCatalog(params: Record<string, unknown>): Promise<unknown> {
+  const path = settingsPath(params)
+  const loaded = await loadProviderSettings(path)
+  return {
+    catalog: providerMatrix(),
+    settings: loaded.settings,
+    path: loaded.path,
+    ...(loaded.diagnostic !== undefined ? { diagnostic: loaded.diagnostic } : {}),
+  }
+}
+
+/** Persist key-free configuration. Returns what was actually written. */
+async function providerConfigSave(params: Record<string, unknown>): Promise<unknown> {
+  const settings = params['settings']
+  if (settings === undefined || settings === null) {
+    throw new InvalidParamsError('params.settings must be an object')
+  }
+  asObject(settings, 'params.settings')
+  const saved = await saveProviderSettings(settings, settingsPath(params))
+  return { settings: saved.settings, path: saved.path }
+}
+
+/**
+ * Run one connection test. A real network call, so it happens only because a user
+ * asked: nothing in the engine calls this on startup.
+ */
+async function providerTest(
+  params: Record<string, unknown>,
+  ctx: MethodContext,
+): Promise<unknown> {
+  // Reuses the run path's reader, which is what registers the key as a secret.
+  const config = readProviderConfig(params['provider'], ctx)
+  const timeoutMs = optionalNumber(params, 'timeoutMs', 'params.timeoutMs')
+  const target: ProviderTestTarget = {
+    id: config.id,
+    kind: config.kind,
+    // An empty baseUrl falls back to the catalog default, exactly as a run does.
+    baseUrl: config.baseUrl || (describeProvider(config.id)?.defaultBaseUrl ?? ''),
+    model: config.model,
+    ...(config.apiKey !== undefined ? { apiKey: config.apiKey } : {}),
+    ...(config.headers !== undefined ? { headers: config.headers } : {}),
+  }
+  return testProviderConnection(target, {
+    ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+  })
+}
+
 const SKILL_FILE = 'SKILL.md'
 const SKILL_MANIFEST = 'skill.json'
 
@@ -588,6 +666,11 @@ export const METHODS: Readonly<Record<string, MethodHandler>> = {
   'git-stage': gitStage,
   'git-unstage': gitUnstage,
   'git-commit': gitCommit,
+  // Task 4.1's Provider Settings surface. Same reasoning as the git group: engine
+  // capability, one implementation, reachable from both transports.
+  'provider-catalog': providerCatalog,
+  'provider-config-save': providerConfigSave,
+  'provider-test': providerTest,
 }
 
 /** The five the protocol contract names. Every build answers at least these. */

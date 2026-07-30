@@ -240,6 +240,33 @@ export class MockSketchClient implements SketchClient {
     return this.noRepository('git-commit')
   }
 
+  // ── provider settings ─────────────────────────────────────────────────────
+  //
+  // Same rule as git: no engine, no answer, and it says so. Returning a fabricated
+  // catalog would put a provider list on screen that no registry produced, and a
+  // fabricated "connection ok" would be the worst possible lie in this surface.
+
+  private noEngine(call: string): Promise<never> {
+    return Promise.reject(
+      new Error(
+        `the mock transport has no engine behind it, so '${call}' cannot answer. ` +
+          'Start the app with VITE_BRIDGE=http or run it under Tauri to reach a real engine.',
+      ),
+    )
+  }
+
+  async providerCatalog(): Promise<never> {
+    return this.noEngine('provider-catalog')
+  }
+
+  async saveProviderSettings(): Promise<never> {
+    return this.noEngine('provider-config-save')
+  }
+
+  async testProvider(): Promise<never> {
+    return this.noEngine('provider-test')
+  }
+
   private nextRunId(): string {
     // Time-prefixed so ids sort chronologically, matching the engine's scheme.
     this.runCounter += 1

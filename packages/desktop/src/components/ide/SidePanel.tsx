@@ -10,6 +10,7 @@ import { SkillsMarketplace } from '../../panels/SkillsMarketplace';
 import { AgentTimelinePanel } from '../../ui/panels/AgentTimeline';
 import { AgentConsolePanel } from '../../ui/panels/AgentConsole';
 import DebuggerPanel from '../../panels/ide/DebuggerPanel';
+import { ProviderSettings } from '../../panels/ProviderSettings';
 
 export default function SidePanel() {
   const { ideActivePanel } = useAppState();
@@ -54,6 +55,10 @@ export default function SidePanel() {
     case 'run':
       title = 'Run & Debug';
       content = <DebuggerPanel />;
+      break;
+    case 'settings':
+      title = 'Provider Settings';
+      content = <ProviderSettings />;
       break;
     default:
       // MCP Tools has an ActivityBar button but its real panel belongs to task 7.3.

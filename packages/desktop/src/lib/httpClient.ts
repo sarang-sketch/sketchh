@@ -1,4 +1,13 @@
-import type { SketchClient, PingResult, EventHandler, Unsubscribe, TransportKind, RunOptions } from './client'
+import type {
+  SketchClient,
+  PingResult,
+  EventHandler,
+  Unsubscribe,
+  TransportKind,
+  RunOptions,
+  ProviderCatalogResult,
+  ProviderTestRequest,
+} from './client'
 import { createEventBus } from './client'
 import type {
   Task,
@@ -6,6 +15,8 @@ import type {
   EvalCase,
   EvalResult,
   GitStatusResult,
+  ProviderSettingsFile,
+  ProviderTestResult,
   SketchEvent,
 } from './contracts'
 
@@ -42,11 +53,12 @@ export class HttpSketchClient implements SketchClient {
     }
   }
 
-  private async callMethod<T>(method: string, params?: unknown): Promise<T> {
+  private async callMethod<T>(method: string, params?: unknown, signal?: AbortSignal): Promise<T> {
     const res = await fetch(`${this.baseUrl}/__sketch`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: Math.random().toString(36).substring(2), method, params }),
+      ...(signal !== undefined ? { signal } : {}),
     })
 
     if (!res.ok) {
@@ -117,6 +129,40 @@ export class HttpSketchClient implements SketchClient {
     message: string
   }): Promise<{ output: string; status: GitStatusResult }> {
     return this.callMethod<{ output: string; status: GitStatusResult }>('git-commit', params)
+  }
+
+  // ── provider settings ─────────────────────────────────────────────────────
+  //
+  // The dev bridge dispatches the same `provider-*` methods the sidecar does, so the
+  // Provider Settings panel is real in the browser too. The catalog is the engine's
+  // registry; nothing here restates it.
+
+  async providerCatalog(): Promise<ProviderCatalogResult> {
+    return this.callMethod<ProviderCatalogResult>('provider-catalog', {})
+  }
+
+  async saveProviderSettings(params: {
+    settings: ProviderSettingsFile
+  }): Promise<{ settings: ProviderSettingsFile; path: string }> {
+    return this.callMethod<{ settings: ProviderSettingsFile; path: string }>(
+      'provider-config-save',
+      { settings: params.settings },
+    )
+  }
+
+  /** Abort ends the wait and the HTTP request; the engine bounds its own GET. */
+  async testProvider(
+    params: ProviderTestRequest,
+    options: { signal?: AbortSignal } = {},
+  ): Promise<ProviderTestResult> {
+    return this.callMethod<ProviderTestResult>(
+      'provider-test',
+      {
+        provider: params.provider,
+        ...(params.timeoutMs !== undefined ? { timeoutMs: params.timeoutMs } : {}),
+      },
+      options.signal,
+    )
   }
 
   subscribe(handler: EventHandler): Unsubscribe {

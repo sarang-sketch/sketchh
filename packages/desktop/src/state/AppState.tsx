@@ -1,5 +1,10 @@
 import React, { createContext, useContext, useReducer, ReactNode, Dispatch } from 'react';
 import { basename, canonicalPath, languageForPath } from '../editor/paths';
+import type {
+  ProviderDescriptor,
+  ProviderSettingsEntry,
+  ProviderTestCode,
+} from '../lib/contracts';
 
 // Common Interfaces
 
@@ -137,11 +142,34 @@ export interface Skill {
   category: string;
 }
 
-export interface Provider {
-  id: string;
-  name: string;
-  models: string[];
-}
+/**
+ * Provider state, all of it real.
+ *
+ * `providerCatalog` is the engine's registry matrix (`PROVIDER_CATALOG`), fetched
+ * over the client seam — not a list retyped here. `providers` is what the user has
+ * configured, loaded from the KEY-FREE `~/.sketch/providers.json`; there is no
+ * `apiKey` on either shape and nothing in this reducer can put one there
+ * (Requirement 17.2).
+ *
+ * The three fixture arrays that used to live here — a hardcoded provider list with
+ * invented model names, `selectedProvider: 'anthropic'`, `providerConnected: true` —
+ * claimed a working Anthropic connection on a machine that had never made one.
+ */
+export type Provider = ProviderSettingsEntry;
+
+/**
+ * What a connection test has told us, per provider id.
+ *
+ * `never-run` is a FIRST-CLASS STATE, not a synonym for failure: a test is a real
+ * network call and only happens when the user asks, so "we have not checked" is the
+ * truthful thing to show until they do (Requirement 27.3).
+ */
+export type ProviderTestState =
+  | { status: 'never-run' }
+  | { status: 'testing' }
+  | { status: 'ok'; message: string; at: number }
+  | { status: 'failed'; code: ProviderTestCode; message: string; at: number }
+  | { status: 'cancelled'; at: number };
 
 export interface WorkspaceEntry {
   name: string;
@@ -217,11 +245,19 @@ export interface AppState {
   installedSkills: Skill[];
   skillMarketplace: Skill[];
   
-  // Provider State
+  // Provider State — see the note above `Provider`. Nothing here holds a key.
+  /** Configured providers, from `~/.sketch/providers.json`. Empty until one is added. */
   providers: Provider[];
+  /** The full matrix from the engine's registry. Empty until the panel loads it. */
+  providerCatalog: ProviderDescriptor[];
+  /** Where the configuration lives, as the engine reported it. Named in the UI. */
+  providerSettingsPath: string | null;
+  /** A failed load, a failed save, or a file that carried something it should not. */
+  providerSettingsNotice: string | null;
+  /** Per-provider connection-test state, keyed by provider id. */
+  providerTests: Record<string, ProviderTestState>;
   selectedProvider: string | null;
   selectedModel: string | null;
-  providerConnected: boolean;
   
   // UI & Tasks
   sidebarCollapsed: boolean;
@@ -260,6 +296,25 @@ export type AppAction =
   | { type: 'TOGGLE_BOTTOM_PANEL' }
   | { type: 'SET_BOTTOM_PANEL_HEIGHT'; payload: number }
   | { type: 'SET_PROVIDER'; payload: { provider: string; model: string } }
+  /** The engine answered `provider-catalog`: the matrix plus what is on disk. */
+  | {
+      type: 'PROVIDER_SETTINGS_LOADED';
+      payload: {
+        catalog: ProviderDescriptor[];
+        providers: Provider[];
+        selected: string | null;
+        path: string;
+        notice?: string | null;
+      };
+    }
+  /** A save came back. The payload is what the engine wrote, not what we sent. */
+  | {
+      type: 'PROVIDER_SETTINGS_SAVED';
+      payload: { providers: Provider[]; selected: string | null; path: string };
+    }
+  | { type: 'PROVIDER_SETTINGS_NOTICE'; payload: string | null }
+  | { type: 'PROVIDER_TEST_STARTED'; payload: string }
+  | { type: 'PROVIDER_TEST_SETTLED'; payload: { id: string; state: ProviderTestState } }
   | { type: 'TOGGLE_SKILL'; payload: string }
   | { type: 'INSTALL_SKILL'; payload: Skill }
   /** A command was just spawned, or refused before it could be. */
@@ -374,17 +429,16 @@ const initialState: AppState = {
     { id: 'm8', name: 'GCP toolkit', description: 'GCP integration', version: '1.0.0', author: 'Community', icon: 'Cloud', enabled: false, category: 'Cloud' }
   ],
   
-  providers: [
-    { id: 'openai', name: 'OpenAI', models: ['gpt-4o', 'gpt-4-turbo', 'gpt-3.5-turbo'] },
-    { id: 'anthropic', name: 'Anthropic', models: ['claude-3-5-sonnet', 'claude-3-opus', 'claude-3-haiku'] },
-    { id: 'gemini', name: 'Gemini', models: ['gemini-1.5-pro', 'gemini-1.5-flash'] },
-    { id: 'groq', name: 'Groq', models: ['llama3-70b-8192', 'mixtral-8x7b-32768'] },
-    { id: 'openrouter', name: 'OpenRouter', models: ['auto'] },
-    { id: 'ollama', name: 'Ollama (Local)', models: ['llama3', 'mistral', 'phi3'] }
-  ],
-  selectedProvider: 'anthropic',
-  selectedModel: 'claude-3-5-sonnet',
-  providerConnected: true,
+  // Nothing is configured until the settings surface loads `providers.json`, and
+  // nothing is connected until the user runs a connection test. Both were asserted
+  // here as facts before either had ever happened.
+  providers: [],
+  providerCatalog: [],
+  providerSettingsPath: null,
+  providerSettingsNotice: null,
+  providerTests: {},
+  selectedProvider: null,
+  selectedModel: null,
   
   sidebarCollapsed: false,
   rightPanelCollapsed: false,
@@ -560,8 +614,68 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, bottomPanelOpen: !state.bottomPanelOpen };
     case 'SET_BOTTOM_PANEL_HEIGHT':
       return { ...state, bottomPanelHeight: action.payload };
-    case 'SET_PROVIDER':
-      return { ...state, selectedProvider: action.payload.provider, selectedModel: action.payload.model };
+    case 'SET_PROVIDER': {
+      // Only a CONFIGURED provider can be selected. Selecting a catalog row that has
+      // no entry in providers.json would make the picker claim a provider the engine
+      // cannot resolve.
+      const entry = state.providers.find(p => p.id === action.payload.provider);
+      if (!entry) return state;
+      return {
+        ...state,
+        selectedProvider: entry.id,
+        selectedModel: action.payload.model || entry.model
+      };
+    }
+    case 'PROVIDER_SETTINGS_LOADED': {
+      const { catalog, providers, selected, path } = action.payload;
+      const chosen = providers.some(p => p.id === selected) ? selected : (providers[0]?.id ?? null);
+      return {
+        ...state,
+        providerCatalog: catalog,
+        providers,
+        selectedProvider: chosen,
+        selectedModel: providers.find(p => p.id === chosen)?.model ?? null,
+        providerSettingsPath: path,
+        providerSettingsNotice: action.payload.notice ?? null,
+        // A reload discards stale verdicts: a test result describes a configuration
+        // that may just have changed underneath it.
+        providerTests: {}
+      };
+    }
+    case 'PROVIDER_SETTINGS_SAVED': {
+      const { providers, selected, path } = action.payload;
+      const chosen = providers.some(p => p.id === selected) ? selected : (providers[0]?.id ?? null);
+      // Verdicts survive a save only for providers whose configuration is unchanged.
+      const kept: Record<string, ProviderTestState> = {};
+      for (const entry of providers) {
+        const before = state.providers.find(p => p.id === entry.id);
+        const unchanged =
+          before !== undefined && before.baseUrl === entry.baseUrl && before.model === entry.model;
+        const previous = state.providerTests[entry.id];
+        if (unchanged && previous) kept[entry.id] = previous;
+      }
+      return {
+        ...state,
+        providers,
+        selectedProvider: chosen,
+        selectedModel: providers.find(p => p.id === chosen)?.model ?? null,
+        providerSettingsPath: path,
+        providerSettingsNotice: null,
+        providerTests: kept
+      };
+    }
+    case 'PROVIDER_SETTINGS_NOTICE':
+      return { ...state, providerSettingsNotice: action.payload };
+    case 'PROVIDER_TEST_STARTED':
+      return {
+        ...state,
+        providerTests: { ...state.providerTests, [action.payload]: { status: 'testing' } }
+      };
+    case 'PROVIDER_TEST_SETTLED':
+      return {
+        ...state,
+        providerTests: { ...state.providerTests, [action.payload.id]: action.payload.state }
+      };
     case 'TOGGLE_SKILL':
       return {
         ...state,

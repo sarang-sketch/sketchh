@@ -48,103 +48,82 @@ export interface ProviderDescriptor {
   kind: ProviderKind
   /** Suggested `baseUrl`; empty where the user must supply their own endpoint. */
   defaultBaseUrl: string
-  /** False for local runtimes that accept unauthenticated requests. */
+  /**
+   * Whether a normal invocation needs a credential supplied at call time. False for
+   * the on-device runtimes, which are the built-in $0 path.
+   */
   needsKey: boolean
   /** True for serverless inference endpoints, so the UI can group them (Req 2.5). */
   serverless: boolean
 }
 
+/**
+ * The one provider catalog. React receives this table over the client seam; it has
+ * no provider matrix of its own. Keep legacy adapters represented here too so a
+ * provider registered by the engine cannot disappear from Settings.
+ */
 export const PROVIDER_CATALOG: readonly ProviderDescriptor[] = [
   {
-    id: 'openai',
-    name: 'OpenAI',
-    kind: 'openai-compatible',
-    defaultBaseUrl: 'https://api.openai.com/v1',
-    needsKey: true,
-    serverless: false,
+    id: 'openai', name: 'OpenAI', kind: 'openai-compatible',
+    defaultBaseUrl: 'https://api.openai.com/v1', needsKey: true, serverless: false,
   },
   {
-    id: 'anthropic',
-    name: 'Anthropic',
-    kind: 'anthropic-messages',
-    defaultBaseUrl: 'https://api.anthropic.com',
-    needsKey: true,
-    serverless: false,
+    id: 'anthropic', name: 'Anthropic', kind: 'anthropic-messages',
+    defaultBaseUrl: 'https://api.anthropic.com', needsKey: true, serverless: false,
   },
   {
-    id: 'gemini',
-    name: 'Google Gemini',
-    kind: 'openai-compatible',
-    // Gemini's OpenAI-compatible surface; keeps the canonical layer at two kinds.
+    id: 'gemini', name: 'Google Gemini', kind: 'openai-compatible',
     defaultBaseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
-    needsKey: true,
-    serverless: false,
+    needsKey: true, serverless: false,
   },
   {
-    id: 'groq',
-    name: 'Groq',
-    kind: 'openai-compatible',
-    defaultBaseUrl: 'https://api.groq.com/openai/v1',
-    needsKey: true,
-    serverless: true,
+    id: 'groq', name: 'Groq', kind: 'openai-compatible',
+    defaultBaseUrl: 'https://api.groq.com/openai/v1', needsKey: true, serverless: true,
   },
   {
-    id: 'openrouter',
-    name: 'OpenRouter',
-    kind: 'openai-compatible',
-    defaultBaseUrl: 'https://openrouter.ai/api/v1',
-    needsKey: true,
-    serverless: true,
+    id: 'openrouter', name: 'OpenRouter', kind: 'openai-compatible',
+    defaultBaseUrl: 'https://openrouter.ai/api/v1', needsKey: true, serverless: true,
   },
   {
-    id: 'github-models',
-    name: 'GitHub Models',
-    kind: 'openai-compatible',
-    defaultBaseUrl: 'https://models.github.ai/inference',
-    needsKey: true,
-    serverless: true,
+    id: 'grok', name: 'Grok (xAI)', kind: 'openai-compatible',
+    defaultBaseUrl: 'https://api.x.ai/v1', needsKey: true, serverless: false,
   },
   {
-    id: 'azure-openai',
-    name: 'Azure OpenAI',
-    kind: 'openai-compatible',
+    id: 'kimi', name: 'Kimi (Moonshot)', kind: 'openai-compatible',
+    defaultBaseUrl: 'https://api.moonshot.cn/v1', needsKey: true, serverless: false,
+  },
+  {
+    id: 'github-models', name: 'GitHub Models', kind: 'openai-compatible',
+    defaultBaseUrl: 'https://models.github.ai/inference', needsKey: true, serverless: true,
+  },
+  {
+    id: 'azure-openai', name: 'Azure OpenAI', kind: 'openai-compatible',
     // Deployment-scoped: https://<resource>.openai.azure.com/openai/deployments/<name>
-    defaultBaseUrl: '',
-    needsKey: true,
-    serverless: true,
+    defaultBaseUrl: '', needsKey: true, serverless: true,
   },
   {
-    id: 'cloudflare-workers-ai',
-    name: 'Cloudflare Workers AI',
-    kind: 'openai-compatible',
+    id: 'cloudflare-workers-ai', name: 'Cloudflare Workers AI', kind: 'openai-compatible',
     // Account-scoped: .../accounts/<account_id>/ai/v1
-    defaultBaseUrl: '',
-    needsKey: true,
-    serverless: true,
+    defaultBaseUrl: '', needsKey: true, serverless: true,
   },
   {
-    id: 'ollama',
-    name: 'Ollama (local)',
-    kind: 'openai-compatible',
-    defaultBaseUrl: 'http://localhost:11434/v1',
-    needsKey: false,
-    serverless: false,
+    id: 'ollama', name: 'Ollama (local)', kind: 'openai-compatible',
+    defaultBaseUrl: 'http://localhost:11434/v1', needsKey: false, serverless: false,
   },
   {
-    id: 'llamacpp',
-    name: 'llama.cpp (local)',
-    kind: 'openai-compatible',
-    defaultBaseUrl: 'http://localhost:8080/v1',
-    needsKey: false,
-    serverless: false,
+    id: 'llamacpp', name: 'llama.cpp (local)', kind: 'openai-compatible',
+    defaultBaseUrl: 'http://localhost:8080/v1', needsKey: false, serverless: false,
   },
   {
-    id: 'custom',
-    name: 'Custom (OpenAI-compatible)',
-    kind: 'openai-compatible',
-    defaultBaseUrl: '',
-    needsKey: false,
-    serverless: false,
+    id: 'lmstudio', name: 'LM Studio (local)', kind: 'openai-compatible',
+    defaultBaseUrl: 'http://localhost:1234/v1', needsKey: false, serverless: false,
+  },
+  {
+    // The extensibility row: the user supplies the endpoint, so nothing about its
+    // deployment is known here. Whether it wants a credential is decided from the
+    // endpoint by the surface, not asserted by this table.
+    id: 'custom', name: 'Custom (OpenAI-compatible)', kind: 'openai-compatible',
+    defaultBaseUrl: '', needsKey: false, serverless: false,
   },
 ]
 

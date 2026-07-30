@@ -1,0 +1,317 @@
+/* Provider Settings. Same variables and the same shapes as the Git panel, so the
+   surface added in task 4.1 does not look like a bolt-on. */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  overflow-y: auto;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.toolbarTitle {
+  flex: 1;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.iconBtn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s ease, background-color 0.2s ease;
+}
+
+.iconBtn:hover:not(:disabled) {
+  color: var(--text-primary);
+  background-color: var(--bg-hover);
+}
+
+/* A named failure, never an empty list (Requirements 27.3, 27.5). */
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 16px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--error);
+  border-bottom: 1px solid var(--border);
+  word-break: break-word;
+}
+
+/* ── honest nothing ──────────────────────────────────────────────────────── */
+
+.empty {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.emptyTitle {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.emptyDetail {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+/* ── the matrix ──────────────────────────────────────────────────────────── */
+
+.list {
+  display: flex;
+  flex-direction: column;
+}
+
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.rowHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.name {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.tag,
+.tagQuiet {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 10px;
+  background-color: var(--bg-hover);
+  color: var(--text-secondary);
+}
+
+.tagQuiet {
+  color: var(--text-muted);
+}
+
+.status {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.idle { color: var(--text-muted); }
+.busy { color: var(--warning); }
+.ok { color: var(--success); }
+.error { color: var(--error); }
+
+.meta {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.metaUrl {
+  color: var(--text-secondary);
+  word-break: break-all;
+}
+
+.metaModel {
+  color: var(--text-muted);
+}
+
+.detail {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+
+.actionBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  padding: 3px 8px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.actionBtn:hover:not(:disabled) {
+  background-color: var(--bg-hover);
+}
+
+.actionBtn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.selected {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--success);
+}
+
+.unconfigured {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* ── the add / edit form ─────────────────────────────────────────────────── */
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background-color: var(--bg-surface);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.input {
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 5px 6px;
+  outline: none;
+}
+
+.input:focus {
+  border-color: var(--accent);
+}
+
+/* The URL that will actually be called, or why it cannot be. */
+.resolved {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  word-break: break-all;
+}
+
+.resolvedBad {
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--error);
+}
+
+.keyNote {
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.formActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.saveBtn {
+  background-color: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 12px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.saveBtn:hover:not(:disabled) {
+  background-color: var(--accent-hover);
+}
+
+.saveBtn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.blocker {
+  font-size: 10px;
+  color: var(--warning);
+}
+
+/* ── footer: where the file is, and what is not in it ────────────────────── */
+
+.footer {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+}
+
+.footerLine {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  word-break: break-all;
+}
+
+.footerNote {
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}

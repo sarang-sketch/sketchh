@@ -26,6 +26,20 @@ export * as diff from './diff/index.js'
 
 export * as events from './events/index.js'
 export * as skills from './skills/index.js'
+
+// The ONE credential pattern table (`secrets.SECRET_KEY_SHAPES`,
+// `secrets.isSensitiveKeyName`). Public because "holds no key material" is a
+// contract this engine makes to its callers (Requirements 17.2, 3.7), and a caller
+// cannot verify that contract without the engine's own definition of what a
+// credential looks like. Left private, every consumer writes its own table and the
+// tables drift — which is the exact failure this module was created to prevent.
+// Pure data and pure functions: no I/O, no runtime dependency.
+export * as secrets from './secrets/index.js'
+
+// Key-free provider configuration (`~/.sketch/providers.json`) and the per-provider
+// connection test. The settings surface reaches these through the RPC methods below,
+// so the desktop bundle keeps taking no runtime dependency on this package.
+export * as settings from './settings/index.js'
 export * as plan from './plan/index.js'
 
 // `<project>/.sketch/` — the engine's own state directory, and the self-ignore

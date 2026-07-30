@@ -9,6 +9,11 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     include: ['src/**/*.test.{ts,tsx}'],
+    // jsdom pairs Node's `fetch` with jsdom's `AbortController`, and Node's fetch
+    // rejects a signal from another realm before it opens a socket. The setup file
+    // bridges the two so a REAL request with a cancellable signal works under the
+    // harness; it fakes no request, no response and no status. See the file header.
+    setupFiles: ['./src/test/jsdomFetchBridge.ts'],
     // CSS modules resolve to a proxy, so class names are irrelevant in tests —
     // assertions go through roles and text, which is what a user actually sees.
     css: false,

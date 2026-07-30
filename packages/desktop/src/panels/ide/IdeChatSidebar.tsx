@@ -1,16 +1,16 @@
 import { useState } from 'react';
 import styles from './IdeChatSidebar.module.css';
 import { 
-  Plus, Refresh, X, ChevronDown, Sparkles, AlertTriangle
+  Plus, Refresh, X, Sparkles, AlertTriangle
 } from '../../components/Icons';
 import { useAppState, useAppDispatch } from '../../state/AppState';
 import { ThinkingIndicator } from '../../components/ThinkingIndicator';
+import { ModelSelector } from '../../components/ModelSelector';
 
 export default function IdeChatSidebar() {
   const state = useAppState();
   const dispatch = useAppDispatch();
   const [inputText, setInputText] = useState('');
-  const selectedModel = 'Claude Opus 4.6 (T...';
 
   const handleSend = () => {
     if (!inputText.trim()) return;
@@ -109,10 +109,10 @@ export default function IdeChatSidebar() {
               <Plus size={15} />
             </button>
 
-            <div className={styles.modelPillBtn}>
-              <span>{selectedModel}</span>
-              <ChevronDown size={11} />
-            </div>
+            {/* The real picker: configured providers only, from providers.json.
+                The pill that used to be here read 'Claude Opus 4.6' on every
+                machine, configured or not. */}
+            <ModelSelector />
 
             <div className={styles.mcpWarningBadge} title="MCP Tools Active (cloudrun, firebase, notebooks, visualization)">
               <AlertTriangle size={12} className={styles.warnIcon} />

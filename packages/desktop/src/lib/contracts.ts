@@ -8,7 +8,7 @@
 // bundle takes on no runtime dependency on @sketch/core. The engine is reached
 // through the SketchClient seam (see ./client.ts) and never imported directly.
 
-import type { tools } from '@sketch/core'
+import type { providers, settings, tools } from '@sketch/core'
 
 /**
  * The git shapes, taken from the engine's parser rather than restated.
@@ -19,6 +19,20 @@ import type { tools } from '@sketch/core'
  */
 export type GitStatusResult = tools.GitStatusResult
 export type GitFileChange = tools.GitFileChange
+
+/**
+ * Provider settings, taken from the engine rather than restated.
+ *
+ * `ProviderDescriptor` is the registry's catalog row — the full matrix the settings
+ * surface lists, including the `serverless` flag. The `ProviderSettings*` shapes are
+ * the KEY-FREE file at `~/.sketch/providers.json`; there is no `apiKey` field on any
+ * of them, by construction (Requirement 17.2).
+ */
+export type ProviderDescriptor = providers.ProviderDescriptor
+export type ProviderSettingsEntry = settings.ProviderSettingsEntry
+export type ProviderSettingsFile = settings.ProviderSettingsFile
+export type ProviderTestResult = settings.ProviderTestResult
+export type ProviderTestCode = settings.ProviderTestCode
 
 export type {
   // Events — the spine the Timeline and the Agent Console read.

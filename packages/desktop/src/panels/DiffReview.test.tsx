@@ -109,6 +109,19 @@ class FakeEventClient implements SketchClient {
     return Promise.reject(new Error('no repository in this test'))
   }
 
+  // Diff review never touches provider configuration.
+  providerCatalog(): Promise<never> {
+    return Promise.reject(new Error('no provider configuration in this test'))
+  }
+
+  saveProviderSettings(): Promise<never> {
+    return Promise.reject(new Error('no provider configuration in this test'))
+  }
+
+  testProvider(): Promise<never> {
+    return Promise.reject(new Error('no provider configuration in this test'))
+  }
+
   emit(kind: SketchEvent['kind'], payload: Record<string, unknown>, runId = 'run-1'): string {
     this.seq += 1
     const id = `engine-${this.seq}`

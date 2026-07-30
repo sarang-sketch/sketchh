@@ -139,6 +139,20 @@ class EngineClient implements SketchClient {
   }): Promise<{ output: string; status: GitStatusResult }> {
     return this.call<{ output: string; status: GitStatusResult }>('git-commit', params)
   }
+
+  // Provider settings reach the same `METHODS` table, but nothing in the Git panel
+  // calls them. Rejecting says so instead of answering with an invented catalog.
+  providerCatalog(): Promise<never> {
+    return Promise.reject(new Error('the Git panel never reads provider settings'))
+  }
+
+  saveProviderSettings(): Promise<never> {
+    return Promise.reject(new Error('the Git panel never writes provider settings'))
+  }
+
+  testProvider(): Promise<never> {
+    return Promise.reject(new Error('the Git panel never tests a provider'))
+  }
 }
 
 /** A client whose git calls fail, for the "name the tool and the reason" case. */

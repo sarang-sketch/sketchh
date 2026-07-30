@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import styles from './AgentChat.module.css';
 import { 
-  Sparkles, Copy, Plus, Send, ChevronDown, Folder
+  Sparkles, Copy, Plus, Send, Folder
 } from '../../components/Icons';
 import { ThinkingIndicator } from '../../components/ThinkingIndicator';
+import { ModelSelector } from '../../components/ModelSelector';
 import { useAppState, useAppDispatch } from '../../state/AppState';
 import { useFileActions } from '../../editor/useFileActions';
 import { useSketchClient } from '../../lib/ClientProvider';
@@ -27,7 +28,6 @@ export const AgentChat: React.FC = () => {
   const client = useSketchClient();
   const bottomRef = useRef<HTMLDivElement>(null);
   const [inputText, setInputText] = useState('');
-  const selectedModel = 'claude-opus-4-8 High';
 
   const messages: DisplayMessage[] = state.chatMessages.length > 0 ? state.chatMessages : [];
 
@@ -120,10 +120,9 @@ export const AgentChat: React.FC = () => {
               </button>
 
               <div className={styles.promptRightActions}>
-                <div className={styles.modelPillDropdown}>
-                  <span>{selectedModel}</span>
-                  <ChevronDown size={12} />
-                </div>
+                {/* Real providers, from providers.json. The pill that used to be
+                    here named a model on machines with nothing configured. */}
+                <ModelSelector />
 
                 <button 
                   className={`${styles.sendCircleBtn} ${inputText.trim() ? styles.sendActive : ''}`} 
@@ -226,10 +225,7 @@ export const AgentChat: React.FC = () => {
               <Plus size={16} />
             </button>
             <div className={styles.promptRightActions}>
-              <div className={styles.modelPillDropdown}>
-                <span>{selectedModel}</span>
-                <ChevronDown size={12} />
-              </div>
+              <ModelSelector />
               <button 
                 className={`${styles.sendCircleBtn} ${inputText.trim() ? styles.sendActive : ''}`} 
                 onClick={handleSend}

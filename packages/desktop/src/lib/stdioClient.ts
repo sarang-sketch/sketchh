@@ -25,7 +25,16 @@
 //
 // Validates: Requirements 13.2, 13.4, 13.6, 13.7, 12.1, 12.5, 12.6
 
-import type { SketchClient, PingResult, EventHandler, Unsubscribe, TransportKind, RunOptions } from './client'
+import type {
+  SketchClient,
+  PingResult,
+  EventHandler,
+  Unsubscribe,
+  TransportKind,
+  RunOptions,
+  ProviderCatalogResult,
+  ProviderTestRequest,
+} from './client'
 import { createEventBus } from './client'
 import type {
   Task,
@@ -33,6 +42,8 @@ import type {
   EvalCase,
   EvalResult,
   GitStatusResult,
+  ProviderSettingsFile,
+  ProviderTestResult,
   SketchEvent,
 } from './contracts'
 
@@ -318,7 +329,11 @@ export class StdioSketchClient implements SketchClient {
 
   // ── requests ──────────────────────────────────────────────────────────────
 
-  private async call<T>(method: string, params: Record<string, unknown>): Promise<T> {
+  private async call<T>(
+    method: string,
+    params: Record<string, unknown>,
+    signal?: AbortSignal,
+  ): Promise<T> {
     const child = await this.ensureStarted()
     const id = `req-${++this.seq}`
 
@@ -328,6 +343,18 @@ export class StdioSketchClient implements SketchClient {
         resolve: (value) => resolve(value as T),
         reject,
       })
+      if (signal) {
+        const abort = () => {
+          // Forget the request so a late frame cannot resolve it. There is no
+          // cancel verb on the wire; see `testProvider` for what that means.
+          this.pendingRequests.delete(id)
+          const error = new Error(`${method} was cancelled`)
+          error.name = 'AbortError'
+          reject(error)
+        }
+        if (signal.aborted) abort()
+        else signal.addEventListener('abort', abort, { once: true })
+      }
     })
 
     try {
@@ -425,6 +452,42 @@ export class StdioSketchClient implements SketchClient {
       root: params.root,
       message: params.message,
     })
+  }
+
+  // ── provider settings ─────────────────────────────────────────────────────
+
+  async providerCatalog(): Promise<ProviderCatalogResult> {
+    return this.call<ProviderCatalogResult>('provider-catalog', {})
+  }
+
+  async saveProviderSettings(params: {
+    settings: ProviderSettingsFile
+  }): Promise<{ settings: ProviderSettingsFile; path: string }> {
+    return this.call<{ settings: ProviderSettingsFile; path: string }>('provider-config-save', {
+      settings: params.settings,
+    })
+  }
+
+  /**
+   * CANCELLATION IS LOCAL, AND THIS IS THE HONEST DESCRIPTION OF IT. The protocol
+   * has no cancel verb (recorded as a spec gap), so aborting drops the pending
+   * request here: the caller stops waiting immediately and a late response frame is
+   * discarded by request id rather than resolving a promise nobody wants. The
+   * engine's own request keeps running until its timeout — it is one GET, and the
+   * engine already bounds it.
+   */
+  async testProvider(
+    params: ProviderTestRequest,
+    options: { signal?: AbortSignal } = {},
+  ): Promise<ProviderTestResult> {
+    return this.call<ProviderTestResult>(
+      'provider-test',
+      {
+        provider: params.provider,
+        ...(params.timeoutMs !== undefined ? { timeoutMs: params.timeoutMs } : {}),
+      },
+      options.signal,
+    )
   }
 
   subscribe(handler: EventHandler): Unsubscribe {

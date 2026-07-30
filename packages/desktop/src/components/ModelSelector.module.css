@@ -26,8 +26,15 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background-color: var(--success);
+  background-color: var(--text-muted);
 }
+
+/* The four tones of `describeTest`. Grey means "not tested", and it is the
+   default: nothing here may imply a connection that was never made. */
+.idle { background-color: var(--text-muted); }
+.busy { background-color: var(--warning); }
+.ok { background-color: var(--success); }
+.error { background-color: var(--error); }
 
 .selectedName {
   font-weight: 500;
@@ -85,13 +92,7 @@
   border-radius: 50%;
 }
 
-.providerDot.connected {
-  background-color: var(--success);
-}
-
-.providerDot.disconnected {
-  background-color: var(--text-muted);
-}
+/* `.providerDot` takes the same four tones as `.statusDot` above. */
 
 .modelItem {
   display: flex;
@@ -145,11 +146,12 @@
   border-radius: 10px;
 }
 
+/* The last connection-test verdict, in words. Not a price: this app has never
+   known what a model costs, and the dollar signs that used to sit here were
+   invented (the Cost Dashboard is task 8.4). */
 .cost {
-  font-family: var(--font-mono);
   font-size: 11px;
   color: var(--text-muted);
-  width: 24px;
   text-align: right;
 }
 

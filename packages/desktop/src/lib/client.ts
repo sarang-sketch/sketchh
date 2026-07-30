@@ -11,6 +11,9 @@ import type {
   EvalCase,
   EvalResult,
   GitStatusResult,
+  ProviderDescriptor,
+  ProviderSettingsFile,
+  ProviderTestResult,
   RunResult,
   SketchEvent,
   Task,
@@ -30,6 +33,31 @@ export type EventHandler = (event: SketchEvent) => void
 
 /** Calling the returned function detaches the handler. Idempotent. */
 export type Unsubscribe = () => void
+
+/** What `providerCatalog` answers: the matrix, the saved file, and where it lives. */
+export interface ProviderCatalogResult {
+  catalog: ProviderDescriptor[]
+  settings: ProviderSettingsFile
+  /** Absolute path of `providers.json`, so the surface can name it. */
+  path: string
+  /** Set when the file could not be read, or carried something it should not. */
+  diagnostic?: string
+}
+
+/**
+ * One connection test. `apiKey` is optional, present for this request only, and is
+ * NOT part of anything that gets saved.
+ */
+export interface ProviderTestRequest {
+  provider: {
+    id: string
+    kind: ProviderSettingsFile['providers'][number]['kind']
+    baseUrl: string
+    model: string
+    apiKey?: string
+  }
+  timeoutMs?: number
+}
 
 export interface RunOptions {
   /** Project root for this run. Required by the desktop to match the open folder. */
@@ -85,6 +113,35 @@ export interface SketchClient {
     root: string
     message: string
   }): Promise<{ output: string; status: GitStatusResult }>
+
+  // ── provider settings ─────────────────────────────────────────────────────
+  //
+  // Same reasoning as git: the provider catalog and the key-free serializer live in
+  // the engine (packages/core/src/settings/) and are reached over this seam, so the
+  // panel is real under the dev bridge as well as in the app.
+  //
+  // NO KEY IS EVER SAVED. `providerCatalog` and `saveProviderSettings` deal only in
+  // the five non-secret fields of `~/.sketch/providers.json`; `testProvider` takes a
+  // key for the duration of one call and the engine scrubs it from every frame
+  // (Requirements 17.2, 17.4).
+
+  /** The full provider matrix, plus whatever is configured on disk. */
+  providerCatalog(): Promise<ProviderCatalogResult>
+
+  /** Persist key-free configuration. Resolves with what was actually written. */
+  saveProviderSettings(params: {
+    settings: ProviderSettingsFile
+  }): Promise<{ settings: ProviderSettingsFile; path: string }>
+
+  /**
+   * Test one provider. A REAL NETWORK CALL, so it is only ever made because a user
+   * asked for it — never on mount. `signal` cancels the wait; see the note in
+   * stdioClient about what cancellation can and cannot reach.
+   */
+  testProvider(
+    params: ProviderTestRequest,
+    options?: { signal?: AbortSignal },
+  ): Promise<ProviderTestResult>
 
   /**
    * Attach a handler to the engine's event stream. Called for every event from

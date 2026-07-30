@@ -343,7 +343,13 @@ Cold-run the whole ritual (§0.2). Then mutation-verify, pasting failing-then-pa
 
 1. Remove the plan-gate check from the engine → an edit-without-plan test must fail.
 2. Remove the UI mirror → the 3.6 test must fail.
-3. Point the hunk applier at the wrong offset → the reject-all byte-identity test must fail.
+3. Point the hunk applier at the wrong offset (`oldStart` → `newStart`) → **seven tests in
+   `packages/core/test/diff.test.ts` must fail** (subset offset, order-indifference, apply-all, pure
+   insertion, empty-file creation, and both round-trip properties).
+   *Corrected at the Phase 3 gate: an earlier version of this line claimed the reject-all
+   byte-identity test would fail. It cannot. Reject-all never calls the applier — its guard is that
+   the writer is called zero times — so that test passes under this mutation and proves nothing
+   about offsets.*
 4. Remove `sanitizePayload` from the event store → the redaction test must fail. *(Run this one
    every gate. It is the regression that actually happened.)*
 5. Add a dependency to `packages/core/package.json` → `deps.test.ts` must fail.

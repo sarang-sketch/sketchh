@@ -89,6 +89,20 @@ class FakeEventClient implements SketchClient {
     return Promise.reject(new Error('no repository in this test'))
   }
 
+  // Provider settings are not part of the editor's story. Rejecting keeps that
+  // explicit rather than handing back a provider list nothing configured.
+  providerCatalog(): Promise<never> {
+    return Promise.reject(new Error('no provider configuration in this test'))
+  }
+
+  saveProviderSettings(): Promise<never> {
+    return Promise.reject(new Error('no provider configuration in this test'))
+  }
+
+  testProvider(): Promise<never> {
+    return Promise.reject(new Error('no provider configuration in this test'))
+  }
+
   /** What the engine's file writer produces after it writes a file. */
   editAccepted(path: string, bytes: number): void {
     this.seq += 1

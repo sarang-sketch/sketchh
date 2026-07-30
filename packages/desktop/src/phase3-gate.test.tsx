@@ -95,6 +95,12 @@ class InProcessGateClient implements SketchClient {
     const git = this.git(root); const result = await git.commit(message)
     return { output: result.output, status: await git.status() }
   }
+
+  // Phase 4's surface, not part of the Phase 3 chain. Rejecting keeps this gate
+  // from quietly depending on provider configuration.
+  providerCatalog(): Promise<never> { return Promise.reject(new Error('not part of the phase 3 gate')) }
+  saveProviderSettings(): Promise<never> { return Promise.reject(new Error('not part of the phase 3 gate')) }
+  testProvider(): Promise<never> { return Promise.reject(new Error('not part of the phase 3 gate')) }
 }
 
 function realFileIo(root: string): FileIo {

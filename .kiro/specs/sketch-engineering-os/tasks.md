@@ -187,29 +187,29 @@ Phase 4 numbering stays intact for anything that references it.
 ## Phase 4 — Settings, secrets, zero telemetry
 
 - [ ] 4. Provider settings, OS-keychain secrets, and provable zero telemetry
-- [ ] 4.1 Build the Provider Settings surface
+- [-] 4.1 Build the Provider Settings surface
   - List the full provider matrix, allow adding a custom endpoint, and offer a per-provider connection test
   - Persist key-free configuration to `~/.sketch/providers.json`
   - Replace the dead `ModelSelector` fixture and the never-rendered `state.providers` array with real data
   - _Requirements: 17.1, 17.2, 27.1_
-- [ ] 4.2 Implement the SecretStore seam and OS credential storage
+- [~] 4.2 Implement the SecretStore seam and OS credential storage
   - Keep `SecretStore` (`get`/`set`/`del`) in core with no implementation that persists
   - Implement real storage on the Rust side against the OS credential store; expose `list_providers`, `set_api_key`, and `remove_api_key` Tauri commands, which the bridge already calls but which do not exist
   - Supply the resolved key to the engine at invocation time only
   - Delete the keytar-shaped `KeychainCredentialStore` in favor of the seam
   - _Requirements: 17.3, 17.4_
-- [ ] 4.3 Harden the Tauri security surface — SUPERSEDED, moved to Phase 1.5 (task 1.5h)
+- [~] 4.3 Harden the Tauri security surface — SUPERSEDED, moved to Phase 1.5 (task 1.5h)
   - Completed ahead of schedule as task 1.5h, by explicit user decision, before task 2.1 wired
     a real IPC path into the (at the time) unsandboxed webview. See Phase 1.5 above for the
     original content and rationale. This row is kept only so the Phase 4 numbering does not
     shift for anything that cites `4.3`.
   - _Requirements: 13.8, 22.6_
-- [ ] 4.4 Prove zero telemetry and secret redaction
+- [~] 4.4 Prove zero telemetry and secret redaction
   - Write `PRIVACY.md` stating exactly what leaves the machine
   - Add a grep test asserting `analytics`, `telemetry`, `sentry`, and `posthog` are absent from `packages/**/src`
   - Add a test asserting a thrown provider error never contains the configured key value
   - _Requirements: 17.5, 17.6, 17.8_
-- [ ] 4.5 Phase 4 gate — v1 complete
+- [~] 4.5 Phase 4 gate — v1 complete
   - Prove keys live only in the OS store, `providers.json` is key-free, the grep test is clean, and a connection test against `http://localhost:11434/v1` succeeds with no internet
   - Write the `README.md` $0 stack recipe: fake adapter for tests, local Ollama or a free tier for demos, never a paid-only path
   - _Requirements: 17.7, 26.3, 1.6_
@@ -219,28 +219,28 @@ Phase 4 numbering stays intact for anything that references it.
 ## Phase 5 — Intelligent context
 
 - [ ] 5. Intelligent context and the architecture generator
-- [ ] 5.1 Persist the repository graph
+- [~] 5.1 Persist the repository graph
   - Build the graph from the existing walker, chunker, and dependency-graph modules; persist to `.sketch/index/graph.json`; rebuild incrementally by content hash
   - Add the missing test coverage for `walkProject`, including `.gitignore` handling
   - _Requirements: 18.1_
-- [ ] 5.2 Build hybrid search with reranking
+- [~] 5.2 Build hybrid search with reranking
   - Add a ripgrep-backed lexical channel; fuse it with the existing vector channel by reciprocal rank; add a rerank pass
   - Vector-only retrieval must not be the shipped default
   - _Requirements: 18.2_
-- [ ] 5.3 Make embeddings work offline
+- [~] 5.3 Make embeddings work offline
   - Local embedding path with no network; provider embeddings cached locally as a documented fallback
   - _Requirements: 18.3_
-- [ ] 5.4 Build context assembly under a token budget
+- [~] 5.4 Build context assembly under a token budget
   - Combine memory, skills, top-k chunks, and one-hop graph neighbors under a token budget
   - Preserve function and type signatures in preference to bodies when truncating
   - Consume the `expandWithDependencies` result that `ContextEngine.retrieve` currently computes and discards
   - Emit `context_assembled` with the selected paths and token estimate
   - _Requirements: 18.4, 18.5, 18.6, 18.8_
-- [ ] 5.5 Build the architecture generator
+- [~] 5.5 Build the architecture generator
   - Derive system, API, database, component, dependency, folder-tree, and call-graph views from the graph; deterministic for a fixed graph; no network
   - Emit `diagram_updated`; render in a Live Architecture panel
   - _Requirements: 19.1, 19.2, 19.3, 19.4, 19.5, 27.1_
-- [ ] 5.6 Phase 5 gate
+- [~] 5.6 Phase 5 gate
   - On a fixed fifty-file fixture, prove targeted context is smaller and more relevant than the whole-repo baseline AND the held-out eval score rises; prove diagrams render
   - _Requirements: 18.7_
 
@@ -249,26 +249,26 @@ Phase 4 numbering stays intact for anything that references it.
 ## Phase 6 — Skills registry and trainer
 
 - [ ] 6. Curated signed registry, capability scopes, and the real optimizer
-- [ ] 6.1 Build the signed curated registry
+- [~] 6.1 Build the signed curated registry
   - Pinned manifest with a content hash per skill; reject installation on hash mismatch with a tamper diagnostic
   - _Requirements: 11.1, 11.2_
-- [ ] 6.2 Seed the registry
+- [~] 6.2 Seed the registry
   - Context packing, web/data, general engineering pack, frontend design, research-stage pack, finance/quant pack
   - _Requirements: 11.3_
-- [ ] 6.3 Enforce capability scopes
+- [~] 6.3 Enforce capability scopes
   - Enforce `capabilities:` at the tool and filesystem layer; a skill without a network capability cannot fetch, and the attempt emits `tool_denied`
   - _Requirements: 11.4, 11.5_
-- [ ] 6.4 Build the real Skills surface
+- [~] 6.4 Build the real Skills surface
   - Replace `SkillsMarketplace`'s `MOCK_SKILLS` and the duplicate never-read `state.installedSkills` and `state.skillMarketplace` fixtures with registry data; wire the dead `TOGGLE_SKILL` and `INSTALL_SKILL` reducers
   - _Requirements: 14.6, 27.1, 27.3_
-- [ ] 6.5 Open the marketplace behind the gate
+- [~] 6.5 Open the marketplace behind the gate
   - Ship the open marketplace with a review queue only after signing and capability scoping are both tested
   - _Requirements: 11.6_
-- [ ] 6.6 Wire the real optimizer into `proposeEdit`
+- [~] 6.6 Wire the real optimizer into `proposeEdit`
   - Replace the stub with the real optimizer while keeping our strict validation gate unchanged
   - Add a "Train this skill on my project" action running `trainSkill` on captured evals over a train/validation split, behind the cost guard and off the hot path
   - _Requirements: 9.5, 9.6, 9.7_
-- [ ] 6.7 Phase 6 gate
+- [~] 6.7 Phase 6 gate
   - Prove signed install and scope enforcement offline; prove the stub-optimizer trainer improves a seed skill and rejects a regression
   - The real-optimizer run in 6.6 is the one documented exception that may require a key
   - _Requirements: 11.2, 11.5, 9.8_
@@ -278,25 +278,25 @@ Phase 4 numbering stays intact for anything that references it.
 ## Phase 7 — Verification contract and MCP
 
 - [ ] 7. Full verification contract, live environment feedback, and curated MCP
-- [ ] 7.1 Build the verify policy
+- [~] 7.1 Build the verify policy
   - Nine ordered stages: format, lint, typecheck, build, unit, integration, security, performance, dependency-audit
   - `verify.yaml` at the project root takes precedence; auto-detect per stack when absent, extending the existing node/python/rust/go detector
   - Unconfigured stages report as skipped without failing
   - A task is `ok` only when every non-skipped stage passed, or none were configured
   - _Requirements: 4.3, 4.4, 4.5, 4.7, 4.8_
-- [ ] 7.2 Add live environment feedback
+- [~] 7.2 Add live environment feedback
   - Browser tool plus an application runner capturing console output and runtime errors
   - A runtime error means not done; a failure to start is a verification failure with captured output; the stage is skippable where it does not apply
   - _Requirements: 23.1, 23.2, 23.3, 23.4_
-- [ ] 7.3 Build the curated isolated MCP registry
+- [~] 7.3 Build the curated isolated MCP registry
   - Hand-rolled JSON-RPC over stdio, no SDK dependency; curated and pinned coverage of GitHub, Docker, Figma, Notion, Slack, terminal, browser, filesystem, SSH, Cloudflare, Supabase, databases, Android emulator, and Playwright
   - Route all side-effecting model actions through the tool layer, emitting `tool_called` or `tool_denied`
   - Per-run and per-capability scoped grants; a hanging server times out, is marked unavailable for the run, and the run continues
   - Surface tool failures, reasons, and retries rather than hiding them — replace the hardcoded MCP badge and tooltip with real status
   - _Requirements: 22.1, 22.2, 22.3, 22.4, 22.5, 27.5_
-- [ ] 7.4 Build the Test Results panel
+- [~] 7.4 Build the Test Results panel
   - _Requirements: 27.1_
-- [ ] 7.5 Phase 7 gate
+- [~] 7.5 Phase 7 gate
   - Prove broken tests or a broken running app both mean not done, and that a hanging tool cannot hang a run
   - _Requirements: 4.7, 23.2, 22.3_
 
@@ -305,20 +305,20 @@ Phase 4 numbering stays intact for anything that references it.
 ## Phase 8 — Cost and budget
 
 - [ ] 8. Cost accounting, budget guard, routing, and cache
-- [ ] 8.1 Implement usage accounting
+- [~] 8.1 Implement usage accounting
   - Every `llm_response` carries usage; the session total equals the sum over events with no independent source
   - _Requirements: 20.1, 20.2_
-- [ ] 8.2 Implement the cost guard and router
+- [~] 8.2 Implement the cost guard and router
   - Enforce per-task token and currency budgets inside the loop; on breach either downgrade or stop with `run_failed{reason:"budget"}`, deterministically by configuration
   - Emit `budget_exceeded`; route cheap or mechanical calls to a local or inexpensive model and reserve a frontier model for hard calls
   - _Requirements: 20.3, 20.4, 20.5, 20.6, 5.10_
-- [ ] 8.3 Implement the content-addressed response cache
+- [~] 8.3 Implement the content-addressed response cache
   - Key on provider, model, messages, and options; store under `.sketch/cache/`; a repeated identical request emits `cache_hit` and issues no second network call
   - _Requirements: 20.7_
-- [ ] 8.4 Build the Cost Dashboard
+- [~] 8.4 Build the Cost Dashboard
   - Reconcile exactly with the event log; replace the hardcoded `$1.4025` in `StatusBar` and `TaskLog` and the never-rendered `state.totalCost`
   - _Requirements: 20.8, 27.1, 14.6_
-- [ ] 8.5 Phase 8 gate
+- [~] 8.5 Phase 8 gate
   - Prove an overrun stops or downgrades deterministically, a cache hit avoids the second call, and the dashboard equals the log
   - _Requirements: 20.4, 20.7, 20.8_
 
@@ -327,19 +327,19 @@ Phase 4 numbering stays intact for anything that references it.
 ## Phase 9 — Memory and hygiene
 
 - [ ] 9. Versioned project memory with hygiene
-- [ ] 9.1 Build the versioned memory store
+- [~] 9.1 Build the versioned memory store
   - Persist decisions, architecture, summarized conversations, standards, preferences, style, bugs, performance history, and test history; every row carries `valid_from` and `valid_to`
   - Keep the existing in-memory implementation as the test double behind the same interface
   - _Requirements: 21.1, 21.2, 21.7_
-- [ ] 9.2 Implement hygiene
+- [~] 9.2 Implement hygiene
   - Newer entries supersede older with a recorded reason and a `memory_superseded` event; support expiration and a memory-lint pass for contradictions
   - _Requirements: 21.3, 21.4_
-- [ ] 9.3 Implement reranked retrieval
+- [~] 9.3 Implement reranked retrieval
   - Reuse the Phase 5 hybrid path with reranking and a recency prior; emit `memory_retrieved`
   - _Requirements: 21.5_
-- [ ] 9.4 Build the Memory panel
+- [~] 9.4 Build the Memory panel
   - _Requirements: 27.1_
-- [ ] 9.5 Phase 9 gate
+- [~] 9.5 Phase 9 gate
   - Insert a decision, insert a contradicting decision, and prove a related query returns the newer while the older is marked superseded
   - _Requirements: 21.6_
 
@@ -348,22 +348,22 @@ Phase 4 numbering stays intact for anything that references it.
 ## Phase 10 — Eval-gated multi-agent
 
 - [ ] 10. Strategy dispatcher, the thirteen roles, and consensus
-- [ ] 10.1 Keep single-agent as the default and add the dispatcher
+- [~] 10.1 Keep single-agent as the default and add the dispatcher
   - Support `single`, `plan-then-code`, and `swarm`; emit `strategy_selected`; record which strategy succeeded
   - Escalate only after the lighter strategy fails within its eval and verify budget
   - _Requirements: 24.1, 24.2, 24.3_
-- [ ] 10.2 Implement the roles as constrained sub-runs
+- [~] 10.2 Implement the roles as constrained sub-runs
   - CEO, Planner, Research, Architect, Backend, Frontend, Database, Security, Testing, Reviewer, Performance, Deployment, Documentation — each with its own verification signal and the inner goal → memory → thinking → action → verification → feedback → retry → consensus loop
   - No role without a distinct verification signal
   - _Requirements: 24.4, 24.5, 24.6_
-- [ ] 10.3 Implement deterministic merge and consensus
+- [~] 10.3 Implement deterministic merge and consensus
   - Union of verified non-conflicting edits; a conflict creates a new task and is never guessed; consensus runs only inside `swarm`
   - _Requirements: 24.7, 24.9_
-- [ ] 10.4 Build the AI Team and Tasks panels
+- [~] 10.4 Build the AI Team and Tasks panels
   - Render real dispatcher events; replace `AgentTeamPanel`'s four function-local fixtures and the twelve never-rendered `state.agentTeam` entries, and make the panel reachable — no ActivityBar button currently dispatches `agents`
   - Replace `TaskLog`'s `MOCK_TASKS` and its non-functional filter with real task state
   - _Requirements: 27.1, 27.3, 27.4, 14.6_
-- [ ] 10.5 Phase 10 gate
+- [~] 10.5 Phase 10 gate
   - `swarm` becomes a default for a task class only after measured pass@k lift over `single` on the internal suite; otherwise it stays off
   - _Requirements: 24.8_
 
@@ -372,22 +372,22 @@ Phase 4 numbering stays intact for anything that references it.
 ## Phase 11 — Honest benchmarks
 
 - [ ] 11. Benchmarks and lift-regression protection
-- [ ] 11.1 Build the internal eval suite
+- [~] 11.1 Build the internal eval suite
   - Scored by the eval harness and the verification contract
   - _Requirements: 25.1_
-- [ ] 11.2 Report the measurable outcomes
+- [~] 11.2 Report the measurable outcomes
   - Task completion rate, build success rate, test pass rate, manual edits required, time to completion, and cost
   - _Requirements: 25.2_
-- [ ] 11.3 Report pass@k under a fixed budget
+- [~] 11.3 Report pass@k under a fixed budget
   - Include the distribution, not only the best case
   - _Requirements: 25.3_
-- [ ] 11.4 Frame public benchmarks as lift
+- [~] 11.4 Frame public benchmarks as lift
   - Present `M + Sketch` versus `M + naive` across several models; never claim to beat a model
   - _Requirements: 25.4_
-- [ ] 11.5 Add the bench script and CI gate
+- [~] 11.5 Add the bench script and CI gate
   - `bench` produces a report artifact; CI fails on internal-suite lift regression
   - _Requirements: 25.5, 25.6_
-- [ ] 11.6 Build the Benchmarks panel
+- [~] 11.6 Build the Benchmarks panel
   - _Requirements: 27.1_
 
 ---
@@ -395,22 +395,22 @@ Phase 4 numbering stays intact for anything that references it.
 ## Phase 12 — Packaging and the open flywheel
 
 - [ ] 12. Packaging, offline proof, and extensibility
-- [ ] 12.1 Produce cross-platform builds
+- [~] 12.1 Produce cross-platform builds
   - macOS, Windows, and Linux Tauri builds with a documented size budget
   - _Requirements: 26.1_
-- [ ] 12.2 Prove local-first on a clean offline machine
+- [~] 12.2 Prove local-first on a clean offline machine
   - Install, index a repository, and complete a task on local Ollama with no external network call beyond the local model endpoint
   - _Requirements: 26.2_
-- [ ] 12.3 Ship the open-source scaffolding
+- [~] 12.3 Ship the open-source scaffolding
   - `CONTRIBUTING.md` and signed releases; the marketplace retains hash, scope, and review
   - _Requirements: 26.3_
-- [ ] 12.4 Prove the flywheel turns server-less
+- [~] 12.4 Prove the flywheel turns server-less
   - A community skill installs, runs, and trains on captured evals with no Sketch server involved
   - _Requirements: 26.4_
-- [ ] 12.5 Complete the extensibility audit
+- [~] 12.5 Complete the extensibility audit
   - Confirm and document an extension point for providers, agents, skills, tools, models, memory, workflows, themes, and languages
   - _Requirements: 26.5_
-- [ ] 12.6 Run the canonical end-to-end acceptance
+- [~] 12.6 Run the canonical end-to-end acceptance
   - The "build an Airbnb clone" flow runs end to end with the plan gate, verification contract, consensus, and cost guard all observable in the Timeline, completing with every check green
   - _Requirements: 24.7, 6.4, 4.7, 20.4_
 
@@ -419,20 +419,20 @@ Phase 4 numbering stays intact for anything that references it.
 ## Documentation reconciliation (runs alongside, gated per phase)
 
 - [ ] 13. Reconcile the prior-generation documents with this build
-- [ ] 13.1 Amend `rules.md`
+- [~] 13.1 Amend `rules.md`
   - Permit consensus and multi-agent code from v2 behind the eval gate, replacing the blanket v1 prohibition while keeping single-agent as the default
   - Replace the keytar-specific credential rule with "the OS credential store, accessed outside the core"
   - _Requirements: 28.1_
-- [ ] 13.2 Amend `what-not-we-are-building.md`
+- [~] 13.2 Amend `what-not-we-are-building.md`
   - Scope the skills registry to v1 and the open marketplace to v2 with signing and capability scoping as preconditions
   - _Requirements: 28.2_
-- [ ] 13.3 Amend `trd.md` and `architecture.md`
+- [~] 13.3 Amend `trd.md` and `architecture.md`
   - Record the dependency-free core decision, replacing mandated `better-sqlite3`, `sqlite-vec`, `keytar`, and MCP SDK dependencies with the seam approach
   - Record the workspace layout, the event-sourced JSONL log, the `.sketch/` directory layout, and the nine-stage verification contract
   - _Requirements: 28.3, 28.4_
-- [ ] 13.4 Amend `prd.md`
+- [~] 13.4 Amend `prd.md`
   - Reflect the two-surface product and the three optimization metrics of lift, reliability, and compounding
   - _Requirements: 28.5_
-- [ ] 13.5 Keep `tasks-executed.md` current
+- [~] 13.5 Keep `tasks-executed.md` current
   - Update at each phase gate, with a decision-log row for every architectural decision recorded in this spec
   - _Requirements: 28.6_
