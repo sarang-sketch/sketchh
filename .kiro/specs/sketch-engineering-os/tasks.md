@@ -219,11 +219,11 @@ Phase 4 numbering stays intact for anything that references it.
 ## Phase 5 — Intelligent context
 
 - [ ] 5. Intelligent context and the architecture generator
-- [~] 5.1 Persist the repository graph
+- [x] 5.1 Persist the repository graph
   - Build the graph from the existing walker, chunker, and dependency-graph modules; persist to `.sketch/index/graph.json`; rebuild incrementally by content hash
   - Add the missing test coverage for `walkProject`, including `.gitignore` handling
   - _Requirements: 18.1_
-- [~] 5.2 Build hybrid search with reranking
+- [x] 5.2 Build hybrid search with reranking
   - Add a ripgrep-backed lexical channel; fuse it with the existing vector channel by reciprocal rank; add a rerank pass
   - Vector-only retrieval must not be the shipped default
   - _Requirements: 18.2_
