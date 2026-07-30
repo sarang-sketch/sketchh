@@ -1,3 +1,7 @@
+/* Fonts first: the @font-face rules must be registered before anything uses them.
+ * They are served from this bundle, not from a font CDN — see fonts.css. */
+@import './fonts.css';
+
 :root {
   --bg-primary: #121212;
   --bg-secondary: #171717;

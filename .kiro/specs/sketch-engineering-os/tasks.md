@@ -204,12 +204,12 @@ Phase 4 numbering stays intact for anything that references it.
     original content and rationale. This row is kept only so the Phase 4 numbering does not
     shift for anything that cites `4.3`.
   - _Requirements: 13.8, 22.6_
-- [~] 4.4 Prove zero telemetry and secret redaction
+- [x] 4.4 Prove zero telemetry and secret redaction
   - Write `PRIVACY.md` stating exactly what leaves the machine
   - Add a grep test asserting `analytics`, `telemetry`, `sentry`, and `posthog` are absent from `packages/**/src`
   - Add a test asserting a thrown provider error never contains the configured key value
   - _Requirements: 17.5, 17.6, 17.8_
-- [~] 4.5 Phase 4 gate — v1 complete
+- [x] 4.5 Phase 4 gate — v1 complete
   - Prove keys live only in the OS store, `providers.json` is key-free, the grep test is clean, and a connection test against `http://localhost:11434/v1` succeeds with no internet
   - Write the `README.md` $0 stack recipe: fake adapter for tests, local Ollama or a free tier for demos, never a paid-only path
   - _Requirements: 17.7, 26.3, 1.6_

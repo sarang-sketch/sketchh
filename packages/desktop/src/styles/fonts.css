@@ -1,0 +1,55 @@
+/* Self-hosted fonts. Task 4.5, Part A.
+ *
+ * WHY THIS FILE EXISTS
+ * `index.html` used to carry two `<link rel="preconnect">` hints and a Google Fonts
+ * stylesheet. That is a third party contacted on window load, before the user does
+ * anything, in a product whose whole claim is that nothing leaves the machine
+ * unasked. The CSP in `src-tauri/tauri.conf.json` blocks the stylesheet and the font
+ * files in a packaged build, but NO CSP DIRECTIVE COVERS `preconnect` — a speculative
+ * DNS lookup and TLS handshake could still disclose the IP address and the fact that
+ * the app started. So the tags are gone and the two families are vendored here.
+ *
+ * The files are real woff2 binaries committed under `src/assets/fonts/`, taken from
+ * the upstream releases (Inter, JetBrains Mono), both SIL Open Font License 1.1. The
+ * licence texts sit next to them — `inter-OFL.txt` and `jetbrains-mono-OFL.txt` —
+ * because the OFL requires the licence to travel with the font.
+ *
+ * WHAT IS AND IS NOT COVERED
+ * These are the LATIN subsets of the variable (`wght` axis) builds: one file per
+ * family, 48 KB and 40 KB, covering weights 100–900 from one resource instead of the
+ * four and three static weights the old stylesheet requested. Text outside the latin
+ * range falls through to the platform stack in the `--font-*` variables, which is the
+ * same behaviour the Google-hosted subset had for a user who never loaded the other
+ * subsets.
+ *
+ * `font-display: block` — not `swap`. There is no network fetch to wait on; the file
+ * is in the bundle. A swap would produce a flash of fallback text for no benefit.
+ *
+ * Vite fingerprints and inlines these URLs at build time, so they resolve under the
+ * app's own origin (`font-src 'self'`) with no path assumptions.
+ *
+ * Enforced by `packages/desktop/src/privacy.egress.test.ts`, which fails if any
+ * source or HTML file names an external font host or any non-loopback subresource.
+ */
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: block;
+  src: url('../assets/fonts/inter-latin-variable.woff2') format('woff2-variations');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212,
+    U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: block;
+  src: url('../assets/fonts/jetbrains-mono-latin-variable.woff2') format('woff2-variations');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212,
+    U+2215, U+FEFF, U+FFFD;
+}

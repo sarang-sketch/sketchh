@@ -271,10 +271,107 @@ task 4.5.
 
 ---
 
+## Phase 4 — Settings, secrets, provable zero egress (spec: `.kiro/specs/sketch-engineering-os`)
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| 4.1 | Provider Settings surface | ✅ | Full matrix from the registry (`providerMatrix()` returns `PROVIDER_CATALOG` itself, not a copy), custom endpoint with scheme/credential/query validation and the resolved URL shown before saving, per-provider connection test with five distinct failure codes. `~/.sketch/providers.json` persisted key-free and atomically (temp file + rename, so a failed write leaves the previous file byte-identical). `ModelSelector`'s hardcoded `PROVIDERS` fixture deleted; `state.providers` is now rendered |
+| 4.2 | SecretStore seam and OS credential storage | ✅ | `SecretStore` stays in core with **no implementation that persists** — `MemorySecretStore` (no `node:fs` import, asserted) and `unavailableSecretStore` (every method throws, naming the missing host). Real storage in Rust: `secret_store.rs` (validation, error shape) + `os_credentials.rs` (Windows `CredWriteW`, macOS `SecKeychainAddGenericPassword`, Linux `secret-tool` with the secret on stdin, never in argv). `list_providers` / `set_api_key` / `remove_api_key` registered and granted in `capabilities/default.json`; keytar-shaped `KeychainCredentialStore` deleted |
+| 4.3 | — | SUPERSEDED | Done early as Phase 1.5 (1.16/1.17). Row kept so `4.3` still resolves |
+| 4.4 | Prove zero data collection and secret redaction | ✅ | `PRIVACY.md` names every outbound path, including the ones that were inconvenient. `privacy.test.ts` scans every `src` root in every package plus all three manifests and the lockfile, with a scanner that strips comments, decodes `\uXXXX`, rejoins split literals and splits camelCase — and which is itself under test against eight evasions and six innocent samples. A thrown provider error, and the connection-test verdict, are asserted key-free for an unshaped key (the only thing that can redact it is the configured-secrets list). Two live wire bugs found and fixed in passing: `is_dir` and `exit_code` crossed the IPC boundary in snake_case while `bridge.ts` read camelCase |
+| 4.5 | Phase 4 gate — v1 complete | ✅ | See below |
+
+### Phase 4 gate result
+
+**Undeclared egress removed first.** `packages/desktop/index.html` still carried two
+`<link rel="preconnect">` hints and a Google Fonts stylesheet, fetched on window load before any
+user action, and PRIVACY.md §3 named it as a defect. A gate that claims no unexpected network
+egress cannot ship over it. Inter and JetBrains Mono are now **vendored** as latin-subset variable
+woff2 files (48 KB + 40 KB) under `packages/desktop/src/assets/fonts/` with their SIL Open Font
+License texts beside them, declared in `src/styles/fonts.css`, which `global.css` imports. All
+three tags are deleted. The production bundle emits both files under `/assets/` and the built CSS
+references them from the app's own origin. PRIVACY.md §3 now describes what is true.
+
+**Cold verification** (`node_modules`, both package `node_modules`, and `packages/core/dist`
+deleted, then `npm install && npm run build && npm test`): install 0, build 0, test 0.
+**Core 482 tests / 26 files, desktop 350 tests / 36 files** — 832 total. Typecheck 0. Offline, with
+no API key in the environment, and identical with `SKETCH_FAKE_PROVIDER=1` and unset. Rust: 18
+`command_policy` tests and 9 `secret_store` tests pass via `rustc --test` into
+`src-tauri/target/rusttest/` (`cargo test` still cannot link here — missing GNU `dlltool` — and is
+not claimed). `os_credentials.rs` cannot be compiled standalone (it imports a sibling module and,
+on Windows, `windows-sys`), so its unit tests are **unverified on this machine**; its behaviour is
+covered only by the source-level guards in `security.test.ts`.
+
+**The four gate claims.**
+
+1. *Keys live only in the OS credential store.* Core cannot persist a secret: no persisting
+   implementation exists, and `MemorySecretStore` has no filesystem import. Rust has no file
+   fallback (`fs::write`, `fs::read_to_string`, `File::create` all absent from both credential
+   files), holds no key in application state, and exposes **no command that returns a key value** —
+   not truncated, not a prefix, not a last-four. Asserted by `security.test.ts` and
+   `secrets.store.test.ts`.
+2. *`providers.json` is key-free.* Proved on the **bytes**, three times over — see the decision row
+   on the layered guard — including through the RPC method the UI actually calls.
+3. *The vocabulary scan is clean.* 26 core files / 36 desktop files green, with the scan covering
+   `packages/core/src`, `packages/desktop/src`, `packages/desktop/src-tauri/src`, all three
+   manifests and `package-lock.json`.
+4. *A connection test against `http://localhost:11434/v1` succeeds with no internet.*
+   `packages/core/test/phase4-gate.test.ts` runs the chain: configure a local provider from an
+   object that carries a key → save → the bytes on disk carry no key and match no secret pattern →
+   load back with no diagnostic → resolve the key from an injected store at call time → connection
+   test against that literal URL returns `ok`. **Ollama is not installed on this machine, so the
+   test stood up its own stub on 127.0.0.1:11434 answering `GET /v1/models` in Ollama's
+   OpenAI-compatible shape.** It prints which of the two ran on every execution, and it defers to a
+   real server if one already owns the port. The failure half of Requirement 17.7 is proved against
+   a genuinely closed port: code `unreachable`, with the host named in the message.
+
+**Mutation evidence** (each broken, watched fail, restored, watched pass):
+
+| Mutation | Result |
+|---|---|
+| Re-add `<link rel="preconnect" href="https://fonts.googleapis.com">` to `index.html` | 3 of 10 `privacy.egress.test.ts` tests fail; restored → 10 pass |
+| Leak `apiKey` through `sanitizeEntry`'s whitelist **and** remove `assertKeyFree` from the serializer | 3 `providerSettings.test.ts` tests fail — and the **bytes stayed clean**, because `serializeProviderSettings` re-projects five named fields. A third layer nobody had documented |
+| Additionally leak `apiKey` through that projection | 6 tests fail across `providerSettings.test.ts` (5) and `phase4-gate.test.ts` (1), including the RPC-level save; restored → 25 pass |
+| Add `POSTHOG_KEY` to `packages/core/src/index.ts` | `privacy.test.ts` fails with `packages/core/src/index.ts: posthog`; restored → 8 pass |
+| Remove `sanitizePayload` from `JsonlEventStore.emit` | 3 `store.test.ts` tests fail on the on-disk bytes; restored → 24 pass. *(This is the regression that actually happened. Run it every gate.)* |
+
+**Real vs seam after Phase 4 — read this before describing the feature to anyone.**
+
+Real: the settings surface over the real registry; the key-free file with three independent guards;
+the connection test, including against a local endpoint with no internet; OS credential storage on
+all three platforms with a presence-only read surface; the vocabulary and key-leak guards; the
+no-external-subresource guard; self-hosted fonts.
+
+**Requirement 17.4 is HALF-WIRED, and the gate does not claim otherwise.** A key can be *stored*
+(`set_api_key`) and its *presence* reported (`list_providers`), and the engine can resolve a key
+from an injected `SecretStore` at invocation time (`resolveProviderConfig`, proved in the gate
+test). But there is **no read command**, deliberately, so nothing in the desktop app can fetch a
+stored key back into the window — which means **a stored key cannot reach a model call today**. The
+only key that reaches a provider is one the user has just typed into the settings surface, for that
+one request. Closing this needs a decision about *where* the key crosses: the honest options are a
+Rust-side command that hands the key straight to the sidecar's stdin (never to the webview), or the
+engine reading the OS store through the sidecar process rather than the window. Neither is specified
+by Requirement 17.4 and neither should be improvised in a gate.
+
+Also still open: `README.md` and `CONTRIBUTING.md` now exist (Requirement 26.3), but 26.3 also asks
+for **signed releases**, and nothing in this repository signs anything. The CSP remains permissive
+(`script-src 'unsafe-inline'`, `connect-src http: https:`); the new egress guard fails the build if
+a source file starts to use that latitude, but the policy itself would not stop it. And **nothing in
+this project has ever run against a real hosted provider** — every run in this phase, including the
+gate, is `FakeChatAdapter` or a loopback stub.
+
+---
+
 ## Decision Log
 
 | Date | Decision | Rationale |
 |---|---|---|
+| 2026-07-31 | Fonts are vendored into the package, not fetched from a CDN | `index.html`'s two `preconnect` hints and Google Fonts stylesheet were a third party contacted on launch, before any user action, in a product whose claim is that nothing leaves the machine unasked. The packaged CSP blocked the stylesheet and the font files, but **no CSP directive covers `preconnect`** — the DNS lookup and TLS handshake could still disclose the IP and the fact that the app started, so the policy was not a control and the tags had to go. Two latin-subset variable woff2 files (88 KB together) replace seven static weights, ship their OFL text, and are served from the app's own origin. `privacy.egress.test.ts` fails the build if any file under `packages/*/src` or `index.html` names a font CDN, references a non-loopback URL in a subresource position, or declares a `preconnect` / `dns-prefetch` / `prefetch` / `preload` hint. A provider endpoint is deliberately not a finding: it is not a subresource and PRIVACY.md §1 documents it (Requirements 17.7, 26.2) |
+| 2026-07-31 | `providers.json` is guarded in layers, and the byte-level check is the one that counts | Three independent things must all fail before a key reaches that file: `sanitizeEntry`'s five-field **whitelist** (an unnamed field cannot survive, so a future `token`/`secret`/`bearer` spelling needs no maintenance), `serializeProviderSettings`'s re-projection of those same five fields, and `assertKeyFree` on the **serialized bytes** against the shared pattern table — which is what catches a key smuggled inside a whitelisted field, such as a `baseUrl` with `?api_key=…`. The mutation run proved the layering is real rather than decorative: leaking the field through the whitelist failed three tests while the bytes on disk stayed clean, and only breaking the projection as well reached the file. Tests assert bytes, never objects (Requirement 17.2) |
+| 2026-07-31 | Deployment metadata is registry-owned, never persisted in a settings entry | `serverless` and `keyRequired` describe a provider, not a user's choice, so they are looked up from `ProviderDescriptor` by id at render time instead of being written into `providers.json`. A persisted copy would go stale the moment the catalog changed, and a stale row would tell the user a cost, latency and privacy story the engine no longer agrees with. The persisted entry is exactly the five fields a user actually decided: `id`, `kind`, `baseUrl`, `model`, `label` (Requirements 17.1, 17.2) |
+| 2026-07-31 | `SecretStore` stays in core with **no** implementation that persists | Requirement 17.3 reads as layering; it is a security property. An engine with no code path to a credential store cannot leak one, and a zero-dependency engine has no native module that could. So core ships the seam, a process-lifetime `Map` with no `node:fs` import, and a default whose three methods **throw** — a default that returned `null` from `get` and swallowed `set` would look like an empty keychain, and "your key was silently discarded" is the worst failure mode this seam has. Real storage lives in Rust, where the platform-specific half already belongs, with no file fallback anywhere near it (Requirements 17.3, 17.4) |
+| 2026-07-31 | The IPC credential surface is presence-only: there is no read command | `list_providers` returns provider ids and a `has_key` boolean. Nothing returns a key value — not truncated, not a four-character prefix, because four characters of a secret are still four characters of a secret. A key that cannot re-enter the webview cannot reach a console log, an error boundary, a crash dump or a screenshot. The cost is stated rather than hidden: **a stored key cannot reach a model call today**, so Requirement 17.4 is half-wired and the run path still needs a key the user just typed. Choosing where the key crosses — Rust straight to the sidecar's stdin, or the sidecar reading the OS store itself — is a spec decision, not a gate improvisation (Requirements 17.3, 17.4) |
+| 2026-07-31 | The IPC boundary is asserted statically, because a double above it can never prove what serde emits | `read_dir` returned `is_dir` and `bridge.ts` read `isDir`, so every directory rendered as a file in the shipped app while the suite stayed green — the doubles sit at the TypeScript seam and built entries in the intended shape. `CommandOutput.exit_code` had the identical defect. The fix is not a better double: `ipc/wireShape.test.ts` reads `main.rs` and `bridge.ts` together, the only place both sides of the boundary are visible at once, and asserts every returned struct's serialized field names against the declared interface. Tauri camelCases *arguments* and does nothing to a *return* value, which is precisely the asymmetry that produced the bug (Requirements 13.8, 27.5) |
 | 2026-07-26 | Scope Tauri capabilities & CSP | Prevents arbitrary filesystem and shell access from untrusted webview content |
 | 2026-07-26 | Dev bridge SSE + POST transport | Allows browser dev mode to connect directly to `@sketch/core` engine without external server dependencies |
 | 2026-07-30 | One file-state owner: `AppState.files[path].content`, Monaco as a projection | Two caches for what a file contains diverge, and the user loses work. Exactly two functions cross the boundary — `ModelRegistry.sync()` (state→model, the only `setValue` in shipped code, asserted by a source-level guard) and one `onDidChangeContent` (model→state). `sync` suppresses the change callback for its own write because Monaco fires the same event for `setValue` as for typing. Everything else — the reviewer applying hunks, the engine writing a file, a reload — goes through the reducer, so the editor cannot hold a version of a file that nothing else agrees with (Requirement 15.2) |

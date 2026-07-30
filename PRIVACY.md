@@ -51,37 +51,44 @@ Provider Settings has a per-provider "Test" button. It performs exactly one requ
 - the key is a function argument for that call. It is not stored, not returned, and every message
   the module produces is passed through the provider redactor before it is rendered.
 
-## 3. Google Fonts on window load — YES, NETWORK EGRESS, and it should not be there
+## 3. Fonts on window load — NO EGRESS. The fonts are in the bundle
 
-`packages/desktop/index.html` contains:
+**This section used to describe a defect.** Until task 4.5, `packages/desktop/index.html` carried
+two `<link rel="preconnect">` hints and a Google Fonts stylesheet, fetched on window load before
+you did anything. The CSP blocked the stylesheet and the font files in a packaged build, but **no
+CSP directive covers `preconnect`**, so a DNS lookup and a TLS handshake to Google could still
+happen — enough to disclose your IP address and the fact that the app started.
 
-```html
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Inter…" rel="stylesheet" />
-```
+**All three tags are deleted.** The two families are now vendored into the package and served from
+the app's own bundle:
 
-This is contact with a third party that you did not configure, on launch, before you do anything.
-It is a defect in a local-first product and it is named here rather than quietly omitted.
+| File | Size | Licence |
+|---|---|---|
+| `packages/desktop/src/assets/fonts/inter-latin-variable.woff2` | 48 KB | SIL Open Font License 1.1 — `inter-OFL.txt`, beside it |
+| `packages/desktop/src/assets/fonts/jetbrains-mono-latin-variable.woff2` | 40 KB | SIL Open Font License 1.1 — `jetbrains-mono-OFL.txt`, beside it |
 
-What we can say from reading the code, and what we have not measured:
+They are declared in `packages/desktop/src/styles/fonts.css`, which `global.css` imports, with
+relative URLs the bundler resolves inside the application origin (`font-src 'self'`). These are the
+latin subsets of the variable builds — one file per family covers weights 100–900, replacing the
+four Inter weights and three JetBrains Mono weights the old stylesheet requested. Text outside the
+latin range falls through to the platform font stack, which is what the CDN's latin subset did too.
 
-- In a **dev** run (`vite`, no CSP) all three requests happen: two connections plus a stylesheet
-  fetch, followed by font files from `fonts.gstatic.com`.
-- In a **packaged** build the CSP in `src-tauri/tauri.conf.json` is `style-src 'self' 'unsafe-inline'`
-  and `font-src 'self' data:`, so the stylesheet and the font files are blocked. The two
-  `preconnect` hints are speculative connections that no CSP directive covers, so they can still
-  open a DNS lookup and a TLS connection to Google — which is enough to disclose your IP address
-  and the fact that the app started. This is read off the configuration; we have not captured
-  packets to confirm the browser engine's behaviour.
+So on launch the window fetches its own HTML, its own bundle, and these two font files. Nothing
+else. There is no request to any host, loopback or otherwise, until you start a run or press
+**Test** in Provider Settings.
 
-Either way it is unwanted. The fix is to self-host the two fonts, or drop them for a system font
-stack, and delete all three tags. Until that lands, treat this as the one outbound path Sketch
-makes that you did not ask for.
+Enforced by `packages/desktop/src/privacy.egress.test.ts`, which fails if any file under
+`packages/*/src` or `index.html` names a font CDN, references a non-loopback URL in a subresource
+position (an HTML tag attribute, a CSS `url()`, a CSS `@import`, or any URL ending in a
+subresource extension), or declares a `preconnect` / `dns-prefetch` / `prefetch` / `preload` hint.
+It also asserts the two woff2 files are present, are really woff2, and ship their licence text.
+A provider endpoint is deliberately not a finding: it is not a subresource, and §1 documents it.
 
-Related, same file: the CSP also allows `img-src … https:` and `connect-src 'self' ws: http: https:`.
-Those are permissive enough that any HTML rendered in the window could fetch a remote image or open
-a socket. Nothing in the shipped surface does, but the policy would not stop it.
+**Still permissive, same file:** the CSP allows `img-src … https:` and
+`connect-src 'self' ws: http: https:`. Nothing in the shipped surface uses that latitude, and the
+guard above now fails the build if a source file starts to, but the policy itself would not stop
+HTML rendered in the window from fetching a remote image or opening a socket. Tightening it for
+production builds is open work.
 
 ## 4. Programs you run in the terminal panel — YES, they can go anywhere they like
 
@@ -114,8 +121,8 @@ project. `npm run build:sidecar` is local. None of this happens while the app is
 - **No Sketch account, no Sketch server.** There is no endpoint we own for the app to talk to.
 - **No update check.** The Tauri build loads three plugins — shell, fs, dialog — and the updater is
   not one of them (`src-tauri/Cargo.toml`).
-- **No CDN for application code.** The bundle is local. The only remote subresource anywhere is the
-  font stylesheet in §3.
+- **No CDN for anything.** Application code, fonts, icons, images — all of it is in the bundle.
+  There is no remote subresource, and a test fails the build if one appears (§3).
 - **No cloud sync, no remote index, no shared cache.** Embeddings, the event log, and the
   repository index are files on your disk.
 
@@ -150,6 +157,7 @@ These are tests, and they fail the build:
 | A key never reaches the event log on disk | `packages/core/test/store.test.ts` |
 | `providers.json` matches no secret pattern | `packages/core/test/providerSettings.test.ts` |
 | No command returns a key to the window | `packages/desktop/src/lib/security.test.ts` |
+| No font CDN, no non-loopback subresource, no `preconnect` | `packages/desktop/src/privacy.egress.test.ts` |
 | `packages/core` has zero runtime dependencies — nothing can phone home from a transitive dep | `packages/core/test/deps.test.ts` |
 
 ## Reporting
