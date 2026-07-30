@@ -13,32 +13,34 @@ Written at the end of a session that hit context limits. Everything needed to re
 
 ## IMMEDIATE NEXT ACTION
 
-**One test is red. Fix it first.**
+**Phase 3 is gated. Commit the working tree, then start task 4.1 (Provider Settings).**
 
-```
-FAIL packages/core/test/git.test.ts
-  > the git-* RPC methods [git present: git version 2.55.0.windows.1]
-  > stages through the protocol, streams the mutation, and returns a fresh status
-  expected false to be true
-```
+Cold install (`node_modules` and `packages/core/dist` deleted, then `npm install && npm run build && npm test`):
+typecheck 0, build 0, test 0 — **core 441 tests / 22 files, desktop 287 tests / 31 files**, offline,
+no API key, and identical with `SKETCH_FAKE_PROVIDER=1` and unset.
 
-`npm run typecheck` → 0. `npm run build` → 0. `npm test` → non-zero, **only** because of this one test.
-Core: 404/405 pass. Desktop: 151/151 pass.
-
-This belongs to **task 3.3**, which landed partially when its sub-agent was interrupted by a network error. Task 3.3 needs finishing, starting with this failure. Do not delete, loosen, or skip the test — fix the cause. If the test itself is wrong, say so explicitly before changing it.
+The Phase 3 gate proof is `packages/desktop/src/phase3-gate.test.tsx` (one real chain: Explorer →
+disk → Monaco/AppState → save → real core run → real `edit_proposed` patch → hunk accept → real bytes
+→ real `git status`, plus both plan-gate assertions) and `packages/desktop/src/phase3-guards.test.ts`
+(source-level tripwires for the invariants that span packages). Five guards were mutation-verified at
+this gate: the engine plan gate, the UI mirror, the hunk applier's coordinate space, write-path event
+sanitation, and the zero-dependency rule.
 
 ---
 
 ## Git state
 
 ```
-dc0b9cf  sketch: phase 3 task 3.1 - Monaco editor with a single file-state owner   <- HEAD
-397be09  sketch: phase 2 hardening fixes - contain fs commands, gate dev bridge
-3bb3ac9  sketch: phase 2 complete - hardening, real transports, capture-as-eval
-fe4cfb6  sketch: phase 1 complete - dependency-free engine baseline
+e90861d  sketch: phase 3 task 3.2 part 2 - diff review surface with per-hunk accept and reject   <- HEAD
+b676b68  sketch: phase 3 task 3.2 part 1 - unified diff parser and per-hunk subset applier in core
+e3b560b  sketch: phase 3 task 3.4 - real Terminal, real Search, honest Debugger entry point
+345c0ed  sketch: phase 3 task 3.4 WIP - real Explorer
+aad0c8e  sketch: phase 3 task 3.3 - real git panel, core git tool, contained git commands
 ```
 
-Working tree clean at `dc0b9cf`. Stash is empty (the Phase 3 WIP stash was popped and committed).
+**The working tree is NOT clean.** Tasks 3.5 (ghost completions), 3.6 (UI plan-gate mirror) and 3.7
+(this gate) are green but uncommitted — `ghostCompletion*.ts`, `phase3-gate.test.tsx` and
+`phase3-guards.test.ts` are untracked. Commit them before anything else (Rule 5 in NEED-TO-DO §0.1).
 
 Git was initialised mid-session. Before that, an unreverted mutation from a cancelled sub-agent silently removed `sanitizePayload` from `JsonlEventStore.emit` — API keys were reaching disk unredacted — and only a cold-state rebuild caught it. **Commit at every green point.**
 
@@ -51,10 +53,10 @@ Git was initialised mid-session. Before that, an unreverted mutation from a canc
 | 1 — Engine baseline (1.1–1.15) | **DONE**, gate green from a cold install |
 | 1.5 — Tauri hardening (1.16, 1.17) | **DONE** — pulled forward from task 4.3 by user decision, because 2.2 opens a real IPC path and `src-tauri` was unsandboxed. Task 4.3 is marked SUPERSEDED in tasks.md |
 | 2 — Transports + capture-as-eval (2.1–2.4) | **DONE**, then audited; four defects found and fixed in `397be09` |
-| 3 — Code surface | 3.1 **DONE**. 3.3 **PARTIAL** (one red test). 3.2, 3.4, 3.5, 3.6, 3.7 **NOT STARTED** |
+| 3 — Code surface (3.1–3.7) | **DONE**, gate green from a cold install |
 | 4–12 | Not started. Note 4.3 is superseded by 1.16 |
 
-Task counts as of this handoff: 96 total, ~20 complete.
+Task counts as of this handoff: 96 total, 28 complete.
 
 ---
 
@@ -66,8 +68,9 @@ Task counts as of this handoff: 96 total, ~20 complete.
 - `proposeEdit` has only the offline scripted stub → **6.6**
 - No tool layer at all; `tool` actions emit `tool_denied` → **7.3**
 - `ask` terminates the run (no interactive channel); there is no `cancel` verb on the CLI wire
-- `FileExplorer` (`MOCK_TREE`), `Terminal` (static markup, no input), `SearchPanel` (`mockResults`) → **3.4**
-- `GitPanel` (`MOCK_*`) → **3.3, in flight**
+- `FileExplorer`, `Terminal`, `SearchPanel`, `GitPanel`, `DiffReview` are now **real** (3.2–3.4, 3.6);
+  ghost completions are real but **off by default** and have no provider behind the client seam yet.
+  Monaco's widget is doubled in tests because it cannot run in jsdom — `ModelRegistry` is what is covered
 - `SkillsMarketplace` (`MOCK_SKILLS`) → **6.4**
 - `TaskLog` (`MOCK_TASKS`), `AgentTeamPanel` (fixture, and unreachable — no ActivityBar item dispatches `agents`) → **10.4**
 - `ModelSelector` (hardcoded providers) → **4.1**

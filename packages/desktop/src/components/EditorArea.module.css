@@ -240,6 +240,24 @@
   width: 100%;
 }
 
+/* Optional completion text is a view-only decoration. It never enters Monaco's
+   model or AppState until a future explicit acceptance path exists. */
+.ghostCompletion {
+  position: absolute;
+  left: 64px;
+  bottom: 30px;
+  z-index: 2;
+  max-width: calc(100% - 96px);
+  overflow: hidden;
+  color: #737373;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 19px;
+  white-space: pre;
+  pointer-events: none;
+  opacity: 0.85;
+}
+
 .statusBar {
   position: absolute;
   bottom: 8px;

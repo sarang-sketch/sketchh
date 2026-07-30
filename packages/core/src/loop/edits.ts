@@ -69,14 +69,74 @@ export interface ApplyEditOptions {
   readText?: TextReader
 }
 
+/** A validated edit with its real before/after bytes and reviewable patch. */
+export interface PreparedEdit {
+  edit: EditSpec
+  target: string
+  original: string
+  content: string
+  created: boolean
+  diff: string
+}
+
+export type PrepareEditResult =
+  | { ok: true; prepared: PreparedEdit }
+  | { ok: false; outcome: EditOutcome }
+
+interface PatchText {
+  lines: string[]
+  trailingNewline: boolean
+}
+
+function patchText(text: string): PatchText {
+  if (text === '') return { lines: [], trailingNewline: false }
+  const trailingNewline = /(?:\r\n|\n)$/.test(text)
+  const lines = text.split(/\r?\n/)
+  if (trailingNewline) lines.pop()
+  return { lines, trailingNewline }
+}
+
 /**
- * Apply one edit. Never throws: a refusal is data, so the loop can emit
- * `edit_rejected` and keep going.
+ * Build a dependency-free unified patch that the shared hunk parser can apply.
+ *
+ * The whole changed file is one hunk. That is intentionally conservative: the
+ * model protocol describes exact search/replace operations, not line edit scripts,
+ * and inventing several hunks by heuristic could let a reviewer accept a grouping
+ * the model never proposed. Multiple edit actions still produce multiple review
+ * decisions. Patch text always uses LF as unified-diff syntax while the body omits
+ * CR; applyHunks restores the original file's line endings.
  */
-export async function applyEdit(
+export function unifiedDiff(path: string, original: string, proposed: string): string {
+  const before = patchText(original)
+  const after = patchText(proposed)
+  const oldStart = before.lines.length === 0 ? 0 : 1
+  const newStart = after.lines.length === 0 ? 0 : 1
+  const out = [
+    `--- a/${path}`,
+    `+++ b/${path}`,
+    `@@ -${oldStart},${before.lines.length} +${newStart},${after.lines.length} @@`,
+  ]
+
+  before.lines.forEach((line, index) => {
+    out.push(`-${line}`)
+    if (index === before.lines.length - 1 && !before.trailingNewline) {
+      out.push('\\ No newline at end of file')
+    }
+  })
+  after.lines.forEach((line, index) => {
+    out.push(`+${line}`)
+    if (index === after.lines.length - 1 && !after.trailingNewline) {
+      out.push('\\ No newline at end of file')
+    }
+  })
+  return `${out.join('\n')}\n`
+}
+
+/** Resolve and compute an edit without touching disk. */
+export async function prepareEdit(
   edit: EditSpec,
-  options: ApplyEditOptions,
-): Promise<EditOutcome> {
+  options: Pick<ApplyEditOptions, 'root' | 'readText'>,
+): Promise<PrepareEditResult> {
   const rootAbs = resolve(options.root)
   const readText = options.readText ?? diskTextReader
 
@@ -84,58 +144,94 @@ export async function applyEdit(
   try {
     target = resolve(rootAbs, edit.path)
   } catch {
-    return { path: edit.path, ok: false, reason: 'path could not be resolved' }
+    return { ok: false, outcome: { path: edit.path, ok: false, reason: 'path could not be resolved' } }
   }
-
   if (!isWithin(rootAbs, target)) {
     return {
-      path: edit.path,
       ok: false,
-      reason: `path is outside the project root and was refused: ${edit.path}`,
+      outcome: {
+        path: edit.path,
+        ok: false,
+        reason: `path is outside the project root and was refused: ${edit.path}`,
+      },
     }
   }
 
   const current = await readText(target)
   let content: string
-
   if (edit.search === '') {
-    // Whole-file write: create or overwrite.
     content = edit.replace
   } else {
     if (current === null) {
       return {
-        path: edit.path,
         ok: false,
-        reason: `file does not exist or could not be read: ${edit.path}`,
+        outcome: {
+          path: edit.path,
+          ok: false,
+          reason: `file does not exist or could not be read: ${edit.path}`,
+        },
       }
     }
     const index = current.indexOf(edit.search)
     if (index < 0) {
       return {
-        path: edit.path,
         ok: false,
-        reason:
-          `search string not found in ${edit.path}; the file was left unchanged. ` +
-          'Read the current content and send an exact substring.',
+        outcome: {
+          path: edit.path,
+          ok: false,
+          reason:
+            `search string not found in ${edit.path}; the file was left unchanged. ` +
+            'Read the current content and send an exact substring.',
+        },
       }
     }
     content = current.slice(0, index) + edit.replace + current.slice(index + edit.search.length)
   }
 
+  const original = current ?? ''
+  return {
+    ok: true,
+    prepared: {
+      edit,
+      target,
+      original,
+      content,
+      created: current === null,
+      diff: unifiedDiff(edit.path, original, content),
+    },
+  }
+}
+
+/** Write an already prepared edit through the one guarded FileWriter. */
+export async function applyPreparedEdit(
+  prepared: PreparedEdit,
+  options: Pick<ApplyEditOptions, 'root' | 'files'>,
+): Promise<EditOutcome> {
   try {
-    await options.files.apply(rootAbs, [{ path: edit.path, content }])
+    await options.files.apply(resolve(options.root), [
+      { path: prepared.edit.path, content: prepared.content },
+    ])
   } catch (err) {
     return {
-      path: edit.path,
+      path: prepared.edit.path,
       ok: false,
       reason: `write failed: ${(err as Error).message}`,
     }
   }
-
   return {
-    path: edit.path,
+    path: prepared.edit.path,
     ok: true,
-    created: current === null,
-    bytes: Buffer.byteLength(content, 'utf8'),
+    created: prepared.created,
+    bytes: Buffer.byteLength(prepared.content, 'utf8'),
   }
+}
+
+/** Apply one edit. Never throws: a refusal is data. */
+export async function applyEdit(
+  edit: EditSpec,
+  options: ApplyEditOptions,
+): Promise<EditOutcome> {
+  const prepared = await prepareEdit(edit, options)
+  if (!prepared.ok) return prepared.outcome
+  return applyPreparedEdit(prepared.prepared, options)
 }

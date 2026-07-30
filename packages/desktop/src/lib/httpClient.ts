@@ -1,4 +1,4 @@
-import type { SketchClient, PingResult, EventHandler, Unsubscribe, TransportKind } from './client'
+import type { SketchClient, PingResult, EventHandler, Unsubscribe, TransportKind, RunOptions } from './client'
 import { createEventBus } from './client'
 import type {
   Task,
@@ -69,8 +69,12 @@ export class HttpSketchClient implements SketchClient {
     }
   }
 
-  async run(task: Task): Promise<RunResult> {
-    return this.callMethod<RunResult>('run', { task })
+  async run(task: Task, options: RunOptions = {}): Promise<RunResult> {
+    return this.callMethod<RunResult>('run', {
+      task,
+      ...(options.root !== undefined ? { root: options.root } : {}),
+      ...(options.reviewEdits !== undefined ? { reviewEdits: options.reviewEdits } : {}),
+    })
   }
 
   async eval(cases: EvalCase[]): Promise<EvalResult[]> {

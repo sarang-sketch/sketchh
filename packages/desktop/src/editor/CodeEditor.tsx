@@ -13,6 +13,10 @@
 // Validates: Requirements 15.1, 15.2, 15.3
 
 import { useEffect, useRef, useState } from 'react'
+import {
+  GhostCompletionController,
+  type GhostCompletionProvider,
+} from './ghostCompletion'
 import styles from '../components/EditorArea.module.css'
 import { useAppDispatch, useAppState } from '../state/AppState'
 import type {
@@ -26,6 +30,8 @@ import { loadMonaco, type LoadedMonaco } from './monacoSetup'
 export interface CodeEditorProps {
   /** Injected in tests. Production uses the real, lazily loaded Monaco. */
   loader?: () => Promise<LoadedMonaco>
+  /** Provider seam. No provider is required and the feature defaults off. */
+  completionProvider?: GhostCompletionProvider
 }
 
 /** Passed to `editor.create`. No language service is bundled — see monacoRuntime.ts. */
@@ -44,13 +50,16 @@ const EDITOR_OPTIONS: Omit<EditorCreateOptions, 'theme'> = {
   padding: { top: 12, bottom: 12 },
 }
 
-export function CodeEditor({ loader = loadMonaco }: CodeEditorProps) {
+export function CodeEditor({ loader = loadMonaco, completionProvider }: CodeEditorProps) {
   const state = useAppState()
   const dispatch = useAppDispatch()
+  const latestState = useRef(state)
+  latestState.current = state
 
   const containerRef = useRef<HTMLDivElement | null>(null)
   const editorRef = useRef<MonacoEditorInstance | null>(null)
   const registryRef = useRef<ModelRegistry | null>(null)
+  const ghostController = useRef<GhostCompletionController | null>(null)
   /** Per-tab scroll and selection. View state, not file state. */
   const viewStates = useRef<Map<string, unknown>>(new Map())
   const shownPath = useRef<string | null>(null)
@@ -58,11 +67,20 @@ export function CodeEditor({ loader = loadMonaco }: CodeEditorProps) {
   const [ready, setReady] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [cursor, setCursor] = useState({ lineNumber: 1, column: 1 })
+  const [ghost, setGhost] = useState<string | null>(null)
 
   // ── Mount: load Monaco, build the model map, create the one editor ──────────
   useEffect(() => {
     let cancelled = false
     let cursorSubscription: Disposable | null = null
+
+    ghostController.current = completionProvider
+      ? new GhostCompletionController({
+          provider: completionProvider,
+          enabled: () => latestState.current.ghostCompletionsEnabled,
+          onSuggestion: setGhost,
+        })
+      : null
 
     loader()
       .then(({ api, theme }) => {
@@ -73,6 +91,7 @@ export function CodeEditor({ loader = loadMonaco }: CodeEditorProps) {
         // programmatic writes, so this fires for user input and nothing else.
         registryRef.current = new ModelRegistry(api, (path, content) => {
           dispatch({ type: 'UPDATE_FILE_CONTENT', payload: { path, content } })
+          ghostController.current?.update({ path, content, cursorOffset: content.length })
         })
 
         const editor = api.editor.create(container, { ...EDITOR_OPTIONS, theme })
@@ -98,9 +117,15 @@ export function CodeEditor({ loader = loadMonaco }: CodeEditorProps) {
       editorRef.current?.dispose()
       editorRef.current = null
       shownPath.current = null
-      setReady(false)
+      ghostController.current?.dispose()
+      ghostController.current = null
     }
-  }, [dispatch, loader])
+  }, [completionProvider, dispatch, loader])
+
+  // Turning the feature off cancels queued and in-flight requests immediately.
+  useEffect(() => {
+    if (!state.ghostCompletionsEnabled) ghostController.current?.cancel()
+  }, [state.ghostCompletionsEnabled])
 
   // ── Which model is on screen ────────────────────────────────────────────────
   useEffect(() => {
@@ -172,6 +197,11 @@ export function CodeEditor({ loader = loadMonaco }: CodeEditorProps) {
   return (
     <div className={styles.editorBody}>
       <div className={styles.monacoHost} ref={containerRef} data-testid="monaco-host" />
+      {ghost !== null && state.ghostCompletionsEnabled && (
+        <div className={styles.ghostCompletion} aria-label="Ghost completion">
+          {ghost}
+        </div>
+      )}
       <div className={styles.statusBar} aria-label="cursor position">
         Ln {cursor.lineNumber}, Col {cursor.column}
       </div>

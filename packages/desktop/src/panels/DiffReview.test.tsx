@@ -193,15 +193,88 @@ function mount(initial: Partial<AppState> = {}) {
   )
 }
 
+/** The `plan_written` event the UI mirrors. It does not authorise the engine. */
+function plan(runId = 'run-1'): string {
+  return client.emit('plan_written', { dir: `${ROOT}/.sketch/plan/${runId}` }, runId)
+}
+
 /** The `edit_proposed` the engine emits before it writes. Returns its event id. */
-function propose(diff: string = DIFF, path: string = STATED): string {
-  return client.emit('edit_proposed', { iteration: 1, edits: [{ path, diff }] })
+function propose(
+  diff: string = DIFF,
+  path: string = STATED,
+  runId = 'run-1',
+  withPlan = true,
+): string {
+  if (withPlan) plan(runId)
+  return client.emit('edit_proposed', { iteration: 1, edits: [{ path, diff }] }, runId)
 }
 
 const accept = (index: number) =>
   fireEvent.click(screen.getByLabelText(`Accept hunk ${index} of ${STATED}`))
 const reject = (index: number) =>
   fireEvent.click(screen.getByLabelText(`Reject hunk ${index} of ${STATED}`))
+
+// ── 0. plan gate mirror ─────────────────────────────────────────────────────
+
+describe('DiffReview — run-scoped plan gate mirror (Requirements 16.4, 6.5)', () => {
+  it('keeps acceptance disabled and writes nothing when this run has no plan_written event', async () => {
+    mount()
+    propose(DIFF, STATED, 'run-1', false)
+
+    const acceptFirst = screen.getByLabelText(`Accept hunk 1 of ${STATED}`)
+    const apply = screen.getByRole('button', { name: /Apply/ })
+    expect(acceptFirst.hasAttribute('disabled')).toBe(true)
+    expect(apply.hasAttribute('disabled')).toBe(true)
+    expect(screen.getByRole('note').textContent).toContain(
+      'Apply is disabled because no plan_written event has been observed for run run-1',
+    )
+
+    fireEvent.click(acceptFirst)
+    fireEvent.click(apply)
+    await act(async () => {})
+    expect(counting.attempts).toEqual([])
+    expect(disk.read(FILE)).toBe(ORIGINAL)
+  })
+
+  it('does not let plan_written for another run unlock this proposal', () => {
+    mount()
+    plan('run-other')
+    propose(DIFF, STATED, 'run-1', false)
+
+    expect(screen.getByLabelText(`Accept hunk 1 of ${STATED}`).hasAttribute('disabled')).toBe(true)
+    expect(screen.getByRole('button', { name: /Apply/ }).hasAttribute('disabled')).toBe(true)
+  })
+
+  it('enables acceptance when plan_written is observed later for the same run', () => {
+    mount()
+    propose(DIFF, STATED, 'run-1', false)
+    expect(screen.getByLabelText(`Accept hunk 1 of ${STATED}`).hasAttribute('disabled')).toBe(true)
+
+    // The projection is order-independent: the plan can arrive after the proposal.
+    plan('run-1')
+    expect(screen.getByLabelText(`Accept hunk 1 of ${STATED}`).hasAttribute('disabled')).toBe(false)
+
+    accept(1)
+    accept(2)
+    expect(screen.getByRole('button', { name: /Apply/ }).hasAttribute('disabled')).toBe(false)
+  })
+
+  it('recomputes the gate for the selected proposal rather than leaking across runs', () => {
+    mount()
+    propose(DIFF, STATED, 'run-a', false)
+    propose(DIFF, 'src/other.ts', 'run-b', false)
+    plan('run-a')
+
+    // Newest run B is selected and remains locked.
+    expect(
+      screen.getByLabelText('Accept hunk 1 of src/other.ts').hasAttribute('disabled'),
+    ).toBe(true)
+
+    // Selecting older run A derives its own gate from the same event log.
+    fireEvent.click(screen.getByText(STATED, { selector: 'span' }).closest('button')!)
+    expect(screen.getByLabelText(`Accept hunk 1 of ${STATED}`).hasAttribute('disabled')).toBe(false)
+  })
+})
 
 // ── 1. no fixture, no HTML ──────────────────────────────────────────────────
 

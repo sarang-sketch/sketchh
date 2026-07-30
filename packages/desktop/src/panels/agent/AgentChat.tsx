@@ -5,6 +5,7 @@ import {
 } from '../../components/Icons';
 import { ThinkingIndicator } from '../../components/ThinkingIndicator';
 import { useAppState, useAppDispatch } from '../../state/AppState';
+import { useFileActions } from '../../editor/useFileActions';
 import { useSketchClient } from '../../lib/ClientProvider';
 
 interface DisplayMessage {
@@ -22,6 +23,7 @@ function newId(): string {
 export const AgentChat: React.FC = () => {
   const state = useAppState();
   const dispatch = useAppDispatch();
+  const fileActions = useFileActions();
   const client = useSketchClient();
   const bottomRef = useRef<HTMLDivElement>(null);
   const [inputText, setInputText] = useState('');
@@ -50,7 +52,10 @@ export const AgentChat: React.FC = () => {
     dispatch({ type: 'SET_THINKING', payload: { isThinking: true, stage: 'Running task through the engine...' } });
 
     client
-      .run({ id: newId(), prompt, verify: [] })
+      .run(
+        { id: newId(), prompt, verify: [] },
+        { ...(state.projectRoot ? { root: state.projectRoot } : {}), reviewEdits: true },
+      )
       .then((result) => {
         dispatch({ type: 'SET_THINKING', payload: { isThinking: false } });
         dispatch({
@@ -81,7 +86,7 @@ export const AgentChat: React.FC = () => {
   };
 
   const handleFolderClick = () => {
-    dispatch({ type: 'SET_PROJECT_ROOT', payload: 'C:\\Users\\saran\\Downloads\\sketch' });
+    void fileActions.openFolder();
   };
 
   if (isEmpty) {

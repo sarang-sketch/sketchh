@@ -14,6 +14,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { runTask, DEFAULT_MAX_ITERATIONS, PLAN_GATE_REASON } from '../src/loop/index.js'
+import { parseUnifiedDiff, applyHunks, allHunkIndexes } from '../src/diff/index.js'
 import { parseAction } from '../src/loop/actions.js'
 import { MemoryEventStore } from '../src/events/index.js'
 import { PlanWriter } from '../src/plan/index.js'
@@ -187,6 +188,61 @@ describe('the plan gate (Requirements 5.5, 6.4, 6.5)', () => {
     expect(accepted[0]!.payload.created).toBe(true)
     expect(seenByModel(adapter)).toContain('EDIT APPLIED')
   })
+
+  it('still refuses independently when plan_written was emitted but the authoritative gate later denies', async () => {
+    const h = await harness()
+    const adapter = new FakeChatAdapter({
+      script: [PLAN_ACTION, editAction('src/denied.ts', 'export const denied = true\n'), DONE_ACTION],
+    })
+    const denyingPlan = {
+      write: h.plan.write.bind(h.plan),
+      // Models the artifact disappearing or becoming invalid after plan_written.
+      // A UI projection would be unlocked, but the engine asks this seam again.
+      hasPlan: async (_runId: string) => false,
+    }
+
+    const result = await runTask(task(), deps(h, adapter, { plan: denyingPlan }))
+    const order = kinds(result.events)
+
+    expect(order).toContain('plan_written')
+    expect(order.indexOf('plan_written')).toBeLessThan(order.indexOf('edit_rejected'))
+    expect(result.events.find((event) => event.kind === 'edit_rejected')?.payload.reason).toBe(
+      PLAN_GATE_REASON,
+    )
+    expect(order).not.toContain('edit_proposed')
+    expect(order).not.toContain('edit_accepted')
+    expect(await exists(join(h.root, 'src', 'denied.ts'))).toBe(false)
+  })
+})
+
+describe('human review mode (Requirements 16.1, 16.4, 16.5)', () => {
+  it('emits a real applicable patch and leaves disk untouched for review', async () => {
+    const h = await harness()
+    await writeFile(join(h.root, 'review.txt'), 'alpha\r\nbeta\r\n', 'utf8')
+    const adapter = new FakeChatAdapter({
+      script: [PLAN_ACTION, editAction('review.txt', 'BETA', 'beta'), DONE_ACTION],
+    })
+
+    const result = await runTask(task(), deps(h, adapter, { reviewEdits: true }))
+    const proposal = result.events.find((event) => event.kind === 'edit_proposed')!
+    const edit = (proposal.payload.edits as Array<{ diff: string }>)[0]!
+
+    expect(proposal.payload.reviewRequired).toBe(true)
+    expect(edit.diff).toContain('-beta')
+    expect(edit.diff).toContain('+BETA')
+    expect(await readFile(join(h.root, 'review.txt'), 'utf8')).toBe('alpha\r\nbeta\r\n')
+    expect(kinds(result.events)).not.toContain('edit_accepted')
+
+    const parsed = parseUnifiedDiff(edit.diff)
+    expect(parsed.ok).toBe(true)
+    if (!parsed.ok) return
+    const reviewed = applyHunks(
+      'alpha\r\nbeta\r\n',
+      parsed.hunks,
+      allHunkIndexes(parsed.hunks),
+    )
+    expect(reviewed).toEqual({ ok: true, content: 'alpha\r\nBETA\r\n' })
+  })
 })
 
 describe('event-before-action ordering (Requirement 3.3)', () => {
@@ -206,6 +262,17 @@ describe('event-before-action ordering (Requirement 3.3)', () => {
     const accepted = order.indexOf('edit_accepted')
     expect(proposed).toBeGreaterThan(-1)
     expect(accepted).toBeGreaterThan(proposed)
+
+    const proposal = result.events[proposed]!
+    const edits = proposal.payload.edits as Array<{ path: string; diff?: string }>
+    expect(edits[0]!.path).toBe('a.txt')
+    expect(edits[0]!.diff).toContain('@@ -0,0 +1,1 @@')
+    const parsed = parseUnifiedDiff(edits[0]!.diff!)
+    expect(parsed.ok).toBe(true)
+    if (parsed.ok) {
+      const applied = applyHunks('', parsed.hunks, allHunkIndexes(parsed.hunks))
+      expect(applied).toEqual({ ok: true, content: 'hello' })
+    }
 
     // The announce-before-acting rule holds for the model call too.
     expect(order.indexOf('llm_request')).toBeLessThan(order.indexOf('llm_response'))

@@ -134,6 +134,19 @@ function optionalNumber(
   return value
 }
 
+function optionalBoolean(
+  source: Record<string, unknown>,
+  key: string,
+  field: string,
+): boolean | undefined {
+  const value = source[key]
+  if (value === undefined || value === null) return undefined
+  if (typeof value !== 'boolean') {
+    throw new InvalidParamsError(`${field} must be a boolean when present`)
+  }
+  return value
+}
+
 function optionalStringArray(value: unknown, field: string): string[] | undefined {
   if (value === undefined || value === null) return undefined
   if (!Array.isArray(value)) throw new InvalidParamsError(`${field} must be an array of strings`)
@@ -355,6 +368,7 @@ async function run(params: Record<string, unknown>, ctx: MethodContext): Promise
   const root = resolve(optionalString(params, 'root', 'params.root') ?? ctx.cwd())
   const adapter = adapterFor(params, ctx)
   const maxIterations = optionalNumber(params, 'maxIterations', 'params.maxIterations')
+  const reviewEdits = optionalBoolean(params, 'reviewEdits', 'params.reviewEdits')
 
   const events = new StreamingEventStore(
     new JsonlEventStore({ baseDir: root, secrets: () => ctx.secrets() }),
@@ -373,6 +387,7 @@ async function run(params: Record<string, unknown>, ctx: MethodContext): Promise
     skills,
     projectContext: await loadProjectContext(root),
     ...(maxIterations !== undefined ? { maxIterations } : {}),
+    ...(reviewEdits !== undefined ? { reviewEdits } : {}),
   })
 }
 

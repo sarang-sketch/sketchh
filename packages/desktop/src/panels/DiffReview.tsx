@@ -334,6 +334,14 @@ export function DiffReview() {
   const open = selected.outcome.state === 'open'
   const hasPath = selected.files.length > 0
 
+  // Defence in depth only: this is a projection of the shared event log, not an
+  // authorisation cache. The engine still asks PlanWriter.hasPlan(runId) before
+  // every edit, and it may refuse even when this projection says a plan was seen.
+  // Run scoping is essential: a plan for run A says nothing about run B.
+  const planWrittenForSelectedRun = events.some(
+    (event) => event.kind === 'plan_written' && event.runId === selected.runId,
+  )
+
   return (
     <div className={styles.container}>
       <div className={styles.header}>
@@ -457,7 +465,12 @@ export function DiffReview() {
                             className={`${styles.hunkBtn} ${verdict === 'accept' ? styles.hunkBtnOn : ''}`}
                             aria-pressed={verdict === 'accept'}
                             aria-label={`Accept hunk ${index + 1} of ${file.statedPath}`}
-                            disabled={busy}
+                            disabled={busy || !planWrittenForSelectedRun}
+                            title={
+                              planWrittenForSelectedRun
+                                ? undefined
+                                : `Accept is disabled because no plan_written event has been observed for run ${selected.runId}.`
+                            }
                             onClick={() => setVerdict(file, index, 'accept')}
                           >
                             <Check size={12} /> Accept
@@ -517,10 +530,18 @@ export function DiffReview() {
           <div className={styles.footerRow}>
             <button
               className={styles.applyBtn}
-              disabled={busy || totalHunks === 0 || undecided > 0 || acceptedCount === 0}
+              disabled={
+                busy ||
+                !planWrittenForSelectedRun ||
+                totalHunks === 0 ||
+                undecided > 0 ||
+                acceptedCount === 0
+              }
               title={
-                totalHunks === 0
-                  ? 'There are no hunks to apply.'
+                !planWrittenForSelectedRun
+                  ? `Apply is disabled because no plan_written event has been observed for run ${selected.runId}.`
+                  : totalHunks === 0
+                    ? 'There are no hunks to apply.'
                   : undecided > 0
                     ? `${undecided} hunk${undecided === 1 ? '' : 's'} still need a verdict.`
                     : acceptedCount === 0
@@ -540,7 +561,13 @@ export function DiffReview() {
               <X size={14} /> Reject all
             </button>
           </div>
-          {undecided > 0 && (
+          {!planWrittenForSelectedRun && (
+            <div className={styles.hint} role="note">
+              Apply is disabled because no <code>plan_written</code> event has been observed for run{' '}
+              <code>{selected.runId}</code>. The engine will still verify the on-disk plan independently.
+            </div>
+          )}
+          {planWrittenForSelectedRun && undecided > 0 && (
             <div className={styles.hint}>
               {undecided} hunk{undecided === 1 ? '' : 's'} still need a verdict before anything can be
               applied.

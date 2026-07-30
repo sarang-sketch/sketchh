@@ -79,18 +79,20 @@ writes down what happened. Do not describe a wired interface as a working featur
 
 ## 1. Where the project actually stands
 
-23 of 96 tasks complete. Phases 1, 1.5, and 2 are done and gated. Phase 3 is half done.
+28 of 96 tasks complete. Phases 1, 1.5, 2, and 3 are done and gated. Phase 4 is next.
 
 ```
-aad0c8e  phase 3 task 3.3 — real git panel, core git tool, contained git commands   <- HEAD
+<uncommitted>  phase 3 tasks 3.5–3.7 — ghost completions, UI plan-gate mirror, phase 3 gate
+e90861d  phase 3 task 3.2 part 2 — diff review surface with per-hunk accept and reject
+b676b68  phase 3 task 3.2 part 1 — unified diff parser and per-hunk subset applier in core
+e3b560b  phase 3 task 3.4 — real Terminal, real Search, honest Debugger entry point
+aad0c8e  phase 3 task 3.3 — real git panel, core git tool, contained git commands
 dc0b9cf  phase 3 task 3.1 — Monaco editor with a single file-state owner
-397be09  phase 2 hardening fixes — contain fs commands, gate dev bridge
-3bb3ac9  phase 2 complete — hardening, real transports, capture-as-eval
-fe4cfb6  phase 1 complete — dependency-free engine baseline
 ```
 
-Current suite: **core 405 tests / 21 files green, desktop 175 tests / 17 files green**, typecheck 0,
-build 0, offline, no key.
+Current suite, from a **cold install** (`node_modules` and `packages/core/dist` deleted):
+**core 441 tests / 22 files green, desktop 287 tests / 31 files green**, typecheck 0, build 0,
+offline, no key, identical with `SKETCH_FAKE_PROVIDER=1` and unset.
 
 ### 1.1 What is genuinely real
 
@@ -126,9 +128,12 @@ build 0, offline, no key.
 | Tool layer | **does not exist**; `tool` actions emit `tool_denied` | **7.3** |
 | `ask` action | terminates the run; there is no interactive channel | *unowned — see §4.1* |
 | Run cancellation | `runTask` accepts an `AbortSignal` the CLI wire cannot reach | *unowned — see §4.1* |
-| `FileExplorer` | `MOCK_TREE` | **3.4** |
-| `Terminal` | static markup, no input | **3.4** |
-| `SearchPanel` | function-local `mockResults`, uncontrolled input | **3.4** |
+| `FileExplorer` | **real** — lazy `read_dir`, opens files (3.4) | done |
+| `Terminal` | **real** — input, scoped `run_command`, ring-buffered output (3.4) | done |
+| `SearchPanel` | **real** — shell-less spawn, query as argv, capped results (3.4) | done |
+| `DiffReview` | **real** — core hunk parser/applier, per-hunk verdicts, run-scoped plan mirror (3.2, 3.6) | done |
+| Ghost completions | wired to the client seam, **off by default**, no provider behind it | 4.1, 8.2 |
+| Monaco widget itself | doubled in tests (cannot run in jsdom); `ModelRegistry` is what is covered | *unowned — jsdom limit, not a stub* |
 | `SkillsMarketplace` | `MOCK_SKILLS`; `TOGGLE_SKILL`/`INSTALL_SKILL` reducers are dead | **6.4** |
 | `TaskLog` | `MOCK_TASKS`, non-functional filter | **10.4** |
 | `AgentTeamPanel` | fixture data **and unreachable** — no ActivityBar item dispatches `agents` | **10.4** |

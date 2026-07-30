@@ -25,7 +25,7 @@
 //
 // Validates: Requirements 13.2, 13.4, 13.6, 13.7, 12.1, 12.5, 12.6
 
-import type { SketchClient, PingResult, EventHandler, Unsubscribe, TransportKind } from './client'
+import type { SketchClient, PingResult, EventHandler, Unsubscribe, TransportKind, RunOptions } from './client'
 import { createEventBus } from './client'
 import type {
   Task,
@@ -361,8 +361,12 @@ export class StdioSketchClient implements SketchClient {
     }
   }
 
-  async run(task: Task): Promise<RunResult> {
-    return this.call<RunResult>('run', this.withRoot({ task }))
+  async run(task: Task, options: RunOptions = {}): Promise<RunResult> {
+    return this.call<RunResult>('run', {
+      task,
+      ...(options.root !== undefined ? { root: options.root } : this.root !== undefined ? { root: this.root } : {}),
+      ...(options.reviewEdits !== undefined ? { reviewEdits: options.reviewEdits } : {}),
+    })
   }
 
   async eval(cases: EvalCase[]): Promise<EvalResult[]> {

@@ -8,15 +8,12 @@
 //
 // ── THE PAYLOAD IS READ DEFENSIVELY, AND ITS GAPS ARE REPORTED ───────────────
 //
-// `edit_proposed` is emitted by the loop before it writes (packages/core/src/loop/
-// agent.ts), and TODAY that payload carries a byte summary per file — path,
-// wholeFile, searchBytes, replaceBytes — and no patch text. A payload that carries a
-// patch (`diff` / `patch`) is parsed into hunks and reviewed hunk by hunk; a payload
-// that carries only the summary is reported AS a summary with no diff, because the
-// alternative is an empty diff pane that reads as "no changes" when the truth is
-// "this event never said what the change was" (Requirement 27.5's rule, applied
-// here). Teaching the loop to emit the patch is an engine change and belongs to the
-// task that owns the loop, not to the review surface.
+// `edit_proposed` is emitted by the loop before any write (packages/core/src/loop/
+// agent.ts). Current engine events carry the real unified patch plus a byte summary
+// per file. The summary-only shape is still accepted for legacy or malformed event
+// logs and is reported AS a summary with no diff; drawing an empty diff would read
+// as "no changes" when the truth is "this event never said what changed"
+// (Requirement 27.5's rule, applied here).
 //
 // Every field is read with a type check. These payloads are `Record<string, unknown>`
 // on the wire and reach here from a subprocess.

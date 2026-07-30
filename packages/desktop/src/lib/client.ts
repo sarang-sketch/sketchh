@@ -31,6 +31,13 @@ export type EventHandler = (event: SketchEvent) => void
 /** Calling the returned function detaches the handler. Idempotent. */
 export type Unsubscribe = () => void
 
+export interface RunOptions {
+  /** Project root for this run. Required by the desktop to match the open folder. */
+  root?: string
+  /** Leave emitted patches open for human hunk review instead of auto-applying. */
+  reviewEdits?: boolean
+}
+
 export interface SketchClient {
   /** Which implementation this is. Surfaced in the UI; never branched on by panels. */
   readonly transport: TransportKind
@@ -47,7 +54,7 @@ export interface SketchClient {
    * completion. The resolved `RunResult.events` is the same sequence, replayed,
    * so a caller that never subscribed still gets the whole log.
    */
-  run(task: Task): Promise<RunResult>
+  run(task: Task, options?: RunOptions): Promise<RunResult>
 
   /** Score eval cases through the harness. */
   eval(cases: EvalCase[]): Promise<EvalResult[]>

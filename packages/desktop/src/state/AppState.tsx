@@ -201,6 +201,8 @@ export interface AppState {
    * second copy of them could disagree with what the box says.
    */
   searchQuery: string;
+  /** Optional provider-backed ghost text. Off unless the user explicitly enables it. */
+  ghostCompletionsEnabled: boolean;
   
   // File State — the single owner (Requirement 15.2).
   /** Open tabs, in tab order. PATHS only: the content lives in `files`, once. */
@@ -265,7 +267,8 @@ export type AppAction =
   /** That command's outcome: an exit code, a denial, or a failure to start. */
   | { type: 'TERMINAL_RUN_SETTLED'; payload: TerminalRunOutcome }
   | { type: 'TERMINAL_CLEARED' }
-  | { type: 'SET_SEARCH_QUERY'; payload: string };
+  | { type: 'SET_SEARCH_QUERY'; payload: string }
+  | { type: 'SET_GHOST_COMPLETIONS'; payload: boolean };
 
 // Initial State with Mock Data
 const initialState: AppState = {
@@ -332,6 +335,8 @@ const initialState: AppState = {
   // program that does not exist.
   terminalHistory: [],
   searchQuery: '',
+  // Cost- and latency-sensitive provider work is opt-in, never inferred.
+  ghostCompletionsEnabled: false,
   
   openFiles: [],
   activeFile: null,
@@ -597,6 +602,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, terminalHistory: [] };
     case 'SET_SEARCH_QUERY':
       return { ...state, searchQuery: action.payload };
+    case 'SET_GHOST_COMPLETIONS':
+      return { ...state, ghostCompletionsEnabled: action.payload };
     default:
       return state;
   }

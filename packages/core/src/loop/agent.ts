@@ -53,7 +53,13 @@ import type {
 } from '../types.js'
 import { parseAction } from './actions.js'
 import type { Action, EditSpec } from './actions.js'
-import { applyEdit, type EditOutcome, type TextReader } from './edits.js'
+import {
+  applyPreparedEdit,
+  prepareEdit,
+  type EditOutcome,
+  type PreparedEdit,
+  type TextReader,
+} from './edits.js'
 
 /**
  * Default iteration cap: 12 model turns.
@@ -106,6 +112,11 @@ export interface RunTaskDeps {
   projectContext?: ProjectContext
   /** File reader used to resolve search/replace edits. Injectable for tests. */
   readText?: TextReader
+  /**
+   * Leave valid edits as open `edit_proposed` events for human hunk review.
+   * The desktop enables this; autonomous CLI/eval callers retain apply mode.
+   */
+  reviewEdits?: boolean
 }
 
 /** Prefix of the refusal fed back when the plan gate is shut. */
@@ -222,13 +233,14 @@ function describeEditOutcomes(outcomes: readonly EditOutcome[]): string {
   return lines.join('\n')
 }
 
-function editSummary(edits: readonly EditSpec[]): Record<string, unknown>[] {
-  return edits.map((e) => ({
-    path: e.path,
-    wholeFile: e.search === '',
-    searchBytes: Buffer.byteLength(e.search, 'utf8'),
-    replaceBytes: Buffer.byteLength(e.replace, 'utf8'),
-  }))
+function editSummary(edit: EditSpec, prepared?: PreparedEdit): Record<string, unknown> {
+  return {
+    path: edit.path,
+    wholeFile: edit.search === '',
+    searchBytes: Buffer.byteLength(edit.search, 'utf8'),
+    replaceBytes: Buffer.byteLength(edit.replace, 'utf8'),
+    ...(prepared ? { diff: prepared.diff } : {}),
+  }
 }
 
 /** An aborted run, whatever the abort looked like at the syscall level. */
@@ -422,17 +434,46 @@ export async function runTask(task: Task, deps: RunTaskDeps): Promise<RunResult>
             break
           }
 
+          // Resolve the exact before/after bytes first so the event carries the REAL
+          // patch the action would write. This is still before the side effect: no
+          // FileWriter call occurs until after edit_proposed is durable.
+          const prepared = await Promise.all(
+            action.edits.map((edit) =>
+              prepareEdit(edit, { root: deps.root, readText: deps.readText }),
+            ),
+          )
+
           await emit('edit_proposed', {
             iteration: iterations,
-            edits: editSummary(action.edits),
+            reviewRequired: deps.reviewEdits === true,
+            edits: action.edits.map((edit, index) => {
+              const result = prepared[index]!
+              return editSummary(edit, result.ok ? result.prepared : undefined)
+            }),
           })
 
           const outcomes: EditOutcome[] = []
-          for (const edit of action.edits) {
-            const outcome = await applyEdit(edit, {
+          let reviewable = 0
+          for (let index = 0; index < action.edits.length; index++) {
+            const result = prepared[index]!
+            if (!result.ok) {
+              outcomes.push(result.outcome)
+              await emit('edit_rejected', {
+                iteration: iterations,
+                path: result.outcome.path,
+                reason: result.outcome.reason ?? 'unknown reason',
+              })
+              continue
+            }
+
+            if (deps.reviewEdits === true) {
+              reviewable++
+              continue
+            }
+
+            const outcome = await applyPreparedEdit(result.prepared, {
               root: deps.root,
               files: deps.files,
-              readText: deps.readText,
             })
             outcomes.push(outcome)
             if (outcome.ok) {
@@ -451,7 +492,19 @@ export async function runTask(task: Task, deps: RunTaskDeps): Promise<RunResult>
             }
           }
 
-          messages.push({ role: 'user', content: describeEditOutcomes(outcomes) })
+          if (deps.reviewEdits === true && reviewable > 0) {
+            messages.push({
+              role: 'user',
+              content:
+                `EDIT PROPOSED (${reviewable} file${reviewable === 1 ? '' : 's'}) — ` +
+                'awaiting human hunk review; no proposed bytes were written.',
+            })
+            if (outcomes.length > 0) {
+              messages.push({ role: 'user', content: describeEditOutcomes(outcomes) })
+            }
+          } else {
+            messages.push({ role: 'user', content: describeEditOutcomes(outcomes) })
+          }
           break
         }
 

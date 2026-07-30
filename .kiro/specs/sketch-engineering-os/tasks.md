@@ -148,14 +148,14 @@ Phase 4 numbering stays intact for anything that references it.
 
 ## Phase 3 — Code surface
 
-- [ ] 3. Code surface: Monaco, diff review, git, and one file state
+- [x] 3. Code surface: Monaco, diff review, git, and one file state
 - [x] 3.1 Integrate Monaco with a single file-state owner
   - Install Monaco and render it with a `Map<path, model>` keyed by absolute path
   - Make `AppState` the single owner of `openFiles`, `activeFile`, and `files`; delete `EditorArea`'s local `hasFileOpen` and its hardcoded tabs, gutter, and fake syntax markup
   - Load file content from the real filesystem through the client seam
   - When the engine writes an open file, update the model or flag a conflict — no second cache
   - _Requirements: 15.1, 15.2, 15.3, 15.4, 15.6, 14.6_
-- [-] 3.2 Build diff review with per-hunk accept and reject
+- [x] 3.2 Build diff review with per-hunk accept and reject
   - Render `edit_proposed` payloads as a reviewable diff with per-hunk controls
   - Emit `edit_accepted` on accept and `edit_rejected` with a reason on reject
   - Rejecting every hunk leaves the file on disk unchanged
@@ -172,13 +172,13 @@ Phase 4 numbering stays intact for anything that references it.
   - Replace `SearchPanel`'s function-local `mockResults` with real search, wiring the uncontrolled input to state
   - Add a Debugger panel entry point
   - _Requirements: 14.4, 14.6, 27.1, 27.3, 27.4_
-- [ ] 3.5 Add optional debounced ghost completions
+- [x] 3.5 Add optional debounced ghost completions
   - Keystroke-to-UI under 16 ms, in-flight requests cancellable, feature off by default
   - _Requirements: 15.5_
-- [ ] 3.6 Mirror the plan gate in the UI
+- [x] 3.6 Mirror the plan gate in the UI
   - Disable apply-edit controls until `plan_written` has been observed for the run
   - _Requirements: 16.4, 6.5_
-- [ ] 3.7 Phase 3 gate
+- [x] 3.7 Phase 3 gate
   - Prove open → edit → run → review diff → accept → git status works offline with the plan gate enforced in both the engine and the UI
   - _Requirements: 15.2, 16.4_
 
