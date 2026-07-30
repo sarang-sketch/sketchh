@@ -23,9 +23,9 @@ export function buildDependencyGraph(
 
   for (const file of files) {
     const deps = new Set<string>()
-    const raw = extractImports(file.relativePath, file.content)
+    const raw = extractImportSpecifiers(file.relativePath, file.content)
     for (const spec of raw) {
-      const resolved = resolveImport(file.relativePath, spec, known)
+      const resolved = resolveImportSpecifier(file.relativePath, spec, known)
       if (resolved) deps.add(resolved)
     }
     edges.set(file.relativePath, deps)
@@ -34,7 +34,17 @@ export function buildDependencyGraph(
   return { edges }
 }
 
-function extractImports(path: string, content: string): string[] {
+/**
+ * The raw, unresolved module specifiers a file references.
+ *
+ * Exported because parsing and resolution have different costs and different
+ * invalidation rules. Parsing depends only on a file's own bytes, so an
+ * incremental index caches the specifiers per file and never re-parses an
+ * unchanged file (see `context/repo-graph.ts`). RESOLUTION depends on the whole
+ * file set — adding `src/b.ts` changes what `./b` in an untouched `src/a.ts`
+ * points at — so it is redone on every build from the cached specifiers.
+ */
+export function extractImportSpecifiers(path: string, content: string): string[] {
   const specs: string[] = []
   if (/\.(ts|tsx|js|jsx|mjs|cjs|vue|svelte)$/.test(path)) {
     for (const m of content.matchAll(JS_IMPORT_FROM)) specs.push(m[1])
@@ -65,7 +75,28 @@ function pythonSpecToPath(spec: string): string | null {
   return prefix + rest
 }
 
-function resolveImport(fromPath: string, spec: string, known: Set<string>): string | null {
+/** Emitted-extension → source-extension candidates, for the NodeNext rewrite. */
+const JS_TO_TS_EXTENSIONS: Readonly<Record<string, readonly string[]>> = {
+  '.js': ['.ts', '.tsx'],
+  '.jsx': ['.tsx'],
+  '.mjs': ['.mts'],
+  '.cjs': ['.cts'],
+}
+
+function extensionOf(path: string): string {
+  const match = /\.[^./]+$/.exec(path)
+  return match === null ? '' : match[0]
+}
+
+/**
+ * Resolve one relative specifier against the known file set, or null for an
+ * external package. Pure and cheap: no filesystem access, no parsing.
+ */
+export function resolveImportSpecifier(
+  fromPath: string,
+  spec: string,
+  known: Set<string>
+): string | null {
   // Only resolve relative imports; external packages are ignored
   if (!spec.startsWith('.')) return null
 
@@ -77,6 +108,20 @@ function resolveImport(fromPath: string, spec: string, known: Set<string>): stri
     const withExt = candidate + ext
     if (known.has(withExt)) return withExt
   }
+
+  // NodeNext rewrite. A TypeScript file imports its EMITTED specifier, so
+  // `import './helper.js'` inside `helper.ts`'s neighbour refers to
+  // `helper.ts` on disk. Without this the graph has zero edges for any
+  // NodeNext codebase — including this one, where every relative import
+  // carries a `.js` extension by rule.
+  const rewrite = JS_TO_TS_EXTENSIONS[extensionOf(candidate)]
+  if (rewrite !== undefined) {
+    const stem = candidate.slice(0, candidate.length - extensionOf(candidate).length)
+    for (const ext of rewrite) {
+      if (known.has(stem + ext)) return stem + ext
+    }
+  }
+
   // Try index files
   for (const idx of ['/index.ts', '/index.js', '/index.tsx', '/__init__.py']) {
     const withIdx = (candidate + idx).replace(/\\/g, '/')

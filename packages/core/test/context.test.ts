@@ -85,6 +85,19 @@ describe('buildDependencyGraph', () => {
     expect(graph.edges.get('src/a.ts')?.has('src/utils/index.ts')).toBe(true)
   })
 
+  it('resolves a NodeNext .js specifier to its TypeScript source', () => {
+    // This codebase imports the emitted extension by rule, so without the
+    // rewrite the graph would have no edges for the project it indexes.
+    const files = [
+      { relativePath: 'src/a.ts', content: `import { b } from './b.js'` },
+      { relativePath: 'src/b.ts', content: `export const b = 1` },
+      { relativePath: 'src/c.tsx', content: `import { b } from './b.js'` },
+    ]
+    const graph = buildDependencyGraph(files)
+    expect(graph.edges.get('src/a.ts')?.has('src/b.ts')).toBe(true)
+    expect(graph.edges.get('src/c.tsx')?.has('src/b.ts')).toBe(true)
+  })
+
   it('resolves Python imports', () => {
     const files = [
       { relativePath: 'app.py', content: `from .helper import thing` },
