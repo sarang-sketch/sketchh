@@ -153,6 +153,32 @@ export type {
   ExtractSignatureOptions,
 } from './signatures.js'
 
+// The architecture generator: seven views derived from the persisted graph,
+// emitted as Mermaid text, deterministic for a fixed graph, and honest about the
+// views it has no evidence for (19.1–19.5).
+export {
+  generateArchitecture,
+  renderArchitectureDocument,
+  titleOf,
+  moduleOf,
+  publicDeclarations,
+  compareText,
+  ARCHITECTURE_VIEWS,
+  ARCHITECTURE_VERSION,
+  DIAGRAM_FORMAT,
+  DEFAULT_MAX_NODES,
+  DEFAULT_MAX_EDGES,
+  MAX_SOURCE_BYTES,
+} from './architecture.js'
+export type {
+  ArchitectureDiagrams,
+  ArchitectureView,
+  ArchitectureViewKind,
+  GenerateArchitectureOptions,
+  SourceFile,
+  ViewEvidence,
+} from './architecture.js'
+
 // Context assembly under a token budget: memory + skills + top-k chunks +
 // one-hop `imports` neighbours, degrading detail before coverage (18.4–18.6,
 // 18.8). The token number is an ESTIMATE (`chars/4`), not a tokenizer count.
