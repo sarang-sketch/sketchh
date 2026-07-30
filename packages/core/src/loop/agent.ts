@@ -336,7 +336,13 @@ export async function runTask(task: Task, deps: RunTaskDeps): Promise<RunResult>
   for (const skill of deps.skills ?? []) {
     await emit('skill_loaded', { name: skill.name, source: skill.source })
   }
+  // Three call sites emit `context_assembled`, told apart by `component`:
+  // `assembly` (the real budgeted assembly step, and the primary payload — see
+  // context/assembly.ts), `hybrid-search` (retrieval telemetry) and this one,
+  // the loop's message-count breadcrumb. The discriminator is what keeps a
+  // consumer from reading this breadcrumb as the assembly record.
   await emit('context_assembled', {
+    component: 'agent-loop',
     messages: messages.length,
     skills: (deps.skills ?? []).map((s) => s.name),
     hasProjectContext: deps.projectContext !== undefined,

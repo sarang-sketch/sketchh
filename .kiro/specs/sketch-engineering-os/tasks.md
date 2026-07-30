@@ -230,7 +230,7 @@ Phase 4 numbering stays intact for anything that references it.
 - [x] 5.3 Make embeddings work offline
   - Local embedding path with no network; provider embeddings cached locally as a documented fallback
   - _Requirements: 18.3_
-- [~] 5.4 Build context assembly under a token budget
+- [x] 5.4 Build context assembly under a token budget
   - Combine memory, skills, top-k chunks, and one-hop graph neighbors under a token budget
   - Preserve function and type signatures in preference to bodies when truncating
   - Consume the `expandWithDependencies` result that `ContextEngine.retrieve` currently computes and discards

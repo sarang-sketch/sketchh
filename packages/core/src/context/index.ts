@@ -131,3 +131,43 @@ export type {
 export { MemoryVectorStore } from './vector-store.js'
 export { ContextEngine } from './context-engine.js'
 export type { RetrievedContext, ContextEngineOptions } from './context-engine.js'
+
+// Signature extraction: the outline pass that lets truncation keep coverage.
+// Hand-rolled, heuristic, and honest about the languages it cannot parse (18.5).
+export {
+  extractSignatures,
+  renderSignatures,
+  languageOf,
+  supportsSignatures,
+  extensionOf,
+  stripNoise,
+  BODY_ELISION,
+  ARROW_ELISION,
+  TRUNCATION_MARKER,
+} from './signatures.js'
+export type {
+  Declaration,
+  DeclarationKind,
+  SignatureExtraction,
+  SignatureLanguage,
+  ExtractSignatureOptions,
+} from './signatures.js'
+
+// Context assembly under a token budget: memory + skills + top-k chunks +
+// one-hop `imports` neighbours, degrading detail before coverage (18.4–18.6,
+// 18.8). The token number is an ESTIMATE (`chars/4`), not a tokenizer count.
+export {
+  assembleContext,
+  estimateTokens,
+  oneHopNeighbours,
+  CHARS_PER_TOKEN,
+  TOKEN_ESTIMATE_METHOD,
+} from './assembly.js'
+export type {
+  AssembleContextOptions,
+  AssembledContext,
+  AssembledSection,
+  DetailLevel,
+  DroppedItem,
+  SectionKind,
+} from './assembly.js'
