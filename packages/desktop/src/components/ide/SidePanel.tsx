@@ -4,6 +4,7 @@ import { useAppState } from '../../state/AppState';
 import { FileExplorer } from '../../panels/FileExplorer';
 import SearchPanel from '../../panels/ide/SearchPanel';
 import { GitPanel } from '../../panels/GitPanel';
+import { DiffReview } from '../../panels/DiffReview';
 import { AgentTeamPanel } from '../../panels/agent/AgentTeamPanel';
 import { SkillsMarketplace } from '../../panels/SkillsMarketplace';
 import { AgentTimelinePanel } from '../../ui/panels/AgentTimeline';
@@ -29,6 +30,10 @@ export default function SidePanel() {
     case 'git':
       title = 'Source Control';
       content = <GitPanel />;
+      break;
+    case 'review':
+      title = 'Diff Review';
+      content = <DiffReview />;
       break;
     case 'agents':
       title = 'Agent Team';

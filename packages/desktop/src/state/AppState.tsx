@@ -179,6 +179,8 @@ export interface AppState {
     | 'explorer'
     | 'search'
     | 'git'
+    /** Diff review: the proposed edits an agent has not applied yet (Req 16.1). */
+    | 'review'
     | 'agents'
     | 'skills'
     | 'settings'

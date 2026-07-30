@@ -1,0 +1,331 @@
+/* Same tokens, same spacing and the same diff type as GitPanel.module.css. The
+   review surface is another view of a patch, not a new visual idiom. */
+
+.container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+}
+
+.header {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.headerTitle {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.badge {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 10px;
+}
+
+/* ── the list of proposals, when there is more than one ─────────────────── */
+
+.proposalList {
+  border-bottom: 1px solid var(--border);
+  max-height: 25%;
+  overflow-y: auto;
+}
+
+.proposalRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  background: transparent;
+  border: none;
+  text-align: left;
+  padding: 4px 16px;
+  cursor: pointer;
+  color: var(--text-primary);
+}
+
+.proposalRow:hover {
+  background-color: var(--bg-hover);
+}
+
+.proposalRowSelected {
+  background-color: var(--bg-hover);
+}
+
+.proposalPath {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.proposalState {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* ── states ────────────────────────────────────────────────────────────── */
+
+.resolved {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 16px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border);
+  word-break: break-word;
+}
+
+/* A refusal from the diff engine. Never drawn as an empty diff. */
+.error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 16px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--error);
+  border-bottom: 1px solid var(--border);
+  word-break: break-word;
+}
+
+.note {
+  padding: 8px 16px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.empty {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.emptyTitle {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.emptyDetail {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+/* ── files and hunks ───────────────────────────────────────────────────── */
+
+.files {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.file {
+  border-bottom: 1px solid var(--border);
+}
+
+.filePath {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 16px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  word-break: break-all;
+}
+
+.fileSummary {
+  font-family: var(--font-sans);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.hunk {
+  border-top: 1px solid var(--border);
+  background-color: var(--bg-surface);
+}
+
+.hunkAccepted {
+  box-shadow: inset 2px 0 0 var(--success);
+}
+
+.hunkRejected {
+  opacity: 0.65;
+  box-shadow: inset 2px 0 0 var(--error);
+}
+
+.hunkHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px 4px 16px;
+}
+
+.hunkLabel {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hunkBtn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: 11px;
+  padding: 2px 6px;
+  cursor: pointer;
+  transition: color 0.2s ease, background-color 0.2s ease;
+}
+
+.hunkBtn:hover:not(:disabled) {
+  color: var(--text-primary);
+  background-color: var(--bg-hover);
+}
+
+.hunkBtn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.hunkBtnOn {
+  color: var(--text-primary);
+  border-color: var(--accent);
+}
+
+.verdictTag {
+  font-size: 10px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.hunkBody {
+  margin: 0;
+  padding: 6px 16px;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre;
+}
+
+.lineContext {
+  color: var(--text-secondary);
+}
+
+.lineAdd {
+  color: var(--success);
+}
+
+.lineRemove {
+  color: var(--error);
+}
+
+/* ── footer ────────────────────────────────────────────────────────────── */
+
+.footer {
+  border-top: 1px solid var(--border);
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.reasonInput {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  resize: vertical;
+  min-height: 48px;
+  outline: none;
+}
+
+.reasonInput:focus {
+  border-color: var(--accent);
+}
+
+.footerRow {
+  display: flex;
+  gap: 8px;
+}
+
+.applyBtn,
+.rejectBtn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: none;
+  border-radius: var(--radius);
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.applyBtn {
+  background-color: var(--accent);
+  color: #fff;
+}
+
+.applyBtn:hover:not(:disabled) {
+  background-color: var(--accent-hover);
+}
+
+.rejectBtn {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+}
+
+.rejectBtn:hover:not(:disabled) {
+  background-color: var(--bg-hover);
+}
+
+.applyBtn:disabled,
+.rejectBtn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.hint {
+  font-size: 11px;
+  color: var(--text-muted);
+}

@@ -10,6 +10,7 @@
 
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -32,6 +33,7 @@ interface ClientContextValue {
   client: SketchClient
   events: SketchEvent[]
   status: EngineStatus
+  publish: (event: SketchEvent) => void
 }
 
 const ClientContext = createContext<ClientContextValue | null>(null)
@@ -56,14 +58,16 @@ export function SketchClientProvider({ children, client: injected }: SketchClien
   // One subscription for the whole app. Appends in emission order; deduplicates
   // by event id so a transport that redelivers cannot double-render a run.
   const seen = useRef<Set<string>>(new Set())
+  const append = useCallback((event: SketchEvent) => {
+    if (seen.current.has(event.id)) return
+    seen.current.add(event.id)
+    setEvents((prev) => [...prev, event])
+  }, [])
+
   useEffect(() => {
-    const unsubscribe = client.subscribe((event) => {
-      if (seen.current.has(event.id)) return
-      seen.current.add(event.id)
-      setEvents((prev) => [...prev, event])
-    })
+    const unsubscribe = client.subscribe(append)
     return unsubscribe
-  }, [client])
+  }, [client, append])
 
   // Startup liveness check (Req 13.6).
   useEffect(() => {
@@ -92,8 +96,8 @@ export function SketchClientProvider({ children, client: injected }: SketchClien
   }, [client])
 
   const value = useMemo<ClientContextValue>(
-    () => ({ client, events, status }),
-    [client, events, status],
+    () => ({ client, events, status, publish: append }),
+    [client, events, status, append],
   )
 
   return <ClientContext.Provider value={value}>{children}</ClientContext.Provider>
@@ -139,4 +143,30 @@ export function useOptionalSketchEvents(): SketchEvent[] {
 
 export function useEngineStatus(): EngineStatus {
   return useClientContext().status
+}
+
+/**
+ * Append an event this window originated to the same log every panel reads.
+ *
+ * The review surface has to emit `edit_accepted` / `edit_rejected` when a reviewer
+ * settles a hunk (Requirement 16.3), and those decisions are made HERE, not by the
+ * engine: the user clicked, the file layer wrote, and the event describes what
+ * actually happened. It goes through the same dedupe-and-append path a transport
+ * event does, so the Timeline, the Git provider and the editor's reconciler all see
+ * it exactly as they see the engine's own.
+ *
+ * WHAT THIS IS NOT: a way to fake engine activity. Every caller must have performed
+ * the thing it reports. And the honest limit — the protocol has no "append to the
+ * run log" method (packages/core/src/rpc/methods.ts), so a UI-originated event lives
+ * in this window's log and does not reach the project's JSONL file. Persisting it
+ * needs an engine method, which is an engine change.
+ */
+export function useEventPublisher(): (event: SketchEvent) => void {
+  return useClientContext().publish
+}
+
+/** Publisher when there is a provider, a no-op when there is not. */
+const NO_PUBLISH = (): void => {}
+export function useOptionalEventPublisher(): (event: SketchEvent) => void {
+  return useContext(ClientContext)?.publish ?? NO_PUBLISH
 }
