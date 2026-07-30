@@ -192,7 +192,7 @@ Phase 4 numbering stays intact for anything that references it.
   - Persist key-free configuration to `~/.sketch/providers.json`
   - Replace the dead `ModelSelector` fixture and the never-rendered `state.providers` array with real data
   - _Requirements: 17.1, 17.2, 27.1_
-- [~] 4.2 Implement the SecretStore seam and OS credential storage
+- [x] 4.2 Implement the SecretStore seam and OS credential storage
   - Keep `SecretStore` (`get`/`set`/`del`) in core with no implementation that persists
   - Implement real storage on the Rust side against the OS credential store; expose `list_providers`, `set_api_key`, and `remove_api_key` Tauri commands, which the bridge already calls but which do not exist
   - Supply the resolved key to the engine at invocation time only

@@ -10,14 +10,34 @@ mod secret_store;
 use serde::{Deserialize, Serialize};
 use std::fs;
 
+// ── THE WIRE SHAPE IS camelCase, AND IT IS TESTED ───────────────────────────
+//
+// Tauri converts command ARGUMENTS from camelCase to snake_case for you. It does
+// nothing at all to the RETURN value: that is plain serde, so a `snake_case` field
+// crosses the IPC boundary as `snake_case` and the TypeScript wrapper reading
+// `camelCase` gets `undefined`.
+//
+// `FsEntry.is_dir` was exactly that bug in the shipped app: `bridge.ts` declares
+// `isDir`, so every entry read as a file and the Explorer's folder/file distinction
+// was silently broken while the tests — which build entries at the TypeScript seam,
+// in the intended shape — stayed green. `CommandOutput.exit_code` had the same
+// defect: a non-zero exit would have rendered as "Exited with code undefined".
+//
+// A test now compares these serialized names against the interfaces in
+// src/ipc/bridge.ts (src/ipc/wireShape.test.ts), so the two sides cannot drift
+// again without something failing.
 #[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct FsEntry {
     name: String,
     path: String,
     is_dir: bool,
 }
 
+// No two-word field today, so this rename is a no-op — it is here so that adding
+// one (`ahead_by`, `detached_head`) cannot reintroduce the `is_dir` bug.
 #[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct GitStatus {
     branch: String,
     staged: Vec<String>,
@@ -26,6 +46,7 @@ struct GitStatus {
 }
 
 #[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct CommandOutput {
     exit_code: i32,
     stdout: String,
