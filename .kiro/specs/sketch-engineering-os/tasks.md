@@ -227,7 +227,7 @@ Phase 4 numbering stays intact for anything that references it.
   - Add a ripgrep-backed lexical channel; fuse it with the existing vector channel by reciprocal rank; add a rerank pass
   - Vector-only retrieval must not be the shipped default
   - _Requirements: 18.2_
-- [~] 5.3 Make embeddings work offline
+- [x] 5.3 Make embeddings work offline
   - Local embedding path with no network; provider embeddings cached locally as a documented fallback
   - _Requirements: 18.3_
 - [~] 5.4 Build context assembly under a token budget

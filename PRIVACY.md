@@ -21,7 +21,7 @@ around that and no attempt to soften it here.
 | Chat completion, OpenAI-shaped | `packages/core/src/providers/openaiCompatible.ts` | `POST {your baseUrl}/chat/completions` |
 | Chat completion, Anthropic-shaped | `packages/core/src/providers/anthropicMessages.ts` | `POST {your baseUrl}/v1/messages` |
 | Legacy streaming adapters, not wired into the current agent loop but present in the package | `providers/openai.ts`, `providers/anthropic.ts`, `providers/gemini.ts`, `providers/base.ts`, `providers/openai-compatible.ts` | the same provider endpoints |
-| Embeddings — **not reachable from any shipped surface today** (Phase 5 wires `src/context/`) | `packages/core/src/context/embedder.ts` | `POST {your baseUrl}/embeddings` |
+| Embeddings — **off by default**, and only when a caller passes a provider (§7) | `packages/core/src/context/embedder.ts` | `POST {your baseUrl}/embeddings` |
 
 **What is in the request body:** the messages the agent built. In practice that means your
 instruction plus whatever file contents, diffs, and repository context the run assembled. Assume
@@ -112,6 +112,41 @@ network boundary and does not claim to be.
 `npm install` fetches from the npm registry and `cargo build` from crates.io, like every other
 project. `npm run build:sidecar` is local. None of this happens while the app is running.
 
+## 7. Embeddings — NO EGRESS by default, and the default is worse at its job
+
+The repository index needs vectors. The shipped default computes them **on this machine, with no
+network and no dependency**, and it is worth being blunt about what that costs.
+
+**What the local path is.** `HashEmbedder` (`packages/core/src/context/embedder.ts`) is a *hashing
+vectoriser*: it hashes tokens with FNV-1a and adds ±1 into buckets. **It is not a semantic embedding
+model.** `car` and `automobile` are orthogonal under it. Two texts look similar only when they share
+literal tokens.
+
+**Why it is not better.** `packages/core` has zero runtime dependencies, enforced by a test. A real
+local embedder needs a tokenizer and an inference runtime — `onnxruntime-node`, `transformers.js`, a
+GGUF loader — all native or multi-megabyte, and a native module is the most common reason a
+local-first install fails on someone's machine. The alternative, a sidecar process holding a small
+model, is deferred: it is a packaging and lifecycle problem, not an embedding one.
+
+**What that means for retrieval quality.** The vector channel adds little when the local path is in
+force; retrieval quality offline is essentially the quality of the *lexical* channel, which is why
+search is hybrid and never vector-only (§18.2 of the spec). A hosted embedding model is genuinely
+better at "find the code that does this", and this document will not pretend otherwise.
+
+**If you configure a provider endpoint,** chunk text leaves the machine exactly as in §1, and:
+
+- vectors are cached at `.sketch/index/embeddings/<ab>/<key>.json`, keyed by
+  `sha256(version + provider id + model + dimensions + sha256(chunk))`, so an unchanged chunk is
+  never re-fetched — a warm index makes zero requests
+- a cache entry holds a hash, a model name, a width and a list of numbers. **No chunk text, no file
+  path, no URL, no header, no key.** A test asserts the bytes on disk contain no key material
+- a changed chunk, a changed model, a changed provider, or a changed vector width is a different
+  key, so a stale vector can never be served for edited code
+- if the endpoint is unreachable, slow, or returns something unusable, the run **degrades to the
+  local path and says so** — in `EmbedderStatus.reason` and in a `context_loaded` event. It never
+  throws, never hangs (the request is raced against a deadline), and never returns empty vectors
+- the cache is local only. There is no shared cache and no remote index
+
 ---
 
 ## What there is none of
@@ -131,7 +166,10 @@ project. `npm run build:sidecar` is local. None of this happens while the app is
 - `.sketch/events/<date>.jsonl` — the append-only event log every surface is a projection of.
   Payloads are redacted on the **write** path (`packages/core/src/events/store.ts`), so a key
   cannot reach the log even if a call site forgets.
-- `.sketch/index/` — the repository graph and embeddings cache, when Phase 5 lands.
+- `.sketch/index/graph.json` — the repository graph: paths, hashes, chunk spans, import edges. No
+  file contents.
+- `.sketch/index/embeddings/` — cached provider vectors, keyed by content hash plus model plus
+  provider. Hashes and numbers only; see §7. The local path writes nothing here.
 - `~/.sketch/providers.json` — provider ids, endpoints, and model names. **Key-free by test.**
 - API keys — in the OS credential store only: Windows Credential Manager, macOS Keychain, or the
   Secret Service on Linux, reached through Rust (`src-tauri/src/os_credentials.rs`). There is no
@@ -158,6 +196,8 @@ These are tests, and they fail the build:
 | `providers.json` matches no secret pattern | `packages/core/test/providerSettings.test.ts` |
 | No command returns a key to the window | `packages/desktop/src/lib/security.test.ts` |
 | No font CDN, no non-loopback subresource, no `preconnect` | `packages/desktop/src/privacy.egress.test.ts` |
+| An embedding cache file contains no key material, no chunk text and no URL | `packages/core/test/embeddings.test.ts` |
+| Embedding works with no provider and no network, and degrades instead of failing | `packages/core/test/embeddings.test.ts` |
 | `packages/core` has zero runtime dependencies — nothing can phone home from a transitive dep | `packages/core/test/deps.test.ts` |
 
 ## Reporting
