@@ -187,7 +187,7 @@ Phase 4 numbering stays intact for anything that references it.
 ## Phase 4 — Settings, secrets, zero telemetry
 
 - [ ] 4. Provider settings, OS-keychain secrets, and provable zero telemetry
-- [-] 4.1 Build the Provider Settings surface
+- [x] 4.1 Build the Provider Settings surface
   - List the full provider matrix, allow adding a custom endpoint, and offer a per-provider connection test
   - Persist key-free configuration to `~/.sketch/providers.json`
   - Replace the dead `ModelSelector` fixture and the never-rendered `state.providers` array with real data

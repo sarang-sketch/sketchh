@@ -23,7 +23,7 @@ import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 
-import type { ProviderConfig, ProviderKind } from '../types.js'
+import type { ProviderConfig, ProviderKind, SecretStore } from '../types.js'
 import { PROVIDER_CATALOG, describeProvider } from '../providers/registry.js'
 import type { ProviderDescriptor } from '../providers/registry.js'
 import {
@@ -433,6 +433,37 @@ export function toProviderConfig(
   }
   if (apiKey !== undefined && apiKey !== '') config.apiKey = apiKey
   return config
+}
+
+/**
+ * Build the config for a run, resolving the key from a host `SecretStore` AT THE
+ * MOMENT OF THE CALL (Requirement 17.4).
+ *
+ * This is the whole of the key's lifetime in the engine: it is read here, handed to
+ * `toProviderConfig`, and lives only as long as the `ProviderConfig` the caller uses
+ * for that one invocation. It is not cached, not returned separately, not attached to
+ * the entry, and not put in an environment variable a child could inherit.
+ *
+ * A store that has no key for this provider is NOT an error: a local endpoint needs
+ * none, and the adapter is the thing that knows whether the call can proceed without
+ * one. A store that FAILS is an error, and it is reported by provider id — never with
+ * anything the store returned in the message.
+ */
+export async function resolveProviderConfig(
+  entry: ProviderSettingsEntry,
+  secretStore: SecretStore,
+): Promise<ProviderConfig> {
+  let apiKey: string | null
+  try {
+    apiKey = await secretStore.get(entry.id)
+  } catch (err) {
+    throw new Error(
+      `could not read the stored key for provider '${entry.id}': ${
+        err instanceof Error ? err.message : 'the credential store refused the read'
+      }`,
+    )
+  }
+  return toProviderConfig(entry, apiKey ?? undefined)
 }
 
 /** The full matrix the settings surface lists. Straight from the registry. */

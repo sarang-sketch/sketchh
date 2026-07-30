@@ -9,7 +9,6 @@ import { AnthropicAdapter } from '../src/providers/anthropic.js'
 import { GeminiAdapter } from '../src/providers/gemini.js'
 import { OllamaAdapter, GroqAdapter, OpenRouterAdapter } from '../src/providers/openai-compatible.js'
 import { ProviderRegistry } from '../src/providers/registry.js'
-import { MemoryCredentialStore, KeychainCredentialStore } from '../src/providers/credentials.js'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -287,56 +286,11 @@ describe('ProviderRegistry', () => {
   })
 })
 
-// ── MemoryCredentialStore ─────────────────────────────────────────────────────
-
-describe('MemoryCredentialStore', () => {
-  it('stores and retrieves a key', async () => {
-    const store = new MemoryCredentialStore()
-    await store.set('openai', 'sk-abc')
-    expect(await store.get('openai')).toBe('sk-abc')
-  })
-
-  it('returns null for missing key', async () => {
-    const store = new MemoryCredentialStore()
-    expect(await store.get('missing')).toBeNull()
-  })
-
-  it('deletes a key', async () => {
-    const store = new MemoryCredentialStore()
-    await store.set('openai', 'sk-abc')
-    await store.delete('openai')
-    expect(await store.get('openai')).toBeNull()
-  })
-
-  it('rejects empty API key', async () => {
-    const store = new MemoryCredentialStore()
-    await expect(store.set('openai', '')).rejects.toThrow()
-  })
-})
-
-// ── KeychainCredentialStore ───────────────────────────────────────────────────
-
-describe('KeychainCredentialStore', () => {
-  it('delegates to keytar with service=sketch', async () => {
-    const keytar = {
-      getPassword: vi.fn().mockResolvedValue('sk-real'),
-      setPassword: vi.fn().mockResolvedValue(undefined),
-      deletePassword: vi.fn().mockResolvedValue(true),
-    }
-    const store = new KeychainCredentialStore(keytar)
-    expect(await store.get('anthropic')).toBe('sk-real')
-    expect(keytar.getPassword).toHaveBeenCalledWith('sketch', 'anthropic')
-
-    await store.set('anthropic', 'sk-new')
-    expect(keytar.setPassword).toHaveBeenCalledWith('sketch', 'anthropic', 'sk-new')
-
-    await store.delete('anthropic')
-    expect(keytar.deletePassword).toHaveBeenCalledWith('sketch', 'anthropic')
-  })
-
-  it('rejects empty API key', async () => {
-    const keytar = { getPassword: vi.fn(), setPassword: vi.fn(), deletePassword: vi.fn() }
-    const store = new KeychainCredentialStore(keytar)
-    await expect(store.set('openai', '')).rejects.toThrow()
-  })
-})
+// ── the credential seam ───────────────────────────────────────────────────────
+//
+// `MemoryCredentialStore` and the keytar-shaped `KeychainCredentialStore` used to be
+// covered here. Task 4.2 deleted both: the canonical seam is `SecretStore`
+// (src/types.ts), its non-persisting implementations are in src/secrets/store.ts, and
+// the real store is the host's, against the OS credential store. The replacement
+// coverage — including the guards that this package CANNOT persist a secret — is
+// test/secrets.store.test.ts.

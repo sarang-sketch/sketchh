@@ -39,6 +39,8 @@ import {
   type SketchClient,
 } from '../lib/client'
 import type { ProviderSettingsFile, ProviderTestResult } from '../lib/contracts'
+import { KeyStoreProvider } from '../settings/KeyStoreProvider'
+import type { KeyStore, ProviderKeyPresence } from '../settings/keyStore'
 import { AppStateProvider } from '../state/AppState'
 
 // ── a real home directory, and real servers ─────────────────────────────────
@@ -201,10 +203,11 @@ function fillForm(id: string, values: { baseUrl?: string; model?: string; apiKey
     })
   }
   if (values.apiKey !== undefined) {
-    fireEvent.change(
-      screen.getByLabelText(`API key for ${id}, used for this connection test only`),
-      { target: { value: values.apiKey } },
-    )
+    // The label lost "used for this connection test only" in task 4.2: the box now
+    // also feeds "Save key to OS store", so the old wording had stopped being true.
+    fireEvent.change(screen.getByLabelText(`API key for ${id}`), {
+      target: { value: values.apiKey },
+    })
   }
 }
 
@@ -514,6 +517,193 @@ describe('the connection test (Requirements 17.1, 17.7, 27.5)', () => {
     expect(screen.getByText(/It offers: llama3, mistral/)).toBeDefined()
     // Three failures, three labels — never one generic "failed".
     expect(screen.queryByText('Failed')).toBeNull()
+  })
+})
+
+// ── 6. the key goes to the OS credential store, and never comes back ────────
+
+/**
+ * A stand-in for the OS credential store, shaped exactly like the Rust one: it holds
+ * values, answers only with PRESENCE, and refuses an id the Rust `validate_id` would
+ * refuse. It records every operation so a test can audit what crossed the seam.
+ *
+ * It cannot be read through the `KeyStore` interface — the interface has no read — so
+ * a test that wants to prove a key was stored has to ask this double directly, which
+ * is the point: the panel has no such affordance.
+ */
+class FakeOsKeyStore implements KeyStore {
+  readonly rows = new Map<string, string>()
+  readonly calls: string[] = []
+  failWith: string | null = null
+
+  private check(id: string): void {
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(id)) {
+      throw new Error(`'${id}' is not a usable provider id`)
+    }
+  }
+
+  async presence(providerIds: string[]): Promise<ProviderKeyPresence[]> {
+    this.calls.push(`presence:${providerIds.join('|')}`)
+    if (this.failWith !== null) throw new Error(this.failWith)
+    return providerIds.map((id) => {
+      this.check(id)
+      return { id, hasKey: this.rows.has(id), store: 'Windows Credential Manager' }
+    })
+  }
+
+  async save(providerId: string, apiKey: string): Promise<string> {
+    // Recorded WITHOUT the value: a test log is a place a key must not end up either.
+    this.calls.push(`save:${providerId}`)
+    if (this.failWith !== null) throw new Error(this.failWith)
+    this.check(providerId)
+    if (apiKey.trim() === '') throw new Error('refusing to store an empty key')
+    this.rows.set(providerId, apiKey)
+    return 'Windows Credential Manager'
+  }
+
+  async remove(providerId: string): Promise<string> {
+    this.calls.push(`remove:${providerId}`)
+    if (this.failWith !== null) throw new Error(this.failWith)
+    this.check(providerId)
+    this.rows.delete(providerId)
+    return 'Windows Credential Manager'
+  }
+}
+
+function mountWithKeys(client: SketchClient, keys: KeyStore) {
+  return render(
+    <SketchClientProvider client={client}>
+      <KeyStoreProvider store={keys}>
+        <AppStateProvider>
+          <ProviderSettings />
+        </AppStateProvider>
+      </KeyStoreProvider>
+    </SketchClientProvider>,
+  )
+}
+
+describe('the key box is wired to the OS credential store (Requirements 17.3, 17.4)', () => {
+  it('saves a typed key to the store and never writes it to providers.json', async () => {
+    const home = makeHome()
+    const client = new EngineClient(home)
+    const keys = new FakeOsKeyStore()
+    mountWithKeys(client, keys)
+
+    fireEvent.click(await screen.findByLabelText('Add OpenAI'))
+    fillForm('openai', { baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o', apiKey: SECRET })
+
+    // Before the click there is no stored key, and the panel says so plainly — once
+    // the store has answered. Until then it says it is still checking, which is the
+    // honest state and not "no key stored".
+    await waitFor(() =>
+      expect(screen.getByText(/No key is stored in Windows Credential Manager/)).toBeDefined(),
+    )
+
+    fireEvent.click(
+      screen.getByLabelText(
+        'Save the API key for openai to the operating system credential store',
+      ),
+    )
+
+    await waitFor(() =>
+      expect(screen.getByText(/A key is stored in Windows Credential Manager/)).toBeDefined(),
+    )
+    // It reached the store, exactly once, under the provider id.
+    expect(keys.rows.get('openai')).toBe(SECRET)
+    expect(keys.calls.filter((c) => c.startsWith('save:'))).toEqual(['save:openai'])
+
+    // And the settings save still carries nothing: no request to the engine mentions
+    // it, so nothing can write it to providers.json.
+    fireEvent.click(screen.getByText('Save'))
+    await waitFor(() => expect(existsSync(settingsPath(home))).toBe(true))
+    for (const payload of client.sent) expect(payload).not.toContain(SECRET)
+    expect(readFileSync(settingsPath(home), 'utf8')).not.toContain(SECRET)
+  })
+
+  it('clears the box on save, so the window stops holding the key', async () => {
+    const keys = new FakeOsKeyStore()
+    mountWithKeys(new EngineClient(makeHome()), keys)
+
+    fireEvent.click(await screen.findByLabelText('Add OpenAI'))
+    fillForm('openai', { baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o', apiKey: SECRET })
+    const box = screen.getByLabelText('API key for openai') as HTMLInputElement
+    expect(box.value).toBe(SECRET)
+
+    fireEvent.click(
+      screen.getByLabelText(
+        'Save the API key for openai to the operating system credential store',
+      ),
+    )
+
+    await waitFor(() => expect(box.value).toBe(''))
+    // A password field, never a plain one, and the value is nowhere in the DOM text.
+    expect(box.type).toBe('password')
+    expect(document.body.textContent ?? '').not.toContain(SECRET)
+  })
+
+  it('offers removal only for a stored key, and says the key is never read back', async () => {
+    const keys = new FakeOsKeyStore()
+    keys.rows.set('openai', SECRET)
+    mountWithKeys(new EngineClient(makeHome()), keys)
+
+    fireEvent.click(await screen.findByLabelText('Add OpenAI'))
+    await waitFor(() =>
+      expect(screen.getByText(/It is never read back into this window/)).toBeDefined(),
+    )
+
+    fireEvent.click(screen.getByLabelText('Remove the stored API key for openai'))
+
+    await waitFor(() =>
+      expect(screen.getByText(/No key is stored in Windows Credential Manager/)).toBeDefined(),
+    )
+    expect(keys.rows.has('openai')).toBe(false)
+    // With nothing stored, there is nothing to remove.
+    expect(screen.queryByLabelText('Remove the stored API key for openai')).toBeNull()
+  })
+
+  it('never claims "no key stored" when the store could not be asked', async () => {
+    const keys = new FakeOsKeyStore()
+    keys.failWith = "not running under Tauri: the native command 'list_providers' is unavailable."
+    mountWithKeys(new EngineClient(makeHome()), keys)
+
+    fireEvent.click(await screen.findByLabelText('Add OpenAI'))
+    fillForm('openai', { baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o' })
+
+    // The honest third state: unknown, with the reason (Requirement 27.3).
+    await waitFor(() =>
+      expect(screen.getByText(/Keys are stored by the operating system/)).toBeDefined(),
+    )
+    expect(screen.queryByText(/No key is stored/)).toBeNull()
+    expect(screen.queryByText(/A key is stored/)).toBeNull()
+  })
+
+  it('has no claim left that key storage is unbuilt', () => {
+    const source = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), 'ProviderSettings.tsx'),
+      'utf8',
+    )
+    // The panel used to say storing a key in the OS credential store "is not built
+    // yet". Task 4.2 built it, so that sentence must be gone rather than stale.
+    expect(source).not.toContain('not built yet')
+    // And no local key cache crept in with the wiring.
+    expect(source).not.toMatch(/dispatch\(\{\s*type: '[A-Z_]*KEY/)
+  })
+})
+
+// ── 7. a local provider needs no key box at all ─────────────────────────────
+
+describe('a $0 local endpoint asks for nothing (Requirement 26.3)', () => {
+  it('shows no key box, no save-key button, and no key state for loopback', async () => {
+    mountWithKeys(new EngineClient(makeHome()), new FakeOsKeyStore())
+    fireEvent.click(await screen.findByLabelText('Add Ollama (local)'))
+    fillForm('ollama', { baseUrl: 'http://localhost:11434/v1', model: 'llama3' })
+
+    expect(screen.queryByLabelText('API key for ollama')).toBeNull()
+    expect(
+      screen.queryByLabelText(
+        'Save the API key for ollama to the operating system credential store',
+      ),
+    ).toBeNull()
   })
 })
 

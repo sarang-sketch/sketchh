@@ -7,10 +7,16 @@
 // it changes the cost and latency story.
 //
 // WHAT IT SAVES: five non-secret fields per provider, to `~/.sketch/providers.json`.
-// NO API KEY IS PERSISTED, ANYWHERE, EVER (Requirement 17.2). The key box below is
-// local component state used for one connection test and dropped; it is never
-// dispatched into AppState and never included in a save payload. Real key storage is
-// task 4.2 (the OS credential store).
+// NO API KEY IS PERSISTED THERE, EVER (Requirement 17.2). The key box is local
+// component state: it is never dispatched into AppState and never included in a save
+// payload.
+//
+// WHERE A KEY GOES INSTEAD: the operating system's credential store, through the
+// `KeyStore` seam (settings/keyStore.ts → Rust → Credential Manager / Keychain /
+// Secret Service). The panel can save a key, see WHETHER one is stored, and remove it.
+// It cannot read one back, because no command exists that returns a key value — so a
+// connection test needs the key typed for that test, and the panel says so rather than
+// pretending it remembered (Requirements 17.3, 17.4).
 //
 // THE CONNECTION TEST IS A REAL NETWORK CALL, so:
 //   * it runs on an explicit click and NEVER on mount — the only thing that happens
@@ -41,7 +47,14 @@ import {
   stateFromResult,
   type ProviderDraft,
 } from '../settings/providerRows';
+import { useKeyStore } from '../settings/KeyStoreProvider';
 import { useProviderConfig } from '../settings/useProviderConfig';
+import {
+  describeKeyFailure,
+  describeKeyState,
+  readKeyStates,
+  type KeyState,
+} from '../settings/keyStore';
 import styles from './ProviderSettings.module.css';
 
 /** Test ceiling. Long enough for a cold local model list, short enough to bail. */
@@ -51,6 +64,7 @@ export function ProviderSettings() {
   const state = useAppState();
   const dispatch = useAppDispatch();
   const client = useSketchClient();
+  const keyStore = useKeyStore();
 
   // The read lives in `useProviderConfig` because the model picker needs the same
   // one. Loading on mount is a file read, not a network call.
@@ -59,11 +73,18 @@ export function ProviderSettings() {
   /** Catalog row being edited; separate because a custom draft has an editable id. */
   const [editingId, setEditingId] = useState<string | null>(null);
   /**
-   * The key for the NEXT connection test. Local, transient, never saved and never
-   * put in AppState. Cleared as soon as a test settles.
+   * The key currently in the box. Local, transient, never put in AppState and never
+   * part of a `providers.json` payload. It goes exactly two places: into a connection
+   * test for that one call, and — if the user asks — into the OS credential store.
+   * Cleared as soon as either settles.
    */
   const [testKey, setTestKey] = useState('');
   const [saving, setSaving] = useState(false);
+  /**
+   * Per-provider key presence, as the OS credential store reported it. NOT keys —
+   * `KeyState` has no field that could hold one (settings/keyStore.ts).
+   */
+  const [keyStates, setKeyStates] = useState<Record<string, KeyState>>({});
 
   /** One controller per in-flight test, so Cancel has something to abort. */
   const inFlight = useRef<Map<string, AbortController>>(new Map());
@@ -80,6 +101,64 @@ export function ProviderSettings() {
   const rows = useMemo(
     () => providerRows(state.providerCatalog, state.providers),
     [state.providerCatalog, state.providers],
+  );
+
+  /** The ids to ask the credential store about. Sorted and joined so the effect below
+   * re-runs when the SET changes rather than on every render. */
+  const keyIds = useMemo(
+    () => rows.map((row) => row.descriptor.id).sort().join(','),
+    [rows],
+  );
+
+  /**
+   * Read key PRESENCE for the rows on screen. This is a local call to the OS
+   * credential store, not a network call, so it may happen on mount — the rule the
+   * connection test obeys (nothing automatic ever leaves the machine) is not weakened
+   * by asking the local keychain whether a key exists.
+   */
+  useEffect(() => {
+    if (keyIds === '') return;
+    let live = true;
+    void readKeyStates(keyStore, keyIds.split(',')).then((states) => {
+      if (live) setKeyStates(states);
+    });
+    return () => {
+      live = false;
+    };
+  }, [keyIds, keyStore]);
+
+  const saveKey = useCallback(
+    async (providerId: string, apiKey: string) => {
+      const value = apiKey.trim();
+      if (value === '') return;
+      setKeyStates((current) => ({ ...current, [providerId]: { status: 'saving' } }));
+      try {
+        const store = await keyStore.save(providerId, value);
+        setKeyStates((current) => ({ ...current, [providerId]: { status: 'stored', store } }));
+        // The key has been handed to the OS. This window keeps no copy of it.
+        setTestKey('');
+      } catch (err) {
+        const reason = describeKeyFailure('save', providerId, err);
+        setKeyStates((current) => ({ ...current, [providerId]: { status: 'unknown', reason } }));
+        dispatch({ type: 'PROVIDER_SETTINGS_NOTICE', payload: reason });
+      }
+    },
+    [dispatch, keyStore],
+  );
+
+  const removeKey = useCallback(
+    async (providerId: string) => {
+      setKeyStates((current) => ({ ...current, [providerId]: { status: 'removing' } }));
+      try {
+        const store = await keyStore.remove(providerId);
+        setKeyStates((current) => ({ ...current, [providerId]: { status: 'absent', store } }));
+      } catch (err) {
+        const reason = describeKeyFailure('remove', providerId, err);
+        setKeyStates((current) => ({ ...current, [providerId]: { status: 'unknown', reason } }));
+        dispatch({ type: 'PROVIDER_SETTINGS_NOTICE', payload: reason });
+      }
+    },
+    [dispatch, keyStore],
   );
 
   const persist = useCallback(
@@ -375,7 +454,10 @@ export function ProviderSettings() {
                       needsKey={keyRequired(row.descriptor, draft.baseUrl)}
                       saving={saving}
                       testKey={testKey}
+                      keyState={keyStates[row.descriptor.id]}
                       onTestKey={setTestKey}
+                      onSaveKey={() => void saveKey(row.descriptor.id, testKey)}
+                      onRemoveKey={() => void removeKey(row.descriptor.id)}
                       onChange={setDraft}
                       onSave={() => void saveDraft()}
                     />
@@ -395,8 +477,9 @@ export function ProviderSettings() {
               </span>
             </div>
             <div className={styles.footerNote}>
-              This file holds the endpoint and model only. API keys are never written to it, and are
-              supplied per request.
+              This file holds the endpoint and model only. API keys are never written to it: a saved
+              key lives in the operating system credential store, and is supplied to a request one
+              call at a time.
             </div>
           </div>
         </>
@@ -410,15 +493,32 @@ interface FormProps {
   needsKey: boolean;
   saving: boolean;
   testKey: string;
+  /** What the OS credential store said. Undefined until it has been asked. */
+  keyState: KeyState | undefined;
   onTestKey: (value: string) => void;
+  onSaveKey: () => void;
+  onRemoveKey: () => void;
   onChange: (draft: ProviderDraft) => void;
   onSave: () => void;
 }
 
 /** The add/edit form. The endpoint preview shows the URL that will be called. */
-function ProviderForm({ draft, needsKey, saving, testKey, onTestKey, onChange, onSave }: FormProps) {
+function ProviderForm({
+  draft,
+  needsKey,
+  saving,
+  testKey,
+  keyState,
+  onTestKey,
+  onSaveKey,
+  onRemoveKey,
+  onChange,
+  onSave,
+}: FormProps) {
   const endpoint = previewEndpoint(draft.baseUrl);
   const blocker = draftBlocker(draft);
+  /** A store operation is in flight: both key buttons wait for it. */
+  const busyKey = keyState?.status === 'saving' || keyState?.status === 'removing';
 
   return (
     <div className={styles.form}>
@@ -464,17 +564,42 @@ function ProviderForm({ draft, needsKey, saving, testKey, onTestKey, onChange, o
             className={styles.input}
             type="password"
             value={testKey}
-            aria-label={`API key for ${draft.id}, used for this connection test only`}
-            placeholder="used for the next connection test only"
+            aria-label={`API key for ${draft.id}`}
+            placeholder="used for the next request, and saved only if you ask"
             onChange={(e) => onTestKey(e.target.value)}
           />
         </label>
       )}
       {needsKey && (
-        <div className={styles.keyNote}>
-          The key is held in this window for the connection test and is not written to
-          providers.json. Storing it in the OS credential store is not built yet.
-        </div>
+        <>
+          <div className={styles.actions}>
+            <button
+              className={styles.actionBtn}
+              aria-label={`Save the API key for ${draft.id} to the operating system credential store`}
+              disabled={testKey.trim() === '' || busyKey}
+              onClick={onSaveKey}
+            >
+              Save key to OS store
+            </button>
+            {keyState?.status === 'stored' && (
+              <button
+                className={styles.actionBtn}
+                aria-label={`Remove the stored API key for ${draft.id}`}
+                disabled={busyKey}
+                onClick={onRemoveKey}
+              >
+                Remove stored key
+              </button>
+            )}
+          </div>
+          {/* One sentence about the store, and it never claims more than the store
+              said. `unknown` stays `unknown` — see settings/keyStore.ts. */}
+          <div className={styles.keyNote}>{describeKeyState(keyState)}</div>
+          <div className={styles.keyNote}>
+            The key is never written to providers.json. Saving puts it in the operating
+            system credential store, and nothing reads it back into this window.
+          </div>
+        </>
       )}
 
       <div className={styles.formActions}>

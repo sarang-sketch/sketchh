@@ -54,5 +54,9 @@ export {
   FAKE_DONE_RESPONSE,
 } from './fake.js'
 export type { FakeChatAdapterOptions } from './fake.js'
-export type { CredentialStore, KeytarLike } from './credentials.js'
-export { KeychainCredentialStore, MemoryCredentialStore } from './credentials.js'
+// No credential store here. `providers/credentials.ts` used to carry a
+// `KeychainCredentialStore` shaped around keytar — an injected `KeytarLike` in a
+// package that is not allowed a runtime dependency, describing storage this package
+// must not be able to perform. The seam is `SecretStore` (src/types.ts), the
+// non-persisting implementations are in `secrets/store.ts`, and the real store is the
+// host's, against the OS credential store (Requirement 17.3).

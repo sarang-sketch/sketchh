@@ -14,6 +14,7 @@ export {
   loadProviderSettings,
   providerMatrix,
   providersFilePath,
+  resolveProviderConfig,
   sanitizeEntry,
   sanitizeSettings,
   saveProviderSettings,

@@ -7,12 +7,20 @@
 // directory listing, git status/diff, and the confirmed terminal command.
 //
 // Every wrapper here names a command that actually exists in src-tauri/src/main.rs.
-// It previously carried wrappers for `list_providers`, `set_api_key`,
-// `remove_api_key`, `run_task`, `approve_plan`, `cancel_task` and listeners for
-// `task-event`/`file-changed` — none of which existed in Rust. A typed wrapper
-// around a command that is not there is a second source of truth that always
+// It previously carried wrappers for `run_task`, `approve_plan`, `cancel_task` and
+// listeners for `task-event`/`file-changed` — none of which existed in Rust. A typed
+// wrapper around a command that is not there is a second source of truth that always
 // disagrees with the first, so they are gone rather than left dangling. If a
 // capability belongs to the engine, add it to `SketchClient`, not here.
+//
+// The three credential wrappers at the bottom were in that same list until task 4.2
+// implemented them in Rust. They are here now because the commands exist; the guard
+// that used to forbid them by name is now the guard in src/lib/security.test.ts that
+// requires every wrapper to name a `#[tauri::command]` that is defined AND registered.
+//
+// NONE OF THEM READS A KEY BACK. There is no `get_api_key`, by design: a key that
+// reaches this window is a key that can reach a console log, an error boundary, or a
+// crash report (Requirement 17.3).
 //
 // EVERY PATH TAKES A `projectRoot`. The Rust side refuses any path outside it; the
 // `fs.scope` in tauri.conf.json does not cover these custom commands, so this is
@@ -127,4 +135,44 @@ export async function gitStatus(projectRoot: string): Promise<GitStatus> {
 
 export async function gitDiff(projectRoot: string, file?: string): Promise<string> {
   return invoke<string>('git_diff', { projectRoot, file })
+}
+
+// ── Credentials ─────────────────────────────────────────────────────────────
+//
+// Storage is the operating system's — Windows Credential Manager, the macOS Keychain,
+// or the Secret Service on Linux — reached through Rust. The engine never persists a
+// key and this window never holds one for longer than the request it was typed for
+// (Requirements 17.3, 17.4).
+
+/** Whether one provider has a stored key, and the name of the store it is in. */
+export interface ProviderKeyPresence {
+  id: string
+  hasKey: boolean
+  /** e.g. "Windows Credential Manager". Shown so the UI can say where a key went. */
+  store: string
+}
+
+/**
+ * Which of the given providers have a key stored.
+ *
+ * PRESENCE ONLY — an id and a boolean. There is no command that returns a key value,
+ * not even truncated, so there is no wrapper here that could.
+ */
+export async function listProviderKeys(providerIds: string[]): Promise<ProviderKeyPresence[]> {
+  return invoke<ProviderKeyPresence[]>('list_providers', { providerIds })
+}
+
+/**
+ * Store a key for one provider. Resolves with the NAME of the store it went into.
+ *
+ * The value crosses this call and is not kept: the caller drops it, and the Rust side
+ * hands it to the OS and wipes its own copy.
+ */
+export async function setProviderKey(providerId: string, apiKey: string): Promise<string> {
+  return invoke<string>('set_api_key', { providerId, apiKey })
+}
+
+/** Remove a provider's stored key. Removing one that is not there succeeds. */
+export async function removeProviderKey(providerId: string): Promise<string> {
+  return invoke<string>('remove_api_key', { providerId })
 }

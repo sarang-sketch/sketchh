@@ -4,6 +4,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod command_policy;
+mod os_credentials;
+mod secret_store;
 
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -28,6 +30,23 @@ struct CommandOutput {
     exit_code: i32,
     stdout: String,
     stderr: String,
+}
+
+/// What `list_providers` answers with: an id, whether a key exists, and the name of
+/// the store it would be in. THERE IS NO FIELD FOR A KEY, and that is the point —
+/// this struct is the entire vocabulary the webview has for a stored secret.
+///
+/// `camelCase` on the wire because that is what the TypeScript wrapper declares
+/// (src/ipc/bridge.ts). Serde's default would send `has_key` while the frontend read
+/// `hasKey`, and an always-`undefined` boolean would read on screen as "no key
+/// stored" for a provider that has one.
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ProviderKeyPresence {
+    id: String,
+    has_key: bool,
+    /// e.g. "Windows Credential Manager". For a UI that says where the key went.
+    store: String,
 }
 
 // ── File System Commands ────────────────────────────────────────────────────
@@ -226,6 +245,91 @@ fn run_command(
     })
 }
 
+// ── Secrets ─────────────────────────────────────────────────────────────────
+//
+// The three commands the settings surface needs, and NOT A FOURTH. Real storage is
+// the operating system's credential store, reached through `os_credentials`; the
+// policy — what a legal provider id is, what a plausible key is, what an error may
+// say — is in `secret_store`, which is std-only and unit tested standalone
+// (Requirement 17.3).
+//
+// ── WHAT IS DELIBERATELY ABSENT ─────────────────────────────────────────────
+//
+// THERE IS NO COMMAND THAT RETURNS A KEY. Not the value, not a prefix, not a length.
+// `list_providers` answers with an id and a bool, because that is all the UI needs to
+// decide between "Save key" and "Remove key". A four-character prefix is four
+// characters of a secret, and once a value reaches the webview it is one accidental
+// `console.log`, one error boundary, and one crash report away from being somewhere
+// permanent.
+//
+// NO KEY IS HELD IN APPLICATION STATE either. These commands are stateless: each one
+// builds a backend, performs one operation, and drops everything. There is no
+// `AppState` field, no cache, no `Mutex<HashMap<String, String>>`.
+//
+// NO PATH IS TAKEN by any of them, which is why none of them calls `command_policy`.
+// Containment exists for arguments that address the filesystem; a provider id
+// addresses a credential record. `secret_store::validate_id` is the door here, and it
+// refuses separators and NUL bytes outright. If one of these ever grows a path
+// argument, it goes through `command_policy::resolve_within` like everything else —
+// there is exactly one containment implementation in this project and it stays that
+// way.
+//
+// ── THE SPEC GAP THIS TASK FOUND ────────────────────────────────────────────
+//
+// Requirement 17.4 says a key is supplied to the engine AT INVOCATION TIME. The
+// engine side of that exists (`settings.resolveProviderConfig` / `toProviderConfig`
+// take the key as an argument for one call). What does not exist is a route from this
+// credential store to the engine process: the sidecar is spawned by the webview, so
+// with no read command the only key that can reach a run today is one the user typed
+// into the window for that call. Wiring stored keys into a run needs a decision that
+// is not in the spec — a single-use resolve scoped to one request, or moving the
+// sidecar spawn into Rust so the key never enters the webview. Recorded rather than
+// invented here.
+
+/// Whether each named provider has a key in the OS credential store.
+///
+/// The argument is the provider ids the settings surface is displaying — it is not a
+/// listing of the credential store, because enumerating a user's whole keychain is
+/// not something this app needs to be able to do.
+#[tauri::command]
+fn list_providers(provider_ids: Vec<String>) -> Result<Vec<ProviderKeyPresence>, String> {
+    let backend = os_credentials::backend();
+    let store = backend.describe();
+    secret_store::list_presence(backend.as_ref(), &provider_ids)
+        .map(|rows| {
+            rows.into_iter()
+                .map(|row| ProviderKeyPresence {
+                    id: row.id,
+                    has_key: row.has_key,
+                    store: store.clone(),
+                })
+                .collect()
+        })
+        .map_err(|e| e.to_string())
+}
+
+/// Store one provider's key in the OS credential store. Returns where it went — the
+/// NAME of the store, so the UI can be specific — and nothing about the key itself.
+#[tauri::command]
+fn set_api_key(provider_id: String, api_key: String) -> Result<String, String> {
+    let backend = os_credentials::backend();
+    secret_store::set_secret(backend.as_ref(), &provider_id, &api_key)
+        .map(|()| backend.describe())
+        // `SecretError` has no variant that can hold a value, so this cannot echo the
+        // key even by accident. See secret_store.rs.
+        .map_err(|e| e.to_string())
+}
+
+/// Remove one provider's key. Removing a key that is not there succeeds: the caller
+/// asked for it to be gone.
+#[tauri::command]
+fn remove_api_key(provider_id: String) -> Result<String, String> {
+    let backend = os_credentials::backend();
+    secret_store::remove_secret(backend.as_ref(), &provider_id)
+        .map(|()| backend.describe())
+        .map_err(|e| e.to_string())
+}
+
 /// What the terminal UI may offer. Exposed so a panel does not hardcode its own
 /// copy of the list and drift from what the backend actually permits.
 #[tauri::command]
@@ -252,6 +356,9 @@ fn main() {
             git_diff,
             run_command,
             allowed_programs,
+            list_providers,
+            set_api_key,
+            remove_api_key,
         ])
         .run(tauri::generate_context!())
         .expect("error running Sketch");

@@ -274,14 +274,12 @@ describe('the IPC bridge is one seam, for OS capabilities only', () => {
   });
 
   it('carries no wrapper for a command Rust never had', () => {
-    for (const phantom of [
-      'list_providers',
-      'set_api_key',
-      'remove_api_key',
-      'run_task',
-      'approve_plan',
-      'cancel_task',
-    ]) {
+    // `list_providers`, `set_api_key` and `remove_api_key` were on this list until
+    // task 4.2 implemented them in Rust. They came off it because they now EXIST —
+    // which the test above proves, per command, against main.rs. Nothing was relaxed:
+    // the rule is still "no wrapper without an implementation", and these three are
+    // additionally covered by the credential guards below.
+    for (const phantom of ['run_task', 'approve_plan', 'cancel_task']) {
       expect(bridgeCode, `${phantom} is wrapped`).not.toContain(phantom);
     }
     // Nor listeners for events nothing emits.
@@ -295,6 +293,131 @@ describe('the IPC bridge is one seam, for OS capabilities only', () => {
     // why one is not there.
     expect(bridgeCode).not.toContain('null as T');
     expect(bridgeCode).toContain('not running under Tauri');
+  });
+});
+
+describe('Requirements 17.3, 17.4 — secrets live in the OS store and never come back', () => {
+  const tauriDir = path.resolve(__dirname, '../../src-tauri');
+  const mainRs = fs.readFileSync(path.join(tauriDir, 'src/main.rs'), 'utf8');
+  const policyRs = fs.readFileSync(path.join(tauriDir, 'src/command_policy.rs'), 'utf8');
+  const secretRs = fs.readFileSync(path.join(tauriDir, 'src/secret_store.rs'), 'utf8');
+  const osRs = fs.readFileSync(path.join(tauriDir, 'src/os_credentials.rs'), 'utf8');
+
+  /** Rust with its comments stripped: these files DOCUMENT what they refuse to do. */
+  const rustCode = (text: string) =>
+    text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
+
+  it('registers exactly the three credential commands the settings surface needs', () => {
+    for (const command of ['list_providers', 'set_api_key', 'remove_api_key']) {
+      expect(mainRs, `${command} is not defined`).toMatch(new RegExp(`fn ${command}\\s*\\(`));
+      expect(mainRs, `${command} is not registered`).toMatch(
+        new RegExp(`generate_handler!\\[[\\s\\S]*?${command},`),
+      );
+    }
+  });
+
+  it('exposes no command that returns a key value', () => {
+    const code = rustCode(mainRs);
+    // Not a read command, not a truncated one, not a "verify this prefix" one.
+    for (const forbidden of [
+      'fn get_api_key',
+      'fn read_api_key',
+      'fn api_key(',
+      'fn reveal',
+      'key_prefix',
+      'last_four',
+    ]) {
+      expect(code, forbidden).not.toContain(forbidden);
+    }
+    // The presence shape is an id, a bool and the store's NAME — no fourth field.
+    const presence = /struct ProviderKeyPresence \{[\s\S]*?\n\}/.exec(mainRs);
+    expect(presence).not.toBeNull();
+    expect(presence![0]).toContain('has_key: bool');
+    for (const forbidden of ['api_key', 'secret', 'value', 'preview']) {
+      expect(presence![0], forbidden).not.toContain(forbidden);
+    }
+  });
+
+  it('holds no key in application state', () => {
+    const code = rustCode(mainRs);
+    // The commands are stateless: a backend per call, dropped when it returns. A
+    // long-lived map of keys is the thing this asserts is absent.
+    expect(code).not.toMatch(/State<[^>]*Secret/);
+    expect(code).not.toMatch(/Mutex<[^>]*(HashMap|BTreeMap)<String, String>/);
+    expect(code).toContain('os_credentials::backend()');
+  });
+
+  it('keeps storage in the OS credential store, and no file fallback anywhere near it', () => {
+    // A "temporary" file fallback is how a key ends up in plaintext on disk forever.
+    for (const source of [secretRs, osRs]) {
+      const code = rustCode(source);
+      expect(code).not.toContain('fs::write');
+      expect(code).not.toContain('fs::read_to_string');
+      expect(code).not.toContain('File::create');
+    }
+    // The real backends, one per platform.
+    expect(osRs).toContain('CredWriteW');
+    expect(osRs).toContain('SecKeychainAddGenericPassword');
+    expect(osRs).toContain('secret-tool');
+    // And the Linux path never puts the secret in argv, where `ps` can read it.
+    expect(osRs).toContain('Stdio::piped()');
+    const storeArgs = /pub fn secret_tool_store_args\(([\s\S]*?)\)[\s\S]*?\r?\n}/.exec(osRs);
+    expect(storeArgs).not.toBeNull();
+    // The builder is not even GIVEN the secret: two parameters, both non-secret.
+    expect(storeArgs![1]!.trim()).toBe('service: &str, account: &str');
+    expect(rustCode(storeArgs![0]!)).not.toContain('secret.');
+  });
+
+  it('adds no second containment primitive, and takes no path', () => {
+    // Task 4.2's commands address a credential record, not the filesystem, so there is
+    // nothing here to contain — and containment stays where it is: exactly one
+    // `is_within` and one `has_parent_escape`, both in command_policy.rs.
+    expect(policyRs.match(/fn is_within/g)).toHaveLength(1);
+    expect(policyRs.match(/fn has_parent_escape/g)).toHaveLength(1);
+    for (const source of [secretRs, rustCode(osRs)]) {
+      expect(source).not.toContain('fn is_within');
+      expect(source).not.toContain('fn has_parent_escape');
+    }
+    expect(rustCode(secretRs)).not.toContain('canonicalize');
+
+    // No credential command takes a path-shaped argument.
+    for (const command of ['list_providers', 'set_api_key', 'remove_api_key']) {
+      const signature = new RegExp(`fn ${command}\\s*\\(([\\s\\S]*?)\\)`).exec(mainRs);
+      expect(signature, command).not.toBeNull();
+      for (const forbidden of ['path', 'project_root', 'cwd', 'PathBuf']) {
+        expect(signature![1], `${command} takes a ${forbidden}`).not.toContain(forbidden);
+      }
+    }
+  });
+
+  it('validates the provider id the same way the engine does', () => {
+    // The engine's rule is SECRET_ID_PATTERN in packages/core/src/secrets/store.ts.
+    // Two validators that disagree means one of them is the weak one.
+    const core = fs.readFileSync(
+      path.resolve(__dirname, '../../../core/src/secrets/store.ts'),
+      'utf8',
+    );
+    const pattern = /export const SECRET_ID_PATTERN = (.+)/.exec(core);
+    expect(pattern).not.toBeNull();
+    expect(pattern![1]).toContain('A-Za-z0-9._-');
+    expect(pattern![1]).toContain('127');
+
+    const validate = /pub fn validate_id[\s\S]*?\n}/.exec(secretRs);
+    expect(validate).not.toBeNull();
+    expect(validate![0]).toContain('is_ascii_alphanumeric');
+    expect(validate![0]).toContain("c == '.'");
+    expect(validate![0]).toContain('MAX_ID_LEN');
+    expect(secretRs).toContain('pub const MAX_ID_LEN: usize = 128;');
+  });
+
+  it('has an error type with no room for a secret', () => {
+    const enumBody = /pub enum SecretError \{[\s\S]*?\n\}/.exec(secretRs);
+    expect(enumBody).not.toBeNull();
+    // Every variant carries an id, an operation, a byte count, or the OS's own words
+    // about a FAILURE. None carries the value that was being written.
+    for (const forbidden of ['secret:', 'value:', 'api_key', 'blob']) {
+      expect(enumBody![0], forbidden).not.toContain(forbidden);
+    }
   });
 });
 
