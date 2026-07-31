@@ -57,6 +57,7 @@ export {
   looksLikeDefinition,
   chunkForLine,
   queryTerms,
+  smartCase,
   MAX_QUERY_TERMS,
   DEFAULT_SEARCH_CONFIG,
   RERANK_WEIGHTS,

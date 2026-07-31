@@ -40,6 +40,7 @@ import {
   resolveSearchConfig,
   ripgrepArgs,
   RRF_K,
+  smartCase,
   vectorSearch,
   type FusedCandidate,
   type HybridHit,
@@ -334,7 +335,9 @@ describe('lexical channel', () => {
     await write(root, 'src/substring.ts', 'const retryBudgetMs = 1\nconst budgetish = 2\nconst xbudget = 3\n')
     const { graph } = await buildRepoGraph({ root, persist: false })
 
-    const result = await lexicalSearch({ root, query: 'budget', graph })
+    // `ignoreCase: false` is explicit here, and it has to be: `budget` is
+    // all-lower-case, so the default is now smart case (see the next test).
+    const result = await lexicalSearch({ root, query: 'budget', graph, ignoreCase: false })
     expect(result.hits[0]!.path).toBe('src/exact.ts')
     expect(result.hits[0]!.exactMatches).toBe(2)
     expect(result.hits[0]!.score).toBe(6)
@@ -344,6 +347,30 @@ describe('lexical channel', () => {
     expect(substring.matches).toBe(2)
     expect(substring.exactMatches).toBe(0)
     expect(substring.score).toBe(2)
+  })
+
+  it('folds case for a lower-case term and keeps it for a spelled-out identifier', async () => {
+    // SMART CASE, per term. A prompt says "retry budget"; the constant is spelled
+    // RETRY_BUDGET_MS. Strict case-sensitivity means a natural-language prompt can
+    // never find a SCREAMING_CASE constant, which is most configuration in most
+    // repositories.
+    const root = await makeProject()
+    await write(root, 'src/config.ts', 'export const RETRY_BUDGET_MS = 4500\n')
+    await write(root, 'src/other.ts', 'export const budget = 1\n')
+    const { graph } = await buildRepoGraph({ root, persist: false })
+
+    for (const preferRipgrep of [false, true]) {
+      const prose = await lexicalSearch({ root, query: 'budget', graph, preferRipgrep })
+      expect(prose.hits.map(h => h.path).sort(), `engine ${prose.engine}`).toEqual([
+        'src/config.ts',
+        'src/other.ts',
+      ])
+
+      // An identifier the caller spelled with capitals keeps its precision: this
+      // must NOT also match the lower-case `budget` in other.ts.
+      const exact = await lexicalSearch({ root, query: 'RETRY_BUDGET_MS', graph, preferRipgrep })
+      expect(exact.hits.map(h => h.path), `engine ${exact.engine}`).toEqual(['src/config.ts'])
+    }
   })
 
   it('returns nothing, and no error, for an empty query', async () => {
@@ -819,5 +846,19 @@ describe('lexical channel on a sentence query', () => {
     expect(lexical.hits).toBeGreaterThan(0)
     expect(result.vectorOnly).toBe(false)
     expect(result.hits[0]!.path).toBe('src/retry.ts')
+  })
+})
+
+describe('smart case', () => {
+  it('folds an all-lower-case term and preserves one carrying capitals', () => {
+    expect(smartCase('budget')).toBe(true)
+    expect(smartCase('retry_budget')).toBe(true)
+    expect(smartCase('RETRY_BUDGET_MS')).toBe(false)
+    expect(smartCase('parseRetry')).toBe(false)
+  })
+
+  it('lets an explicit setting win in both directions', () => {
+    expect(smartCase('budget', false)).toBe(false)
+    expect(smartCase('RETRY_BUDGET_MS', true)).toBe(true)
   })
 })

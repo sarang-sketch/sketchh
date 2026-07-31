@@ -214,6 +214,24 @@ const STOPWORDS: ReadonlySet<string> = new Set(
 )
 
 /**
+ * Whether a single term is matched case-insensitively. Smart case, per term.
+ *
+ * An all-lower-case term is prose — `budget` came out of a sentence a human wrote —
+ * and the constant it is looking for is spelled `RETRY_BUDGET_MS`. A term carrying
+ * an upper-case letter is an identifier the caller typed deliberately, and folding
+ * its case would throw away the precision they were expressing. The same rule
+ * ripgrep calls `--smart-case`, applied one term at a time so a mixed query gets
+ * both behaviours in the same search.
+ *
+ * An explicit `ignoreCase` from the caller wins outright, in both directions:
+ * `false` restores strict case-sensitive matching for every term.
+ */
+export function smartCase(term: string, explicit?: boolean): boolean {
+  if (explicit !== undefined) return explicit
+  return term === term.toLowerCase()
+}
+
+/**
  * Split a query into search terms, in first-appearance order.
  *
  * Identifier-shaped runs only: `retry_budget`, `RETRY_BUDGET_MS` and `parseRetry`
@@ -591,7 +609,6 @@ async function ripgrepSearch(
   byPath: Map<string, GraphFile>,
   terms: readonly string[]
 ): Promise<{ result: LexicalResult } | { failure: string }> {
-  const ignoreCase = options.ignoreCase === true
   const acc = new Map<string, HitAccumulator>()
   const files = new Set<string>()
 
@@ -600,6 +617,7 @@ async function ripgrepSearch(
   // output would no longer say WHICH term matched a line, and term coverage is the
   // first thing the ranking needs.
   for (const term of terms) {
+    const ignoreCase = smartCase(term, options.ignoreCase)
     const run = await runCommand(
       {
         name: 'lexical-search',
@@ -650,7 +668,8 @@ async function scannerSearch(
   reason: string,
   terms: readonly string[]
 ): Promise<LexicalResult> {
-  const ignoreCase = options.ignoreCase === true
+  // Resolved once per term, not once per search: the same rule ripgrep is given.
+  const folded = terms.map(term => ({ term, ignoreCase: smartCase(term, options.ignoreCase) }))
   const limit = options.maxFilesScanned ?? MAX_SCANNED_FILES
   const acc = new Map<string, HitAccumulator>()
   let scanned = 0
@@ -683,7 +702,7 @@ async function scannerSearch(
     for (let i = 0; i < lines.length; i++) {
       const text = lines[i]!.replace(/\r$/, '')
       let matchedHere = false
-      for (const term of terms) {
+      for (const { term, ignoreCase } of folded) {
         if (!hasMatch(text, term, ignoreCase)) continue
         accumulate(acc, file, i, text, term, ignoreCase)
         matchedHere = true
