@@ -218,7 +218,7 @@ Phase 4 numbering stays intact for anything that references it.
 
 ## Phase 5 — Intelligent context
 
-- [ ] 5. Intelligent context and the architecture generator
+- [x] 5. Intelligent context and the architecture generator
 - [x] 5.1 Persist the repository graph
   - Build the graph from the existing walker, chunker, and dependency-graph modules; persist to `.sketch/index/graph.json`; rebuild incrementally by content hash
   - Add the missing test coverage for `walkProject`, including `.gitignore` handling
@@ -236,11 +236,11 @@ Phase 4 numbering stays intact for anything that references it.
   - Consume the `expandWithDependencies` result that `ContextEngine.retrieve` currently computes and discards
   - Emit `context_assembled` with the selected paths and token estimate
   - _Requirements: 18.4, 18.5, 18.6, 18.8_
-- [~] 5.5 Build the architecture generator
+- [x] 5.5 Build the architecture generator
   - Derive system, API, database, component, dependency, folder-tree, and call-graph views from the graph; deterministic for a fixed graph; no network
   - Emit `diagram_updated`; render in a Live Architecture panel
   - _Requirements: 19.1, 19.2, 19.3, 19.4, 19.5, 27.1_
-- [~] 5.6 Phase 5 gate
+- [x] 5.6 Phase 5 gate
   - On a fixed fifty-file fixture, prove targeted context is smaller and more relevant than the whole-repo baseline AND the held-out eval score rises; prove diagrams render
   - _Requirements: 18.7_
 
