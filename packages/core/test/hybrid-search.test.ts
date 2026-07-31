@@ -30,7 +30,9 @@ import {
   isVectorOnly,
   lexicalSearch,
   looksLikeDefinition,
+  MAX_QUERY_TERMS,
   parseRipgrepLine,
+  queryTerms,
   reciprocalRankFusion,
   rerank,
   rerankScore,
@@ -514,6 +516,7 @@ function lexicalOf(path: string, partial: Partial<LexicalHit> = {}): LexicalHit 
     matches: 1,
     exactMatches: 1,
     matchLines: 1,
+    termsMatched: 1,
     score: 3,
     firstLine: 0,
     preview: '',
@@ -671,5 +674,150 @@ describe('vector channel', () => {
         expect(hits[i - 1]!.id < hits[i]!.id).toBe(true)
       }
     }
+  })
+})
+
+// ── sentence-shaped queries ─────────────────────────────────────────────────
+//
+// The lexical channel is handed `task.prompt`, and a prompt is a sentence. Before
+// query terms existed, the channel searched for the whole sentence as one fixed
+// string, found nothing, and hybrid retrieval quietly became vector-only — the very
+// thing Requirement 18.2 forbids, reached without anyone disabling a channel.
+//
+// Both engines are exercised on every machine: `preferRipgrep: false` forces the
+// scanner, and the ripgrep path runs when the binary is there.
+
+describe('query terms', () => {
+  it('leaves a single identifier exactly as it was', () => {
+    // The pre-existing behaviour, pinned. An identifier is not split on its own
+    // case or underscore boundaries: one precise term beats three vague ones.
+    expect(queryTerms('parse_retry_budget')).toEqual(['parse_retry_budget'])
+    expect(queryTerms('RETRY_BUDGET_MS')).toEqual(['RETRY_BUDGET_MS'])
+    expect(queryTerms('parseRetryBudget')).toEqual(['parseRetryBudget'])
+  })
+
+  it('drops prose and punctuation from a real prompt', () => {
+    expect(queryTerms('Where is the payments retry budget set?')).toEqual([
+      'payments',
+      'retry',
+      'budget',
+    ])
+  })
+
+  it('deduplicates case-insensitively, keeping the first spelling', () => {
+    expect(queryTerms('Budget budget BUDGET')).toEqual(['Budget'])
+  })
+
+  it('caps the term count, so a long prompt cannot fan out unbounded', () => {
+    const long = Array.from({ length: 40 }, (_, i) => `term_${i}`).join(' ')
+    expect(queryTerms(long)).toHaveLength(MAX_QUERY_TERMS)
+  })
+
+  it('falls back to the query itself when every token is filtered out', () => {
+    // Otherwise a query of "the" would search for nothing at all and the channel
+    // would report zero hits as though the repository were empty.
+    expect(queryTerms('the and for')).toEqual(['the and for'])
+    expect(queryTerms('??')).toEqual(['??'])
+    expect(queryTerms('   ')).toEqual([])
+  })
+})
+
+describe('lexical channel on a sentence query', () => {
+  it('finds the definition that a whole-sentence literal search cannot', async () => {
+    const root = await makeProject()
+    await seedIdentifierProject(root)
+    const { graph } = await buildRepoGraph({ root, persist: false })
+    const query = 'Where is the retry budget parsed?'
+
+    for (const preferRipgrep of [false, true]) {
+      const result = await lexicalSearch({ root, query, graph, preferRipgrep })
+      expect(result.terms).toEqual(['retry', 'budget', 'parsed'])
+      expect(result.hits.length, `engine ${result.engine}`).toBeGreaterThan(0)
+      // src/retry.ts carries both `retry` and `budget`; the notes carry only the
+      // one identifier, and coverage is the first sort key.
+      expect(result.hits[0]!.path, `engine ${result.engine}`).toBe('src/retry.ts')
+      expect(result.hits[0]!.termsMatched).toBeGreaterThan(1)
+    }
+  })
+
+  it('ranks broad term coverage above one term repeated', async () => {
+    const root = await makeProject()
+    // `wide.ts` matches two terms once each. `narrow.ts` matches one term twelve
+    // times, which is the higher raw score and the wrong answer.
+    await write(root, 'src/wide.ts', 'export const payments = 1\nexport const retry = 2\n')
+    await write(
+      root,
+      'src/narrow.ts',
+      `${Array.from({ length: 12 }, (_, i) => `export const retry_${i} = ${i}`).join('\n')}\n`
+    )
+    const { graph } = await buildRepoGraph({ root, persist: false })
+
+    for (const preferRipgrep of [false, true]) {
+      const result = await lexicalSearch({
+        root,
+        query: 'payments retry',
+        graph,
+        preferRipgrep,
+      })
+      expect(result.hits[0]!.path, `engine ${result.engine}`).toBe('src/wide.ts')
+      expect(result.hits[0]!.termsMatched).toBe(2)
+      const narrow = result.hits.find(h => h.path === 'src/narrow.ts')!
+      expect(narrow.termsMatched).toBe(1)
+      // Not dropped — outranked. A one-term match is still evidence.
+      expect(narrow.score).toBeGreaterThan(result.hits[0]!.score)
+    }
+  })
+
+  it('counts a line matching several terms as one matching line', async () => {
+    const root = await makeProject()
+    await write(root, 'src/one.ts', 'export const paymentsRetryBudget = 4500\n')
+    const { graph } = await buildRepoGraph({ root, persist: false })
+
+    const result = await lexicalSearch({
+      root,
+      query: 'payments retry budget',
+      graph,
+      preferRipgrep: false,
+      ignoreCase: true,
+    })
+    expect(result.hits).toHaveLength(1)
+    expect(result.hits[0]!.matchLines).toBe(1)
+    expect(result.hits[0]!.termsMatched).toBe(3)
+  })
+
+  it('reports the same terms whichever engine ran', async () => {
+    const root = await makeProject()
+    await seedIdentifierProject(root)
+    const { graph } = await buildRepoGraph({ root, persist: false })
+    const query = 'retry budget parsing'
+
+    const scanner = await lexicalSearch({ root, query, graph, preferRipgrep: false })
+    const other = await lexicalSearch({ root, query, graph, binary: MISSING_BINARY })
+    expect(scanner.terms).toEqual(other.terms)
+    // Ordering must not depend on which engine discovered the files.
+    expect(scanner.hits.map(h => h.id)).toEqual(other.hits.map(h => h.id))
+  })
+
+  it('keeps hybrid retrieval genuinely hybrid for a sentence query', async () => {
+    const root = await makeProject()
+    await seedIdentifierProject(root)
+    const { graph } = await buildRepoGraph({ root, persist: false })
+    const vector = await buildVectorChannel(root, graph)
+
+    const result = await hybridSearch({
+      root,
+      query: 'Where is the retry budget parsed?',
+      graph,
+      vector,
+      preferRipgrep: false,
+    })
+
+    const lexical = result.channels.find(c => c.channel === 'lexical')!
+    // The assertion that would have caught the original defect: a sentence query
+    // must not leave the lexical channel with zero hits.
+    expect(lexical.ran).toBe(true)
+    expect(lexical.hits).toBeGreaterThan(0)
+    expect(result.vectorOnly).toBe(false)
+    expect(result.hits[0]!.path).toBe('src/retry.ts')
   })
 })

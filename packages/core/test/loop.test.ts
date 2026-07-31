@@ -13,7 +13,12 @@ import { mkdtemp, rm, readFile, writeFile, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { runTask, DEFAULT_MAX_ITERATIONS, PLAN_GATE_REASON } from '../src/loop/index.js'
+import {
+  runTask,
+  DEFAULT_MAX_ITERATIONS,
+  PLAN_GATE_REASON,
+  RETRIEVED_CONTEXT_HEADING,
+} from '../src/loop/index.js'
 import { parseUnifiedDiff, applyHunks, allHunkIndexes } from '../src/diff/index.js'
 import { parseAction } from '../src/loop/actions.js'
 import { MemoryEventStore } from '../src/events/index.js'
@@ -574,5 +579,79 @@ describe('cost accounting inputs', () => {
 
     const response = result.events.find((e) => e.kind === 'llm_response')!
     expect(response.payload.usage).toEqual({ in: 0, out: 0 })
+  })
+})
+
+// ── retrieved context (Requirement 18.4, the loop's half of it) ──────────────
+//
+// The loop does no retrieval. What it owes the context layer is a way in that is
+// distinguishable from `AGENTS.md`, does not appear when nothing was retrieved,
+// and does not put repository bodies on the event log a second time.
+
+describe('retrieved context', () => {
+  it('shows the assembled text to the model under its own heading, with a caveat', async () => {
+    const h = await harness()
+    const adapter = new FakeChatAdapter({ script: [DONE_ACTION] })
+
+    await runTask(
+      task(),
+      deps(h, adapter, { retrievedContext: 'export const RETRY_BUDGET_MS = 4500' }),
+    )
+
+    const seen = seenByModel(adapter)
+    expect(seen).toContain(RETRIEVED_CONTEXT_HEADING)
+    expect(seen).toContain('export const RETRY_BUDGET_MS = 4500')
+    // Labelled as retrieval, not as instruction. A model that reads a retrieved
+    // guess as a project rule will follow a file it merely happened to find.
+    expect(seen).toMatch(/evidence to check/i)
+  })
+
+  it('is a separate system message from AGENTS.md, not merged into it', async () => {
+    const h = await harness()
+    const adapter = new FakeChatAdapter({ script: [DONE_ACTION] })
+
+    await runTask(
+      task(),
+      deps(h, adapter, {
+        projectContext: { agents: 'Always run npm test.', claude: '' },
+        retrievedContext: 'export const RETRY_BUDGET_MS = 4500',
+      }),
+    )
+
+    const messages = adapter.lastMessages ?? []
+    const agents = messages.filter((m) => m.content.includes('Always run npm test.'))
+    const retrieved = messages.filter((m) => m.content.includes(RETRIEVED_CONTEXT_HEADING))
+    expect(agents).toHaveLength(1)
+    expect(retrieved).toHaveLength(1)
+    expect(agents[0]).not.toBe(retrieved[0])
+    expect(retrieved[0]!.content).not.toContain('Always run npm test.')
+  })
+
+  it('adds no message at all when it is absent or blank', async () => {
+    const h = await harness()
+
+    const without = new FakeChatAdapter({ script: [DONE_ACTION] })
+    await runTask(task(), deps(h, without))
+    const blank = new FakeChatAdapter({ script: [DONE_ACTION] })
+    await runTask(task(), deps(h, blank, { retrievedContext: '   \n  ' }))
+
+    expect((blank.lastMessages ?? []).length).toBe((without.lastMessages ?? []).length)
+    expect(seenByModel(blank)).not.toContain(RETRIEVED_CONTEXT_HEADING)
+  })
+
+  it('logs that context was supplied and how big it was, never the text itself', async () => {
+    const h = await harness()
+    const adapter = new FakeChatAdapter({ script: [DONE_ACTION] })
+    const body = 'export const RETRY_BUDGET_MS = 4500'
+
+    const result = await runTask(task(), deps(h, adapter, { retrievedContext: body }))
+
+    const breadcrumb = result.events.find(
+      (e) => e.kind === 'context_assembled' && e.payload.component === 'agent-loop',
+    )!
+    expect(breadcrumb.payload.hasRetrievedContext).toBe(true)
+    expect(breadcrumb.payload.retrievedContextChars).toBe(body.length)
+    // The bodies belong to the assembly event's path list, not to this one.
+    expect(JSON.stringify(breadcrumb.payload)).not.toContain('RETRY_BUDGET_MS')
   })
 })

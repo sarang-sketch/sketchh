@@ -56,6 +56,8 @@ export {
   countMatches,
   looksLikeDefinition,
   chunkForLine,
+  queryTerms,
+  MAX_QUERY_TERMS,
   DEFAULT_SEARCH_CONFIG,
   RERANK_WEIGHTS,
   MAX_RERANK_BOOST,

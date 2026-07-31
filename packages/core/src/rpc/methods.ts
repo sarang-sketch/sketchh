@@ -24,6 +24,7 @@ import { stat } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 
 import {
+  assembleContext,
   buildRepoGraph,
   generateArchitecture,
   graphPath,
@@ -66,6 +67,10 @@ import type {
 } from '../types.js'
 import { StreamingEventStore } from './streaming-store.js'
 import { ENGINE_NAME, ENGINE_VERSION, PROTOCOL_VERSION } from './version.js'
+
+function messageOf(err: unknown): string {
+  return err instanceof Error ? err.message : String(err)
+}
 
 /** `params` did not satisfy the method. Becomes `code: "invalid_params"`. */
 export class InvalidParamsError extends Error {
@@ -376,6 +381,22 @@ async function ping(_params: Record<string, unknown>, ctx: MethodContext): Promi
  *
  * The event store is the JSONL one rooted at the project, so a CLI run leaves the
  * same durable log a desktop run does, and the tee streams exactly what it wrote.
+ *
+ * ── RETRIEVED CONTEXT IS OPT-IN (`contextBudgetTokens`) ────────────────────────
+ * With the parameter absent, this method behaves exactly as it did before Phase 5:
+ * no index is read, no retrieval runs, and the prompt is the task plus skills plus
+ * `AGENTS.md`. That default is deliberate. Retrieval adds tokens to every request,
+ * tokens are money on a paid provider, and the budget guard that would bound the
+ * spend is Phase 8. Turning it on for every caller before that guard exists would
+ * be spending the user's money on a default they never chose.
+ *
+ * With a positive budget, `assembleContext` runs against the PERSISTED graph and
+ * the loop is handed the text (see `RunTaskDeps.retrievedContext`). Assembly emits
+ * `context_assembled` with the paths and the estimate, so what the model was shown
+ * is on the log either way.
+ *
+ * No graph on disk means no retrieval: `assembleContext` would otherwise walk the
+ * user's whole tree because a run started. The refusal is logged, not silent.
  */
 async function run(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
   const task = readTask(params['task'], 'params.task')
@@ -383,6 +404,11 @@ async function run(params: Record<string, unknown>, ctx: MethodContext): Promise
   const adapter = adapterFor(params, ctx)
   const maxIterations = optionalNumber(params, 'maxIterations', 'params.maxIterations')
   const reviewEdits = optionalBoolean(params, 'reviewEdits', 'params.reviewEdits')
+  const contextBudgetTokens = optionalNumber(
+    params,
+    'contextBudgetTokens',
+    'params.contextBudgetTokens',
+  )
 
   const events = new StreamingEventStore(
     new JsonlEventStore({ baseDir: root, secrets: () => ctx.secrets() }),
@@ -390,6 +416,14 @@ async function run(params: Record<string, unknown>, ctx: MethodContext): Promise
   )
 
   const skills = await loadRequestedSkills(root, params, task, ctx)
+  const retrievedContext = await retrieveContextFor(
+    root,
+    task,
+    skills,
+    contextBudgetTokens,
+    events,
+    ctx,
+  )
 
   return runTask(task, {
     adapter,
@@ -400,9 +434,63 @@ async function run(params: Record<string, unknown>, ctx: MethodContext): Promise
     root,
     skills,
     projectContext: await loadProjectContext(root),
+    ...(retrievedContext !== undefined ? { retrievedContext } : {}),
     ...(maxIterations !== undefined ? { maxIterations } : {}),
     ...(reviewEdits !== undefined ? { reviewEdits } : {}),
   })
+}
+
+/**
+ * Assemble retrieved context for a run, or return `undefined` and say why.
+ *
+ * Retrieval failing must not fail the run: a task with no context is a worse run,
+ * not a dead one, and a corrupt index is a live possibility (`loadRepoGraph`
+ * already treats one as "no graph"). The reason is logged through `ctx.log`, which
+ * is stderr on the wire, so it never contaminates the event stream on stdout.
+ */
+async function retrieveContextFor(
+  root: string,
+  task: Task,
+  skills: readonly Skill[],
+  budgetTokens: number | undefined,
+  events: EventStore,
+  ctx: MethodContext,
+): Promise<string | undefined> {
+  if (budgetTokens === undefined) return undefined
+  if (!Number.isFinite(budgetTokens) || budgetTokens <= 0) {
+    ctx.log(`context retrieval skipped: contextBudgetTokens must be positive, got ${budgetTokens}`)
+    return undefined
+  }
+
+  const graph = await loadRepoGraph(root)
+  if (graph === null) {
+    ctx.log(
+      `context retrieval skipped: no repository graph at ${graphPath(root)} ` +
+        `(build one with the architecture method's index flag)`,
+    )
+    return undefined
+  }
+
+  try {
+    const assembled = await assembleContext({
+      root,
+      baseDir: root,
+      query: task.prompt,
+      budgetTokens: Math.floor(budgetTokens),
+      graph,
+      skills,
+      events,
+      runId: task.id,
+    })
+    if (assembled.text === '') {
+      ctx.log('context retrieval produced nothing: no chunk matched the task prompt')
+      return undefined
+    }
+    return assembled.text
+  } catch (err) {
+    ctx.log(`context retrieval failed, continuing without it: ${messageOf(err)}`)
+    return undefined
+  }
 }
 
 /**

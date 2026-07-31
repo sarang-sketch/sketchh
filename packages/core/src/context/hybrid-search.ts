@@ -162,6 +162,89 @@ export async function detectRipgrep(
   return probe
 }
 
+// ── query terms ─────────────────────────────────────────────────────────────
+//
+// A LITERAL SEARCH FOR A WHOLE SENTENCE FINDS NOTHING, which is the shape a real
+// task prompt arrives in. `assembleContext` is called with `task.prompt`, and
+// "where is the payments retry budget set?" appears verbatim in no source file, so
+// searching for it as one fixed string returns zero hits and hybrid retrieval
+// silently collapses onto the weak hashing vector channel — exactly the failure
+// Requirement 18.2 exists to prevent, arriving through the front door.
+//
+// So the query is split into TERMS and the channel searches for each. A query that
+// is already a single identifier tokenises to itself, so the single-token path is
+// byte-for-byte what it was before.
+//
+// Scoring across terms is COORDINATION-FIRST: a chunk matching three of the query's
+// terms outranks a chunk matching one of them a hundred times. That ordering is what
+// makes a sentence query behave like a search rather than like a keyword lottery,
+// and it is why `termsMatched` is the first key in `compareHits`.
+
+/** Terms a single lexical search will look for. Each one costs a scan or a spawn. */
+export const MAX_QUERY_TERMS = 8
+
+/** Shortest term kept. Two-character tokens match almost everything. */
+const MIN_TERM_LENGTH = 3
+
+/**
+ * Words carrying no retrieval signal in an engineering prompt.
+ *
+ * Deliberately short and English-only: this is a stopword list, not a linguistics
+ * project, and every entry earns its place by appearing in ordinary task prompts
+ * while telling a code search nothing. Anything not on it survives, so a term this
+ * list has never heard of is kept rather than guessed at.
+ *
+ * Written as ONE space-separated string rather than an array of quoted words on
+ * purpose. The zero-dependency guard (`test/deps.test.ts`) scans this package's
+ * source for `from '<specifier>'`, so a list containing the quoted word `'from'`
+ * beside another quoted word reads to it as a bare import — and it failed exactly
+ * that way when this list was first written. The guard is right to be that literal:
+ * it is the thing standing between this package and a silent dependency. So the
+ * data moved instead of the guard. Keep `from` away from the end of a segment for
+ * the same reason.
+ */
+const STOPWORDS: ReadonlySet<string> = new Set(
+  (
+    'the and for are but not you all can her was one our out has had how its who ' +
+    'why which what when where that this with from into onto have been does did ' +
+    'should would could will shall must may find show tell give make get set use ' +
+    'used using please need want look looking about there their then than them ' +
+    'these those some any each every code file files project repository repo value'
+  ).split(' ')
+)
+
+/**
+ * Split a query into search terms, in first-appearance order.
+ *
+ * Identifier-shaped runs only: `retry_budget`, `RETRY_BUDGET_MS` and `parseRetry`
+ * survive whole, because splitting an identifier on its own case boundaries would
+ * turn one precise term into three vague ones. Punctuation, prose and stopwords
+ * drop out. Deduplicated case-insensitively, keeping the first spelling seen, and
+ * capped at {@link MAX_QUERY_TERMS}.
+ *
+ * A query with no surviving term (all stopwords, all punctuation) falls back to the
+ * trimmed query itself, so the channel always searches for *something* the caller
+ * actually asked for rather than quietly returning nothing.
+ */
+export function queryTerms(query: string): string[] {
+  const trimmed = query.trim()
+  if (trimmed === '') return []
+
+  const terms: string[] = []
+  const seen = new Set<string>()
+  for (const raw of trimmed.match(/[A-Za-z_$][A-Za-z0-9_$]*|\d[\w.]*/g) ?? []) {
+    if (raw.length < MIN_TERM_LENGTH) continue
+    const lower = raw.toLowerCase()
+    if (STOPWORDS.has(lower)) continue
+    if (seen.has(lower)) continue
+    seen.add(lower)
+    terms.push(raw)
+    if (terms.length >= MAX_QUERY_TERMS) break
+  }
+
+  return terms.length === 0 ? [trimmed] : terms
+}
+
 // ── lexical channel ─────────────────────────────────────────────────────────
 
 export interface LexicalHit {
@@ -171,19 +254,24 @@ export interface LexicalHit {
   chunkIndex: number
   startLine: number
   endLine: number
-  /** Occurrences of the query inside this chunk. */
+  /** Occurrences of any query term inside this chunk. */
   matches: number
   /** Occurrences that sit on an identifier boundary. Weighted higher. */
   exactMatches: number
   /** Lines in this chunk that matched. */
   matchLines: number
+  /**
+   * How many DISTINCT query terms matched this chunk. 1 for a single-term query.
+   * The first sort key: coverage of the question beats repetition of one word.
+   */
+  termsMatched: number
   /** `3 * exactMatches + 1 * (matches - exactMatches)`. */
   score: number
   /** Lowest matching line number, 0-based like the chunker's `startLine`. */
   firstLine: number
   /** The first matching line, clipped. Evidence, not decoration. */
   preview: string
-  /** True when some matching line looks like a definition of the query. */
+  /** True when some matching line looks like a definition of a query term. */
   definition: boolean
 }
 
@@ -197,6 +285,8 @@ export interface LexicalResult {
   filesScanned: number
   /** True when a cap stopped the search early. */
   truncated: boolean
+  /** The terms actually searched for, in order. What `queryTerms` returned. */
+  terms: string[]
 }
 
 export interface LexicalSearchOptions {
@@ -346,28 +436,38 @@ interface HitAccumulator {
   chunk: GraphChunk
   matches: number
   exactMatches: number
-  matchLines: number
+  /** Distinct `${line}` values that matched any term. Counted once per line. */
+  lines: Set<number>
+  /** Distinct terms that matched, lower-cased. */
+  terms: Set<string>
   firstLine: number
   preview: string
   definition: boolean
 }
 
+/**
+ * Fold one matching line into the accumulator for its chunk.
+ *
+ * `term` is one element of {@link queryTerms}, never the whole query, so the same
+ * line can arrive here several times — once per term it contains. `lines` is a set
+ * for exactly that reason: a line matching three terms is still one matching line.
+ */
 function accumulate(
   acc: Map<string, HitAccumulator>,
   file: GraphFile,
   line: number,
   text: string,
-  query: string,
+  term: string,
   ignoreCase: boolean
 ): void {
-  const counted = countMatches(text, query, ignoreCase)
+  const counted = countMatches(text, term, ignoreCase)
   if (counted.matches === 0) return
   const chunk = chunkForLine(file, line)
   if (chunk === null) return
 
   const id = `${file.path}#${chunk.index}`
   const existing = acc.get(id)
-  const definition = looksLikeDefinition(text, query)
+  const definition = looksLikeDefinition(text, term)
 
   if (existing === undefined) {
     acc.set(id, {
@@ -375,7 +475,8 @@ function accumulate(
       chunk,
       matches: counted.matches,
       exactMatches: counted.exact,
-      matchLines: 1,
+      lines: new Set([line]),
+      terms: new Set([term.toLowerCase()]),
       firstLine: line,
       preview: text.slice(0, PREVIEW_CHARS),
       definition,
@@ -385,7 +486,8 @@ function accumulate(
 
   existing.matches += counted.matches
   existing.exactMatches += counted.exact
-  existing.matchLines += 1
+  existing.lines.add(line)
+  existing.terms.add(term.toLowerCase())
   existing.definition = existing.definition || definition
   if (line < existing.firstLine) {
     existing.firstLine = line
@@ -407,11 +509,18 @@ function lexicalScore(matches: number, exact: number): number {
 }
 
 /**
- * Deterministic order for lexical hits: score, then definition-ness, then path,
- * then chunk index. Never insertion order — the scanner and ripgrep discover
- * files in different orders and must still rank identically.
+ * Deterministic order for lexical hits: TERM COVERAGE first, then score, then
+ * definition-ness, then path, then chunk index. Never insertion order — the scanner
+ * and ripgrep discover files in different orders and must still rank identically.
+ *
+ * Coverage leads because the alternative loses the multi-term query outright: a
+ * chunk repeating `budget` twelve times would otherwise outrank the chunk that
+ * mentions `payments`, `retry` AND `budget` once each, and the second chunk is the
+ * answer. For a single-term query `termsMatched` is 1 everywhere and this key
+ * disappears, leaving the original ordering untouched.
  */
 function compareHits(a: LexicalHit, b: LexicalHit): number {
+  if (b.termsMatched !== a.termsMatched) return b.termsMatched - a.termsMatched
   if (b.score !== a.score) return b.score - a.score
   if (a.definition !== b.definition) return a.definition ? -1 : 1
   if (a.path !== b.path) return a.path < b.path ? -1 : 1
@@ -429,7 +538,8 @@ function finishHits(acc: Map<string, HitAccumulator>, maxHits: number): { hits: 
       endLine: entry.chunk.endLine,
       matches: entry.matches,
       exactMatches: entry.exactMatches,
-      matchLines: entry.matchLines,
+      matchLines: entry.lines.size,
+      termsMatched: entry.terms.size,
       score: lexicalScore(entry.matches, entry.exactMatches),
       firstLine: entry.firstLine,
       preview: entry.preview,
@@ -478,38 +588,47 @@ export function parseRipgrepLine(
 
 async function ripgrepSearch(
   options: LexicalSearchOptions,
-  byPath: Map<string, GraphFile>
+  byPath: Map<string, GraphFile>,
+  terms: readonly string[]
 ): Promise<{ result: LexicalResult } | { failure: string }> {
   const ignoreCase = options.ignoreCase === true
-  const command = {
-    name: 'lexical-search',
-    cmd: options.binary ?? RIPGREP_BINARY,
-    // The query travels as ONE element of this array. There is no string here to
-    // interpolate it into, which is the whole point.
-    args: ripgrepArgs(options.query, { ignoreCase }),
-    cwd: options.root,
-    timeoutMs: 20_000,
-  }
-
-  const run = await runCommand(command, { signal: options.signal })
-
-  // ripgrep: 0 = matches, 1 = no matches, 2+ = a real error.
-  if (run.exitCode !== 0 && run.exitCode !== 1) {
-    const detail = run.stderr.trim()
-    return { failure: detail === '' ? `ripgrep exited with ${run.exitCode}` : detail }
-  }
-
   const acc = new Map<string, HitAccumulator>()
   const files = new Set<string>()
-  for (const raw of run.stdout.split('\n')) {
-    const parsed = parseRipgrepLine(raw.replace(/\r$/, ''), path => byPath.has(path))
-    if (parsed === null) continue
-    const file = byPath.get(parsed.path)
-    // Restrict to the graph's file list so both engines see one universe: the
-    // walker already applied `.gitignore`, the skip list and the size cap.
-    if (file === undefined) continue
-    files.add(file.path)
-    accumulate(acc, file, parsed.line, parsed.text, options.query, ignoreCase)
+
+  // One spawn per term, sequentially. `MAX_QUERY_TERMS` is what bounds this; a
+  // single `--regexp` per term in one invocation would be fewer processes but the
+  // output would no longer say WHICH term matched a line, and term coverage is the
+  // first thing the ranking needs.
+  for (const term of terms) {
+    const run = await runCommand(
+      {
+        name: 'lexical-search',
+        cmd: options.binary ?? RIPGREP_BINARY,
+        // The term travels as ONE element of this array. There is no string here
+        // to interpolate it into, which is the whole point.
+        args: ripgrepArgs(term, { ignoreCase }),
+        cwd: options.root,
+        timeoutMs: 20_000,
+      },
+      { signal: options.signal }
+    )
+
+    // ripgrep: 0 = matches, 1 = no matches, 2+ = a real error.
+    if (run.exitCode !== 0 && run.exitCode !== 1) {
+      const detail = run.stderr.trim()
+      return { failure: detail === '' ? `ripgrep exited with ${run.exitCode}` : detail }
+    }
+
+    for (const raw of run.stdout.split('\n')) {
+      const parsed = parseRipgrepLine(raw.replace(/\r$/, ''), path => byPath.has(path))
+      if (parsed === null) continue
+      const file = byPath.get(parsed.path)
+      // Restrict to the graph's file list so both engines see one universe: the
+      // walker already applied `.gitignore`, the skip list and the size cap.
+      if (file === undefined) continue
+      files.add(file.path)
+      accumulate(acc, file, parsed.line, parsed.text, term, ignoreCase)
+    }
   }
 
   const { hits, truncated } = finishHits(acc, options.maxHits ?? MAX_LEXICAL_HITS)
@@ -521,13 +640,15 @@ async function ripgrepSearch(
       reason: null,
       filesScanned: files.size,
       truncated,
+      terms: [...terms],
     },
   }
 }
 
 async function scannerSearch(
   options: LexicalSearchOptions,
-  reason: string
+  reason: string,
+  terms: readonly string[]
 ): Promise<LexicalResult> {
   const ignoreCase = options.ignoreCase === true
   const limit = options.maxFilesScanned ?? MAX_SCANNED_FILES
@@ -554,13 +675,20 @@ async function scannerSearch(
       continue
     }
 
+    // Every term, one pass over the file's lines. The per-file cap counts LINES
+    // that matched anything, not lines per term, so a chunk cannot buy extra
+    // budget by matching more of the query.
     const lines = content.split('\n')
     let perFile = 0
     for (let i = 0; i < lines.length; i++) {
       const text = lines[i]!.replace(/\r$/, '')
-      if (!hasMatch(text, options.query, ignoreCase)) continue
-      accumulate(acc, file, i, text, options.query, ignoreCase)
-      if (++perFile >= MAX_MATCHES_PER_FILE) break
+      let matchedHere = false
+      for (const term of terms) {
+        if (!hasMatch(text, term, ignoreCase)) continue
+        accumulate(acc, file, i, text, term, ignoreCase)
+        matchedHere = true
+      }
+      if (matchedHere && ++perFile >= MAX_MATCHES_PER_FILE) break
     }
   }
 
@@ -572,6 +700,7 @@ async function scannerSearch(
     reason,
     filesScanned: scanned,
     truncated: truncated || overflow,
+    terms: [...terms],
   }
 }
 
@@ -588,24 +717,40 @@ function hasMatch(line: string, query: string, ignoreCase: boolean): boolean {
  */
 export async function lexicalSearch(options: LexicalSearchOptions): Promise<LexicalResult> {
   if (options.query.trim() === '') {
-    return { engine: 'scanner', hits: [], degraded: false, reason: 'empty query', filesScanned: 0, truncated: false }
+    return {
+      engine: 'scanner',
+      hits: [],
+      degraded: false,
+      reason: 'empty query',
+      filesScanned: 0,
+      truncated: false,
+      terms: [],
+    }
   }
+
+  // Computed once, here, so both engines search for the same list and a result can
+  // report what was actually looked for.
+  const terms = queryTerms(options.query)
 
   const byPath = new Map<string, GraphFile>()
   for (const file of options.graph.files) byPath.set(file.path, file)
 
   if (options.preferRipgrep === false) {
-    return scannerSearch(options, 'ripgrep skipped by configuration')
+    return scannerSearch(options, 'ripgrep skipped by configuration', terms)
   }
 
   const probe = await detectRipgrep({ binary: options.binary, cwd: options.root })
   if (!probe.available) {
-    return scannerSearch(options, `${probe.reason}; scanning the indexed file list instead`)
+    return scannerSearch(options, `${probe.reason}; scanning the indexed file list instead`, terms)
   }
 
-  const attempt = await ripgrepSearch(options, byPath)
+  const attempt = await ripgrepSearch(options, byPath, terms)
   if ('failure' in attempt) {
-    return scannerSearch(options, `ripgrep failed: ${attempt.failure}; scanning the indexed file list instead`)
+    return scannerSearch(
+      options,
+      `ripgrep failed: ${attempt.failure}; scanning the indexed file list instead`,
+      terms
+    )
   }
   return attempt.result
 }
@@ -789,13 +934,20 @@ export function rerankScore(rrf: number, boost: number): number {
 function boostFor(
   candidate: FusedCandidate,
   lexical: LexicalHit | undefined,
-  query: string
+  terms: readonly string[]
 ): number {
   let boost = 0
   if (lexical?.definition === true) boost += RERANK_WEIGHTS.definition
   if (candidate.channels.length > 1) boost += RERANK_WEIGHTS.agreement
   if (lexical !== undefined) boost += RERANK_WEIGHTS.exactMatch * Math.min(lexical.exactMatches, 4)
-  if (query !== '' && candidate.path.includes(query)) boost += RERANK_WEIGHTS.pathMatch
+  // Path match is per TERM, not on the whole query: `src/payments/retry.ts` should
+  // earn this signal for a prompt about the payments retry budget, and it never
+  // could while the test was `path.includes("<the whole sentence>")`. Awarded once
+  // however many terms hit, so a long query cannot inflate the boost past its
+  // documented weight.
+  if (terms.some(term => term !== '' && candidate.path.includes(term))) {
+    boost += RERANK_WEIGHTS.pathMatch
+  }
   return boost
 }
 
@@ -811,9 +963,13 @@ export function rerank(
   query: string,
   enabled = true
 ): HybridHit[] {
+  // Tokenised once for the whole list, with the same function the lexical channel
+  // used, so the rerank cannot disagree with the search about what was asked.
+  const terms = enabled ? queryTerms(query) : []
+
   const hits: HybridHit[] = candidates.map(candidate => {
     const lexical = lexicalById.get(candidate.id)
-    const boost = enabled ? boostFor(candidate, lexical, query) : 0
+    const boost = enabled ? boostFor(candidate, lexical, terms) : 0
     return {
       id: candidate.id,
       path: candidate.path,
