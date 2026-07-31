@@ -1,5 +1,5 @@
 import styles from './ActivityBar.module.css';
-import { Files, Search, GitBranch, GitPullRequest, Play, Puzzle, Settings, Server, Activity, MessageSquare } from '../Icons';
+import { Files, Search, GitBranch, GitPullRequest, Layers, Play, Puzzle, Settings, Server, Activity, MessageSquare } from '../Icons';
 import { useAppState, useAppDispatch, type AppState } from '../../state/AppState';
 
 type PanelId = NonNullable<AppState['ideActivePanel']>;
@@ -29,6 +29,7 @@ export default function ActivityBar() {
     { id: 'search', icon: Search, label: 'Search' },
     { id: 'git', icon: GitBranch, label: 'Source Control' },
     { id: 'review', icon: GitPullRequest, label: 'Diff Review' },
+    { id: 'architecture', icon: Layers, label: 'Live Architecture' },
     { id: 'timeline', icon: Activity, label: 'Timeline' },
     { id: 'console', icon: MessageSquare, label: 'Agent Console' },
     { id: 'run', icon: Play, label: 'Run & Debug' },

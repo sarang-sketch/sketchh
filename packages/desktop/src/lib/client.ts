@@ -8,6 +8,7 @@
 // Validates: Requirements 13.1, 13.3
 
 import type {
+  ArchitectureDiagrams,
   EvalCase,
   EvalResult,
   GitStatusResult,
@@ -57,6 +58,28 @@ export interface ProviderTestRequest {
     apiKey?: string
   }
   timeoutMs?: number
+}
+
+/** What `architecture` answers: the seven views, plus where the graph was read from. */
+export interface ArchitectureResult {
+  /** The project the views were derived from, as the engine resolved it. */
+  root: string
+  /** `<root>/.sketch/index/graph.json`, so a surface with no graph can name it. */
+  graphPath: string
+  /** False when nothing readable was at `graphPath`; every view is then unavailable. */
+  graphPresent: boolean
+  /** Present only when this call was asked to index. Counts the work it did. */
+  indexed?: {
+    walked: number
+    indexed: number
+    added: number
+    changed: number
+    reused: number
+    removed: number
+    chunks: number
+    truncated: boolean
+  }
+  diagrams: ArchitectureDiagrams
 }
 
 export interface RunOptions {
@@ -142,6 +165,29 @@ export interface SketchClient {
     params: ProviderTestRequest,
     options?: { signal?: AbortSignal },
   ): Promise<ProviderTestResult>
+
+  // ── architecture ──────────────────────────────────────────────────────────
+  //
+  // Same reasoning as git and provider settings: the generator reads the persisted
+  // graph and the bytes of the files it lists, so it is engine work reached over
+  // this seam rather than duplicated in the UI. No network is involved on either
+  // side of the call (Requirement 19.5).
+  //
+  // OPTIONAL, like `captureEval`, because a transport is allowed not to have an
+  // engine behind it. The Live Architecture panel says which transport it is talking
+  // to when the method is missing instead of drawing seven empty boxes.
+
+  /**
+   * Derive the seven views. `index` rebuilds `.sketch/index/graph.json` first —
+   * explicit, because it walks the project, and it is what makes the panel's
+   * "index this project" offer actionable.
+   */
+  architecture?(params: {
+    root: string
+    index?: boolean
+    maxNodes?: number
+    maxEdges?: number
+  }): Promise<ArchitectureResult>
 
   /**
    * Attach a handler to the engine's event stream. Called for every event from

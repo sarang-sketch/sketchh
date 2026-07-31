@@ -1135,6 +1135,86 @@ function stripComments(source: string): string {
   return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '')
 }
 
+/**
+ * Blank the CONTENT of string and template literals, preserving length.
+ *
+ * Needed because three of the five hazards below are CODE CONSTRUCTS — `import(`,
+ * `import.meta`, `require(` — and a construct cannot live inside a string literal.
+ * Without this, an edge label reading `${count} import(s)` (the architecture
+ * generator's system view) is reported as a dynamic import, and a guard that cries
+ * wolf gets deleted.
+ *
+ * Template SUBSTITUTIONS are deliberately left visible: `${await import(x)}` is real
+ * code in a real position, so masking it would be the weakening this avoids. The two
+ * string-shaped hazards — a `package.json` reference and a `.json` import — keep
+ * reading the raw source, because those ARE strings.
+ */
+function maskLiterals(source: string): string {
+  const out = source.split('')
+  /** Quote characters of the literals currently open, innermost last. */
+  const stack: string[] = []
+  /** Brace depth of each open `${` substitution, innermost last. */
+  const substitutions: number[] = []
+  let braces = 0
+
+  for (let i = 0; i < source.length; i++) {
+    const char = source[i]!
+    const open = stack[stack.length - 1]
+
+    if (open === undefined) {
+      if (char === "'" || char === '"' || char === '`') {
+        stack.push(char)
+        continue
+      }
+      if (char === '{') braces++
+      else if (char === '}') {
+        braces--
+        // The substitution closed: the enclosing template resumes.
+        if (substitutions.length > 0 && substitutions[substitutions.length - 1] === braces) {
+          substitutions.pop()
+          stack.push('`')
+        }
+      }
+      continue
+    }
+
+    if (char === '\\') {
+      out[i] = ' '
+      if (i + 1 < source.length) out[i + 1] = ' '
+      i++
+      continue
+    }
+    if (char === open) {
+      stack.pop()
+      continue
+    }
+    if (open === '`' && char === '$' && source[i + 1] === '{') {
+      // Leave the substitution's code visible.
+      stack.pop()
+      substitutions.push(braces)
+      braces++
+      i++
+      continue
+    }
+    if (char !== '\n') out[i] = ' '
+  }
+
+  return out.join('')
+}
+
+/** The five bundle hazards in one source text. Shared by the audit and its self-test. */
+function bundleHazards(source: string, name = 'source'): string[] {
+  const hazards: string[] = []
+  const code = maskLiterals(source)
+  if (/\bimport\s*\(/.test(code)) hazards.push(`${name}: dynamic import()`)
+  if (/\bimport\s*\.\s*meta\b/.test(code)) hazards.push(`${name}: import.meta`)
+  if (/\brequire\s*\(/.test(code)) hazards.push(`${name}: require()`)
+  // String-shaped hazards: read as written.
+  if (/package\.json/.test(source)) hazards.push(`${name}: package.json reference`)
+  if (/\bfrom\s*['"][^'"]+\.json['"]/.test(source)) hazards.push(`${name}: JSON import`)
+  return hazards
+}
+
 /** Every source file reachable from `src/cli.ts` through relative imports. */
 function moduleGraph(entry: string): string[] {
   const seen = new Set<string>()
@@ -1170,13 +1250,12 @@ describe('esbuild bundleability (Requirement 12.7)', () => {
   it('contains no dynamic import, no import.meta, and no runtime package.json read', () => {
     const hazards: string[] = []
     for (const file of graph) {
-      const source = stripComments(readFileSync(file, 'utf8'))
-      const name = file.slice(packageRoot.length + 1).replace(/\\/g, '/')
-      if (/\bimport\s*\(/.test(source)) hazards.push(`${name}: dynamic import()`)
-      if (/\bimport\s*\.\s*meta\b/.test(source)) hazards.push(`${name}: import.meta`)
-      if (/\brequire\s*\(/.test(source)) hazards.push(`${name}: require()`)
-      if (/package\.json/.test(source)) hazards.push(`${name}: package.json reference`)
-      if (/\bfrom\s*['"][^'"]+\.json['"]/.test(source)) hazards.push(`${name}: JSON import`)
+      hazards.push(
+        ...bundleHazards(
+          stripComments(readFileSync(file, 'utf8')),
+          file.slice(packageRoot.length + 1).replace(/\\/g, '/'),
+        ),
+      )
     }
 
     expect(
@@ -1186,6 +1265,30 @@ describe('esbuild bundleability (Requirement 12.7)', () => {
         'Each hazard above compiles and bundles fine and then fails at runtime in the ' +
         'shipped app.',
     ).toEqual([])
+  })
+
+  it('catches each hazard in code position, and does not flag the same words in a label', () => {
+    // Still caught: the four things that actually break a copied single-file bundle.
+    expect(bundleHazards("const m = await import('./late.js')")).toEqual([
+      'source: dynamic import()',
+    ])
+    expect(bundleHazards('const here = import.meta.url')).toEqual(['source: import.meta'])
+    expect(bundleHazards("const fs = require('node:fs')")).toEqual(['source: require()'])
+    expect(bundleHazards("await readFile(join(dir, 'package.json'))")).toEqual([
+      'source: package.json reference',
+    ])
+    expect(bundleHazards("import pkg from '../package.json'")).toEqual([
+      'source: package.json reference',
+      'source: JSON import',
+    ])
+    // A template SUBSTITUTION is code, so a dynamic import hiding in one is caught.
+    expect(bundleHazards('const x = `${await import("./late.js")}`')).toEqual([
+      'source: dynamic import()',
+    ])
+    // Not flagged: the words inside a literal. The architecture generator labels an
+    // edge `${count} import(s)`, which is text a diagram displays, not a construct.
+    expect(bundleHazards('return { label: `${count} import(s)` }')).toEqual([])
+    expect(bundleHazards("const note = 'call require() at your peril'")).toEqual([])
   })
 
   it('imports only relative paths and node: builtins, so the bundle needs no resolver', () => {

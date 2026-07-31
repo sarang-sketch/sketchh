@@ -32,6 +32,7 @@ import type {
   Unsubscribe,
   TransportKind,
   RunOptions,
+  ArchitectureResult,
   ProviderCatalogResult,
   ProviderTestRequest,
 } from './client'
@@ -488,6 +489,26 @@ export class StdioSketchClient implements SketchClient {
       },
       options.signal,
     )
+  }
+
+  // ── architecture ──────────────────────────────────────────────────────────
+  //
+  // Pass-through to the one `architecture` method. The root travels in the frame
+  // for the same reason it does for git: this client's own `root` is the sidecar's
+  // default for runs, not a substitute for the project the panel has open.
+
+  async architecture(params: {
+    root: string
+    index?: boolean
+    maxNodes?: number
+    maxEdges?: number
+  }): Promise<ArchitectureResult> {
+    return this.call<ArchitectureResult>('architecture', {
+      root: params.root,
+      ...(params.index === true ? { index: true } : {}),
+      ...(params.maxNodes !== undefined ? { maxNodes: params.maxNodes } : {}),
+      ...(params.maxEdges !== undefined ? { maxEdges: params.maxEdges } : {}),
+    })
   }
 
   subscribe(handler: EventHandler): Unsubscribe {

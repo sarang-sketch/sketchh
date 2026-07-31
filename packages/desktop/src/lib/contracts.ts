@@ -8,7 +8,7 @@
 // bundle takes on no runtime dependency on @sketch/core. The engine is reached
 // through the SketchClient seam (see ./client.ts) and never imported directly.
 
-import type { providers, settings, tools } from '@sketch/core'
+import type { context, providers, settings, tools } from '@sketch/core'
 
 /**
  * The git shapes, taken from the engine's parser rather than restated.
@@ -28,6 +28,17 @@ export type GitFileChange = tools.GitFileChange
  * the KEY-FREE file at `~/.sketch/providers.json`; there is no `apiKey` field on any
  * of them, by construction (Requirement 17.2).
  */
+/**
+ * The architecture generator's shapes, taken from the generator rather than
+ * restated. `mermaid` is TEXT — the panel renders it, and the panel is the only
+ * thing that renders it, so its emptiness rule (`available === false` ⇒ no diagram
+ * and a `reason`) is the UI's contract too (Requirement 19.3).
+ */
+export type ArchitectureDiagrams = context.ArchitectureDiagrams
+export type ArchitectureView = context.ArchitectureView
+export type ArchitectureViewKind = context.ArchitectureViewKind
+export type ViewEvidence = context.ViewEvidence
+
 export type ProviderDescriptor = providers.ProviderDescriptor
 export type ProviderSettingsEntry = settings.ProviderSettingsEntry
 export type ProviderSettingsFile = settings.ProviderSettingsFile

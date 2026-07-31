@@ -267,6 +267,17 @@ export class MockSketchClient implements SketchClient {
     return this.noEngine('provider-test')
   }
 
+  // ── architecture ──────────────────────────────────────────────────────────
+  //
+  // Same rule again, and here it is at its sharpest: a fabricated set of views
+  // would be a diagram of a repository that does not exist, which is the exact
+  // failure the generator refuses to commit (see the honesty note at the top of
+  // packages/core/src/context/architecture.ts). No graph, no answer, and it says so.
+
+  async architecture(): Promise<never> {
+    return this.noEngine('architecture')
+  }
+
   private nextRunId(): string {
     // Time-prefixed so ids sort chronologically, matching the engine's scheme.
     this.runCounter += 1

@@ -5,6 +5,7 @@ import { FileExplorer } from '../../panels/FileExplorer';
 import SearchPanel from '../../panels/ide/SearchPanel';
 import { GitPanel } from '../../panels/GitPanel';
 import { DiffReview } from '../../panels/DiffReview';
+import { LiveArchitecture } from '../../panels/LiveArchitecture';
 import { AgentTeamPanel } from '../../panels/agent/AgentTeamPanel';
 import { SkillsMarketplace } from '../../panels/SkillsMarketplace';
 import { AgentTimelinePanel } from '../../ui/panels/AgentTimeline';
@@ -35,6 +36,10 @@ export default function SidePanel() {
     case 'review':
       title = 'Diff Review';
       content = <DiffReview />;
+      break;
+    case 'architecture':
+      title = 'Live Architecture';
+      content = <LiveArchitecture />;
       break;
     case 'agents':
       title = 'Agent Team';

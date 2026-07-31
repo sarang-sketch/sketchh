@@ -209,6 +209,8 @@ export interface AppState {
     | 'git'
     /** Diff review: the proposed edits an agent has not applied yet (Req 16.1). */
     | 'review'
+    /** Live Architecture: the seven generated views of the graph (Req 19.3). */
+    | 'architecture'
     | 'agents'
     | 'skills'
     | 'settings'

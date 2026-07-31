@@ -23,6 +23,12 @@
 import { stat } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 
+import {
+  buildRepoGraph,
+  generateArchitecture,
+  graphPath,
+  loadRepoGraph,
+} from '../context/index.js'
 import { JsonlEventStore, MemoryEventStore, secretsFromEnv } from '../events/index.js'
 import type { EventStore } from '../events/index.js'
 import { runEvalSet, meanScore, captureRunAsEval } from '../evals/index.js'
@@ -589,6 +595,63 @@ async function providerTest(
   })
 }
 
+// ── architecture ─────────────────────────────────────────────────────────────
+//
+// The Live Architecture panel is a UI over this ONE method, for the same reason the
+// Git panel is a UI over `git-*`: the generator reads the persisted graph and the
+// bytes of the files it lists, which is machine work, so it belongs to the engine
+// and reaches the panel through `SketchClient` on both transports.
+//
+// WHY `index` IS A PARAMETER RATHER THAN A SECOND METHOD. With no graph on disk
+// every view comes back unavailable, and the only useful thing a surface can offer
+// is "index this project". That offer has to be actionable, and building the graph
+// then deriving from it is a single round trip with one honest answer — a separate
+// `repo-index` method would let a caller index and never regenerate, which is how a
+// panel ends up showing diagrams for a graph that has since been rebuilt.
+//
+// NO NETWORK, EVER (Requirement 19.5): the walk, the graph and all seven views are
+// pure derivations over local text. `diagram_updated` is recorded through the same
+// JSONL store a run uses (Requirement 19.2), so a regeneration shows up on the
+// Timeline; the generator emits exactly one per call.
+
+async function architecture(
+  params: Record<string, unknown>,
+  ctx: MethodContext,
+): Promise<unknown> {
+  const root = resolve(readString(params, 'root', 'params.root'))
+  const index = optionalBoolean(params, 'index', 'params.index')
+  const maxNodes = optionalNumber(params, 'maxNodes', 'params.maxNodes')
+  const maxEdges = optionalNumber(params, 'maxEdges', 'params.maxEdges')
+
+  const events = new StreamingEventStore(
+    new JsonlEventStore({ baseDir: root, secrets: () => ctx.secrets() }),
+    (event) => ctx.emitEvent(event),
+  )
+
+  // Indexing is explicit. A read that silently rebuilt the graph would walk the
+  // user's whole tree because a panel was opened.
+  const built = index === true ? await buildRepoGraph({ root, events }) : null
+  const graph = built === null ? await loadRepoGraph(root) : built.graph
+
+  const diagrams = await generateArchitecture({
+    graph,
+    root,
+    baseDir: root,
+    events,
+    ...(maxNodes !== undefined ? { maxNodes } : {}),
+    ...(maxEdges !== undefined ? { maxEdges } : {}),
+  })
+
+  return {
+    root,
+    // Named so a surface with no graph can say WHERE it looked.
+    graphPath: graphPath(root),
+    graphPresent: graph !== null,
+    ...(built === null ? {} : { indexed: built.stats }),
+    diagrams,
+  }
+}
+
 const SKILL_FILE = 'SKILL.md'
 const SKILL_MANIFEST = 'skill.json'
 
@@ -671,6 +734,9 @@ export const METHODS: Readonly<Record<string, MethodHandler>> = {
   'provider-catalog': providerCatalog,
   'provider-config-save': providerConfigSave,
   'provider-test': providerTest,
+  // Task 5.5's Live Architecture panel: the seven views derived from the persisted
+  // graph, plus the optional rebuild that makes "index this project" actionable.
+  architecture,
 }
 
 /** The five the protocol contract names. Every build answers at least these. */

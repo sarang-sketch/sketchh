@@ -1,0 +1,300 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  min-height: 0;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.toolbarTitle {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  flex: 1;
+  min-width: 0;
+}
+
+.iconBtn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s ease, background-color 0.2s ease;
+}
+
+.iconBtn:hover:not(:disabled) {
+  color: var(--text-primary);
+  background-color: var(--bg-hover);
+}
+
+.iconBtn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.summary {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  word-break: break-word;
+}
+
+/* A named failure, never an empty diagram box (Requirement 27.5). */
+.error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--error);
+  border-bottom: 1px solid var(--border);
+  word-break: break-word;
+}
+
+/* ── view tabs ───────────────────────────────────────────────────────────── */
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.tab {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  padding: 3px 8px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.tab:hover {
+  color: var(--text-primary);
+  background-color: var(--bg-hover);
+}
+
+.tabActive {
+  color: var(--text-primary);
+  border-color: var(--accent);
+}
+
+.tabMark {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.tabMarkAvailable {
+  font-size: 10px;
+  color: var(--success);
+}
+
+/* ── the selected view ───────────────────────────────────────────────────── */
+
+.view {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.viewHead {
+  padding: 10px 12px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.viewTitle {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.counts {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* Unavailable: the reason, in place of a diagram. */
+.unavailable {
+  margin: 0 12px 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--warning);
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-surface);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.unavailableLabel {
+  font-weight: 600;
+  color: var(--warning);
+  margin-right: 4px;
+}
+
+.truncated {
+  margin: 0 12px 8px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--warning);
+}
+
+.notes {
+  margin: 0 12px 8px;
+  padding: 0;
+  list-style: none;
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.diagram {
+  margin: 0 12px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-surface);
+  overflow: auto;
+  max-height: 420px;
+}
+
+.svg {
+  display: block;
+  font-family: var(--font-mono);
+}
+
+.nodeBox {
+  fill: var(--bg-primary);
+  stroke: var(--border);
+}
+
+.nodeText {
+  fill: var(--text-primary);
+  font-size: 10px;
+}
+
+.edgeLine {
+  stroke: var(--text-muted);
+  stroke-width: 1;
+}
+
+.edgeText {
+  fill: var(--text-muted);
+  font-size: 9px;
+}
+
+.source {
+  margin: 0 12px 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-surface);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--text-primary);
+  white-space: pre;
+  overflow: auto;
+  max-height: 260px;
+}
+
+.evidence {
+  margin: 0 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+
+.evidenceLabel {
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 12px 10px;
+}
+
+.actionBtn {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  padding: 3px 8px;
+}
+
+.actionBtn:hover:not(:disabled) {
+  color: var(--text-primary);
+  background-color: var(--bg-hover);
+}
+
+.actionBtn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* ── honest nothings ─────────────────────────────────────────────────────── */
+
+.empty {
+  padding: 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.emptyTitle {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.emptyDetail {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  word-break: break-word;
+}
+
+.path {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  word-break: break-all;
+}

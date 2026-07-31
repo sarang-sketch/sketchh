@@ -5,6 +5,7 @@ import type {
   Unsubscribe,
   TransportKind,
   RunOptions,
+  ArchitectureResult,
   ProviderCatalogResult,
   ProviderTestRequest,
 } from './client'
@@ -163,6 +164,26 @@ export class HttpSketchClient implements SketchClient {
       },
       options.signal,
     )
+  }
+
+  // ── architecture ──────────────────────────────────────────────────────────
+  //
+  // The dev bridge dispatches the same `architecture` method the sidecar does, so
+  // the Live Architecture panel is real in the browser too. Nothing here derives a
+  // view: the engine already did (packages/core/src/context/architecture.ts).
+
+  async architecture(params: {
+    root: string
+    index?: boolean
+    maxNodes?: number
+    maxEdges?: number
+  }): Promise<ArchitectureResult> {
+    return this.callMethod<ArchitectureResult>('architecture', {
+      root: params.root,
+      ...(params.index === true ? { index: true } : {}),
+      ...(params.maxNodes !== undefined ? { maxNodes: params.maxNodes } : {}),
+      ...(params.maxEdges !== undefined ? { maxEdges: params.maxEdges } : {}),
+    })
   }
 
   subscribe(handler: EventHandler): Unsubscribe {
