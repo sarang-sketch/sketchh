@@ -32,8 +32,16 @@ import {
 } from '../context/index.js'
 import { JsonlEventStore, MemoryEventStore, secretsFromEnv } from '../events/index.js'
 import type { EventStore } from '../events/index.js'
-import { runEvalSet, meanScore, captureRunAsEval } from '../evals/index.js'
+import {
+  runEvalSet,
+  meanScore,
+  captureRunAsEval,
+  evalsFilePath,
+  loadEvalCases as readEvalCases,
+} from '../evals/index.js'
 import type { EvalDeps } from '../evals/index.js'
+import { installSkill, installedSkillsDir, loadManifest } from '../registry/index.js'
+import type { RegistryManifest } from '../registry/index.js'
 import { runTask } from '../loop/index.js'
 import { DiskFileWriter } from '../orchestrator/file-writer.js'
 import { PlanWriter } from '../plan/index.js'
@@ -47,10 +55,13 @@ import {
 } from '../settings/index.js'
 import type { ProviderTestTarget } from '../settings/index.js'
 import {
+  BEST_SKILL_FILENAME,
   loadProjectContext,
   loadSkillFile,
   loadSkillFolder,
   loadSkills,
+  providerProposeEdit,
+  trainSkill,
 } from '../skills/index.js'
 import { GitTool } from '../tools/index.js'
 import type {
@@ -740,6 +751,261 @@ async function architecture(
   }
 }
 
+// ── skills: the registry, installing from it, and training against it ────────
+//
+// The Skills surface is a UI over these three methods, for the third time and the
+// same reason: hashing a directory, writing into `.sketch/skills/`, and scoring an
+// eval set are all machine work, so they belong to the engine and reach the panel
+// through `SketchClient` on both transports.
+//
+// WHAT EACH ONE REFUSES TO DO:
+//   * `skills-catalog` reads. It never installs, so opening a panel cannot write.
+//   * `skill-install` verifies before it writes, and has no force parameter. There
+//     is deliberately no way to ask it to skip the hash check (see `install.ts`).
+//   * `skill-train` is EXPLICIT and off the hot path (Requirement 9.6): nothing
+//     calls it during a task run, and it is the only method here that can reach a
+//     provider. Its spend is bounded by the optimizer's own training budget.
+
+/** Env var naming the registry directory, for a caller that cannot pass params. */
+export const REGISTRY_DIR_ENV = 'SKETCH_REGISTRY_DIR'
+
+/**
+ * Where the pinned registry lives, or null.
+ *
+ * THERE IS NO PATH-RELATIVE DEFAULT, and that is not an omission. The sidecar is a
+ * single esbuild-bundled file copied next to the app binary: there is no
+ * `node_modules`, no package layout, and nothing at a path relative to
+ * `import.meta.url`. A default computed that way resolves under vitest, resolves
+ * from `dist/`, and then points at nothing in the shipped app — the exact class of
+ * defect `cli.test.ts`'s sidecar-hazard guard exists to catch, and it caught this.
+ *
+ * So the location is supplied: `params.registryDir`, or `SKETCH_REGISTRY_DIR` for a
+ * caller with no params to spare. With neither, the catalog reports that no registry
+ * is configured and names the parameter — an honest nothing rather than an empty
+ * list that reads as "there are no skills to install".
+ *
+ * The seeded registry ships in this package under `registry/` (see `files` in
+ * package.json). Pointing the app at it belongs to packaging, task 12.1, which is
+ * where the resource layout is decided.
+ */
+function configuredRegistryDir(
+  params: Record<string, unknown>,
+  ctx: MethodContext,
+): string | null {
+  const fromParams = optionalString(params, 'registryDir', 'params.registryDir')
+  if (fromParams !== undefined) return resolve(fromParams)
+  const fromEnv = ctx.env[REGISTRY_DIR_ENV]
+  if (typeof fromEnv === 'string' && fromEnv.trim() !== '') return resolve(fromEnv)
+  return null
+}
+
+/** Said in one place, so both methods refuse identically. */
+const NO_REGISTRY_REASON =
+  `no skill registry is configured: pass params.registryDir, or set ${REGISTRY_DIR_ENV}. ` +
+  `The curated registry ships inside @sketch/core under registry/`
+
+/**
+ * The catalog: every pinned skill, plus what is installed in this project.
+ *
+ * `installed` is read from disk rather than from a list the UI keeps, so a skill
+ * removed by hand shows as removed and the panel cannot disagree with the
+ * filesystem — the same discipline as one authoritative file cache in the editor.
+ */
+async function skillsCatalog(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
+  const root = resolve(optionalString(params, 'root', 'params.root') ?? ctx.cwd())
+  const registryDir = configuredRegistryDir(params, ctx)
+
+  let manifest: RegistryManifest | null = null
+  let diagnostic: string | undefined
+  if (registryDir === null) {
+    diagnostic = NO_REGISTRY_REASON
+  } else {
+    try {
+      manifest = (await loadManifest(registryDir)).manifest
+    } catch (err) {
+      // A registry that cannot be read is a surface that must say so, not an empty
+      // list that reads as "there are no skills".
+      manifest = null
+      diagnostic = messageOf(err)
+    }
+  }
+
+  const dir = installedSkillsDir(root)
+  const { skills, diagnostics } = await loadSkills(dir)
+  for (const message of diagnostics) ctx.log(`skill diagnostic: ${message}`)
+
+  return {
+    root,
+    registryDir,
+    installedDir: dir,
+    ...(manifest === null ? {} : { registry: manifest.registry, distribution: manifest.distribution }),
+    entries:
+      manifest === null
+        ? []
+        : manifest.entries.map((entry) => ({
+            name: entry.name,
+            version: entry.version,
+            pack: entry.pack,
+            summary: entry.summary,
+            digest: entry.digest,
+            capabilities: entry.capabilities,
+            source: entry.source,
+            license: entry.license,
+            files: entry.files?.length ?? 0,
+            // What the user needs before consenting: is it here, and is what is
+            // here still what the manifest describes.
+            installed: skills.some((skill) => skill.name === entry.name),
+          })),
+    installed: skills.map((skill) => ({
+      name: skill.name,
+      description: skill.description,
+      source: skill.source,
+      capabilities: skill.capabilities ?? [],
+    })),
+    ...(diagnostic !== undefined ? { diagnostic } : {}),
+    diagnostics,
+  }
+}
+
+/**
+ * Install one pinned skill into a project. Verifies first; refuses on mismatch.
+ *
+ * There is no `force`. An escape hatch on the hash check is the same thing as not
+ * having the check.
+ */
+async function skillInstall(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
+  const root = resolve(optionalString(params, 'root', 'params.root') ?? ctx.cwd())
+  const registryDir = configuredRegistryDir(params, ctx)
+  const name = readString(params, 'name', 'params.name')
+  if (registryDir === null) throw new InvalidParamsError(NO_REGISTRY_REASON)
+
+  const { manifest } = await loadManifest(registryDir)
+  const events = new StreamingEventStore(
+    new JsonlEventStore({ baseDir: root, secrets: () => ctx.secrets() }),
+    (event) => ctx.emitEvent(event),
+  )
+
+  const result = await installSkill({
+    manifest,
+    registryDir,
+    name,
+    projectRoot: root,
+    events,
+    runId: `install-${name}`,
+  })
+
+  return {
+    ok: result.ok,
+    name: result.name,
+    ...(result.dir !== undefined ? { dir: result.dir } : {}),
+    ...(result.digest !== undefined ? { digest: result.digest } : {}),
+    ...(result.granted !== undefined ? { granted: result.granted } : {}),
+    ...(result.skill !== undefined
+      ? { skill: { name: result.skill.name, description: result.skill.description } }
+      : {}),
+    warnings: result.warnings,
+    reason: result.reason,
+    files: result.written.length,
+  }
+}
+
+/**
+ * Train one installed skill on this project's captured evals (Requirement 9.6).
+ *
+ * OFF THE HOT PATH, and structurally so: nothing in `loop/` can reach this, it is
+ * only invoked by an explicit user action, and the strict `>` gate inside
+ * `trainSkill` is not parameterised from here — there is no way to ask this method
+ * to accept a tie.
+ *
+ * The cases come from `.sketch/evals/evals.jsonl`, which is what capture-as-eval
+ * has been writing since Phase 2: the user's own runs, scoring their own project.
+ * That is the compounding loop, and this is the method that closes it.
+ */
+async function skillTrain(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
+  const root = resolve(optionalString(params, 'root', 'params.root') ?? ctx.cwd())
+  const name = readString(params, 'name', 'params.name')
+  const epochs = optionalNumber(params, 'epochs', 'params.epochs')
+  const maxCalls = optionalNumber(params, 'maxCalls', 'params.maxCalls')
+  const maxTokens = optionalNumber(params, 'maxTokens', 'params.maxTokens')
+  const guidance = optionalString(params, 'guidance', 'params.guidance')
+  const write = optionalBoolean(params, 'write', 'params.write')
+  const adapter = adapterFor(params, ctx)
+
+  const { skills, diagnostics } = await loadSkills(installedSkillsDir(root))
+  for (const message of diagnostics) ctx.log(`skill diagnostic: ${message}`)
+  const seed = skills.find((skill) => skill.name === name)
+  if (seed === undefined) {
+    throw new InvalidParamsError(
+      `no installed skill named ${JSON.stringify(name)} in ${installedSkillsDir(root)}`,
+    )
+  }
+
+  const captured = await readEvalCases(root)
+  for (const message of captured.diagnostics) ctx.log(`eval diagnostic: ${message}`)
+  const cases = captured.cases
+  if (cases.length < 2) {
+    // Fewer than two cases cannot be split into a train set and a held-out set, and
+    // training with no held-out set is not training — it is editing.
+    return {
+      ok: false,
+      name,
+      reason:
+        `training needs at least 2 captured eval cases and found ${cases.length} in ` +
+        `${evalsFilePath(root)}. Capture some runs first: a trainer with no held-out ` +
+        `split cannot measure whether a change helped`,
+      cases: cases.length,
+    }
+  }
+
+  const events = new StreamingEventStore(
+    new JsonlEventStore({ baseDir: root, secrets: () => ctx.secrets() }),
+    (event) => ctx.emitEvent(event),
+  )
+  const ledger = { calls: 0, tokens: 0, refusal: null as string | null }
+
+  const result = await trainSkill({
+    seed,
+    cases,
+    events,
+    adapter,
+    ...(epochs !== undefined ? { epochs } : {}),
+    proposeEdit: providerProposeEdit({
+      adapter,
+      ledger,
+      ...(guidance !== undefined ? { guidance } : {}),
+      ...(maxCalls !== undefined || maxTokens !== undefined
+        ? {
+            budget: {
+              ...(maxCalls !== undefined ? { maxCalls } : {}),
+              ...(maxTokens !== undefined ? { maxTokens } : {}),
+            },
+          }
+        : {}),
+    }),
+    // Writing the artifact is opt-in: a training run the user has not looked at
+    // should not silently replace the skill they installed.
+    ...(write === true
+      ? { artifactPath: join(installedSkillsDir(root), name, BEST_SKILL_FILENAME) }
+      : {}),
+  })
+
+  return {
+    ok: true,
+    name,
+    improved: result.improved,
+    accepted: result.accepted,
+    baselineValScore: result.baselineValScore,
+    valScore: result.valScore,
+    cases: cases.length,
+    split: { train: result.split.train.length, val: result.split.val.length },
+    epochs: result.epochs,
+    budget: { calls: ledger.calls, tokens: ledger.tokens, refusal: ledger.refusal },
+    ...(result.artifactPath !== undefined ? { artifactPath: result.artifactPath } : {}),
+    // The winning body, so a surface can show a diff before the user writes it.
+    body: result.skill.body,
+  }
+}
+
 const SKILL_FILE = 'SKILL.md'
 const SKILL_MANIFEST = 'skill.json'
 
@@ -825,6 +1091,12 @@ export const METHODS: Readonly<Record<string, MethodHandler>> = {
   // Task 5.5's Live Architecture panel: the seven views derived from the persisted
   // graph, plus the optional rebuild that makes "index this project" actionable.
   architecture,
+  // Task 6.4's Skills surface. `skill-install` verifies before it writes and has no
+  // force parameter; `skill-train` is the only method here that can reach a provider
+  // and is invoked by explicit user action only (Requirement 9.6).
+  'skills-catalog': skillsCatalog,
+  'skill-install': skillInstall,
+  'skill-train': skillTrain,
 }
 
 /** The five the protocol contract names. Every build answers at least these. */

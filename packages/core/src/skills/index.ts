@@ -38,3 +38,21 @@ export type {
   EpochVerdict,
   CaseSplit,
 } from './trainer.js'
+
+// The provider-backed optimizer (Requirement 9.5). It may rewrite the skill's BODY
+// and nothing else — never its capabilities, which would make training a privilege
+// escalation. The strict `>` gate stays in `trainer.ts` and is not swappable.
+export {
+  DEFAULT_TRAINING_BUDGET,
+  MAX_BODY_CHARS,
+  MIN_BODY_CHARS,
+  SKILL_FENCE,
+  parseProposedBody,
+  providerProposeEdit,
+  stripFrontmatter,
+} from './optimizer.js'
+export type {
+  BudgetLedger,
+  ProviderProposeEditOptions,
+  TrainingBudget,
+} from './optimizer.js'

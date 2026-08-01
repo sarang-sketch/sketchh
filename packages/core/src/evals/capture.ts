@@ -38,7 +38,7 @@
 //
 // Validates: Requirements 8.1, 8.2, 8.4
 
-import { appendFile, mkdir } from 'node:fs/promises'
+import { appendFile, mkdir, readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 
 import { sanitizePayload, secretsFromEnv } from '../events/redact.js'
@@ -160,10 +160,106 @@ export async function captureRunAsEval(
 
   const evalCase: EvalCase = { id: newCaseId(), task: sanitizedTask, checks }
 
-  const targetPath =
-    options.evalsPath ?? join(process.cwd(), '.sketch', 'evals', 'evals.jsonl')
+  const targetPath = options.evalsPath ?? evalsFilePath(process.cwd())
   await mkdir(dirname(targetPath), { recursive: true })
   await appendFile(targetPath, `${JSON.stringify(evalCase)}\n`, 'utf8')
 
   return evalCase
+}
+
+/** `<baseDir>/.sketch/evals/evals.jsonl`, per the `.sketch/` layout. */
+export function evalsFilePath(baseDir: string): string {
+  return join(baseDir, '.sketch', 'evals', 'evals.jsonl')
+}
+
+/** What reading the captured set produced, and what it could not read. */
+export interface EvalCaseLoadResult {
+  cases: EvalCase[]
+  /** One message per unusable line, naming the line number. */
+  diagnostics: string[]
+  path: string
+}
+
+/**
+ * Read the captured eval cases back.
+ *
+ * The writer above has existed since Phase 2 and nothing read it until the trainer
+ * needed the user's own runs as a training set (Requirement 9.6) — so this is the
+ * other half of the compounding loop, and it is deliberately tolerant in exactly
+ * one direction.
+ *
+ * A MALFORMED LINE IS SKIPPED WITH A DIAGNOSTIC, not fatal: this file is appended
+ * to over months, a truncated final line after a crash is ordinary, and losing
+ * every captured case because of one bad line would be the worse failure. The same
+ * rule the event store's `readAll` follows.
+ *
+ * A line that parses but is not a usable case is also skipped, for a reason the
+ * eval harness explains: a case with no checks scores 0 for every candidate, so a
+ * split full of them hands the trainer's strict gate a coin flip. Refusing to load
+ * them keeps that out of the training set entirely.
+ *
+ * A missing file is not an error — it means nothing has been captured yet.
+ */
+export async function loadEvalCases(baseDirOrPath: string): Promise<EvalCaseLoadResult> {
+  const path = baseDirOrPath.endsWith('.jsonl') ? baseDirOrPath : evalsFilePath(baseDirOrPath)
+
+  let text: string
+  try {
+    text = await readFile(path, 'utf8')
+  } catch {
+    return { cases: [], diagnostics: [], path }
+  }
+
+  const cases: EvalCase[] = []
+  const diagnostics: string[] = []
+  const lines = text.split('\n')
+
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index]!.trim()
+    if (line === '') continue
+
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(line)
+    } catch {
+      diagnostics.push(`${path}:${index + 1}: not valid JSON, skipped`)
+      continue
+    }
+
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      diagnostics.push(`${path}:${index + 1}: not an object, skipped`)
+      continue
+    }
+
+    const candidate = parsed as Partial<EvalCase>
+    const task = candidate.task as Partial<Task> | undefined
+    if (typeof candidate.id !== 'string' || candidate.id === '') {
+      diagnostics.push(`${path}:${index + 1}: missing id, skipped`)
+      continue
+    }
+    if (task === undefined || typeof task.id !== 'string' || typeof task.prompt !== 'string') {
+      diagnostics.push(`${path}:${index + 1}: missing or malformed task, skipped`)
+      continue
+    }
+    if (!Array.isArray(candidate.checks) || candidate.checks.length === 0) {
+      diagnostics.push(
+        `${path}:${index + 1}: case "${candidate.id}" defines no checks, skipped ` +
+          `(a check-free case scores 0 for every candidate and would make the trainer\u2019s gate a coin flip)`,
+      )
+      continue
+    }
+
+    cases.push({
+      id: candidate.id,
+      task: {
+        id: task.id,
+        prompt: task.prompt,
+        verify: Array.isArray(task.verify) ? (task.verify as Task['verify']) : [],
+        ...(Array.isArray(task.skillNames) ? { skillNames: task.skillNames as string[] } : {}),
+      },
+      checks: candidate.checks as EvalCase['checks'],
+    })
+  }
+
+  return { cases, diagnostics, path }
 }
