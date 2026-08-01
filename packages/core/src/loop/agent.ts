@@ -85,6 +85,31 @@ export type VerifyRunner = (
   options: { sink?: VerifyEventSink; runId?: string; signal?: AbortSignal },
 ) => Promise<VerifyResult[]>
 
+/**
+ * The tool seam: exactly the two members the loop needs from
+ * `capabilities.ToolDispatcher`.
+ *
+ * Structural, not a class import, for the same reason `PlanGate` is: the loop
+ * states the smallest surface it depends on, and a caller can satisfy it without
+ * this file reaching into the capabilities module. What the loop is NOT allowed to
+ * do is check a capability itself — there is one authorisation point and it is
+ * inside the dispatcher.
+ */
+export interface ToolDispatch {
+  call(
+    name: string,
+    args?: Record<string, unknown>,
+    options?: { runId?: string },
+  ): Promise<{
+    ok: boolean
+    name: string
+    output: string
+    denied: string | null
+  }>
+  /** Tool names this grant can reach. Advisory; used to tell the model. */
+  readonly availableTools: readonly { name: string; description: string }[]
+}
+
 export interface RunTaskDeps {
   /** The model. The only network-touching collaborator, and it is a seam. */
   adapter: ChatAdapter
@@ -125,6 +150,22 @@ export interface RunTaskDeps {
    * a retrieval guess as a project rule.
    */
   retrievedContext?: string
+  /**
+   * The capability-scoped tool layer, already constructed with the grant in force
+   * for this run (`capabilities.ToolDispatcher`).
+   *
+   * OMITTED IS THE HONEST DEFAULT for a build with no tool layer: every `tool`
+   * action is refused with {@link TOOL_UNAVAILABLE_REASON}, which is what this
+   * engine has always done. Supplying one routes `tool` actions through the ONE
+   * authorisation point, which emits its own `tool_called` / `tool_denied` — so
+   * this file must not also emit them, or one action would put two denials on the
+   * log.
+   *
+   * The loop deliberately does not construct a dispatcher itself. Resolving a
+   * grant means knowing which skill is speaking and what the registry granted it,
+   * and that is the caller's knowledge (`rpc/methods.ts`), not the loop's.
+   */
+  tools?: ToolDispatch
   /** File reader used to resolve search/replace edits. Injectable for tests. */
   readText?: TextReader
   /**
@@ -182,6 +223,31 @@ function contextMessages(deps: RunTaskDeps): Message[] {
     if (!isBlank(context.agents)) parts.push(`# AGENTS.md\n${context.agents}`)
     if (!isBlank(context.claude)) parts.push(`# CLAUDE.md\n${context.claude}`)
     out.push({ role: 'system', content: parts.join('\n\n') })
+  }
+
+  // What the grant actually permits, so the model does not spend turns on calls
+  // the gate will refuse. ADVISORY ONLY: the check is at execution time inside the
+  // dispatcher, and a model that ignores this text changes nothing about what runs.
+  const dispatch = deps.tools
+  if (dispatch !== undefined) {
+    const available = dispatch.availableTools
+    out.push({
+      role: 'system',
+      content:
+        available.length === 0
+          ? [
+              '# Tools',
+              'No tool is available to you in this run, so do not use the "tool" action.',
+              'Every tool call is checked at execution time and one you were not granted is refused.',
+            ].join('\n')
+          : [
+              '# Tools',
+              'You may call these, and only these:',
+              ...available.map((tool) => `  - ${tool.name}: ${tool.description}`),
+              'This list is advisory. Every call is checked at execution time, and a call',
+              'you were not granted is refused whatever this text says.',
+            ].join('\n'),
+    })
   }
 
   // Last of the system material, immediately before the user prompt: it is the
@@ -567,17 +633,34 @@ export async function runTask(task: Task, deps: RunTaskDeps): Promise<RunResult>
         }
 
         case 'tool': {
-          await emit('tool_denied', {
-            iteration: iterations,
-            name: action.name,
-            reason: TOOL_UNAVAILABLE_REASON,
-          })
-          messages.push({
-            role: 'user',
-            content:
-              `TOOL DENIED (${action.name}) — ${TOOL_UNAVAILABLE_REASON}. ` +
-              'Use edit and verify actions instead.',
-          })
+          const dispatch = deps.tools
+          if (dispatch === undefined) {
+            // No tool layer in this build. Unchanged behaviour, and the honest one.
+            await emit('tool_denied', {
+              iteration: iterations,
+              name: action.name,
+              reason: TOOL_UNAVAILABLE_REASON,
+            })
+            messages.push({
+              role: 'user',
+              content:
+                `TOOL DENIED (${action.name}) — ${TOOL_UNAVAILABLE_REASON}. ` +
+                'Use edit and verify actions instead.',
+            })
+            break
+          }
+
+          // THE ONE AUTHORISATION POINT does the checking and the logging. This
+          // file emits nothing for a dispatched call: two `tool_denied` events for
+          // one refusal would make the log lie about how many times it happened.
+          // A denial comes back as a result, never as a throw, so the model can
+          // degrade and carry on.
+          // The run id goes with the call so the dispatcher's events land in THIS
+          // run's slice of the log. A dispatcher built before `runTask` was called
+          // cannot know the id, and events under a different one are present in the
+          // log but invisible to `forRun(runId)`.
+          const outcome = await dispatch.call(action.name, action.args, { runId })
+          messages.push({ role: 'user', content: outcome.output })
           break
         }
 

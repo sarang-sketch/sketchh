@@ -156,15 +156,25 @@ describe('the single enforcement point (Requirement 11.5)', () => {
       skill: 'commit-context',
     })
 
-    const result = await dispatcher.call('git-log')
+    const result = await dispatcher.call('git-log', { path: 'src/a.ts', token: 'sk-should-not-log' })
     expect(result.ok).toBe(true)
     expect(result.denied).toBeNull()
     expect(state.ran).toBe(1)
 
     const emitted = await events.readAll()
-    expect(emitted.map((event) => event.kind)).toEqual(['tool_called'])
+    // Event before action, then the outcome. Two `tool_called` events told apart by
+    // `phase`, because the contract has no `tool_result` kind — see the guard's
+    // header for why that gap is recorded rather than filled here.
+    expect(emitted.map((event) => event.kind)).toEqual(['tool_called', 'tool_called'])
+    expect(emitted.map((event) => event.payload.phase)).toEqual(['start', 'result'])
     expect(emitted[0]!.payload.skill).toBe('commit-context')
     expect(emitted[0]!.payload.requires).toBe('git:read')
+    expect(emitted[1]!.payload.ok).toBe(true)
+
+    // Argument KEYS reach the log; values never do.
+    expect(emitted[0]!.payload.argKeys).toEqual(['path', 'token'])
+    expect(JSON.stringify(emitted)).not.toContain('src/a.ts')
+    expect(JSON.stringify(emitted)).not.toContain('sk-should-not-log')
   })
 
   it('denies a tool the grant does not cover, and the tool never runs', async () => {
@@ -247,10 +257,13 @@ describe('the single enforcement point (Requirement 11.5)', () => {
     expect(result.ok).toBe(false)
     expect(result.denied).toBe('tool_error')
     expect(result.output).toContain('kaboom')
-    // A buggy tool must not read as a security event.
+    // A buggy tool must not read as a security event: no `tool_denied` anywhere,
+    // and the start event proves the call was attempted before it blew up.
     const emitted = await events.readAll()
-    expect(emitted.map((event) => event.kind)).toEqual(['tool_called'])
-    expect(emitted[0]!.payload.ok).toBe(false)
+    expect(emitted.map((event) => event.kind)).toEqual(['tool_called', 'tool_called'])
+    expect(emitted.map((event) => event.payload.phase)).toEqual(['start', 'result'])
+    expect(emitted[1]!.payload.ok).toBe(false)
+    expect(emitted[1]!.payload.error).toContain('kaboom')
   })
 
   it('cannot have its grant widened after construction', async () => {
@@ -493,5 +506,171 @@ describe('enforcement does not live in the prompt', () => {
     )
     expect(loop).not.toContain('net:http')
     expect(loop).not.toContain('capabilitiesForSkill')
+  })
+})
+
+// ── 5. the loop routes tool actions through the one gate ────────────────────
+//
+// The dispatcher is only worth anything if the agent loop actually goes through
+// it. These drive the REAL `runTask` with a real dispatcher and a scripted model
+// that attempts a denied call and then a permitted one.
+
+describe('the agent loop and the gate (Requirements 11.5, 5.9)', () => {
+  const PLAN = JSON.stringify({ action: 'plan', artifacts: { prd: 'p' } })
+  const DONE = JSON.stringify({ action: 'done', text: 'finished' })
+  const toolAction = (name: string, args: Record<string, unknown> = {}) =>
+    JSON.stringify({ action: 'tool', name, args })
+
+  async function harness() {
+    const root = await makeProject()
+    const { MemoryEventStore: Store } = await import('../src/events/index.js')
+    const { PlanWriter } = await import('../src/plan/index.js')
+    const { DiskFileWriter } = await import('../src/orchestrator/file-writer.js')
+    const events = new Store({ secrets: [] })
+    return {
+      root,
+      events,
+      plan: new PlanWriter({ baseDir: root, events }),
+      files: new DiskFileWriter(),
+    }
+  }
+
+  it('denies a call the skill\u2019s grant does not cover, and the run continues', async () => {
+    const h = await harness()
+    const { runTask } = await import('../src/loop/index.js')
+    const { FakeChatAdapter } = await import('../src/providers/fake.js')
+    const { tool, state } = probe('http-get', 'net:http')
+
+    const adapter = new FakeChatAdapter({ script: [toolAction('http-get'), DONE] })
+    const result = await runTask(
+      { id: 't1', prompt: 'fetch something', verify: [] },
+      {
+        adapter,
+        events: h.events,
+        plan: h.plan,
+        files: h.files,
+        root: h.root,
+        maxIterations: 4,
+        tools: new ToolDispatcher({
+          tools: [tool],
+          granted: ['fs:read:project'],
+          root: h.root,
+          events: h.events,
+          runId: 'ignored-the-loop-owns-the-run-id',
+          skill: 'context-packing',
+        }),
+      },
+    )
+
+    // The run finished, not-crashed, and the tool never ran.
+    expect(result.ok).toBe(true)
+    expect(state.ran).toBe(0)
+
+    // EXACTLY ONE denial on the log. The loop must not emit its own alongside the
+    // dispatcher's — that is what the `deps.tools === undefined` branch is for.
+    const denied = result.events.filter((event) => event.kind === 'tool_denied')
+    expect(denied).toHaveLength(1)
+    expect(denied[0]!.payload.missing).toBe('net:http')
+    // And the loop's own unavailable-reason is NOT what came back: this build has a
+    // tool layer, it just did not grant this call.
+    expect(String(denied[0]!.payload.reason ?? '')).not.toContain('does not exist in this build')
+
+    // The refusal reached the model in words it can act on.
+    const seen = (adapter.lastMessages ?? []).map((message) => message.content).join('\n')
+    expect(seen).toContain('TOOL DENIED (http-get)')
+    expect(seen).toContain('net:http')
+  })
+
+  it('runs a call the grant covers and feeds the output back', async () => {
+    const h = await harness()
+    const { runTask } = await import('../src/loop/index.js')
+    const { FakeChatAdapter } = await import('../src/providers/fake.js')
+    const { tool, state } = probe('git-log', 'git:read')
+
+    const adapter = new FakeChatAdapter({ script: [toolAction('git-log', { path: 'a.ts' }), DONE] })
+    const result = await runTask(
+      { id: 't2', prompt: 'why is this here', verify: [] },
+      {
+        adapter,
+        events: h.events,
+        plan: h.plan,
+        files: h.files,
+        root: h.root,
+        maxIterations: 4,
+        tools: new ToolDispatcher({
+          tools: [tool],
+          granted: ['git:read'],
+          root: h.root,
+          events: h.events,
+          skill: 'commit-context',
+        }),
+      },
+    )
+
+    expect(result.ok).toBe(true)
+    expect(state.ran).toBe(1)
+    expect(result.events.filter((event) => event.kind === 'tool_denied')).toHaveLength(0)
+    // Start then result, in that order (Requirement 3.3).
+    const called = result.events.filter((event) => event.kind === 'tool_called')
+    expect(called.map((event) => event.payload.phase)).toEqual(['start', 'result'])
+    expect((adapter.lastMessages ?? []).some((message) => message.content.includes('git-log ran'))).toBe(
+      true,
+    )
+  })
+
+  it('tells the model which tools it can reach, and calls the list advisory', async () => {
+    const h = await harness()
+    const { runTask } = await import('../src/loop/index.js')
+    const { FakeChatAdapter } = await import('../src/providers/fake.js')
+
+    const adapter = new FakeChatAdapter({ script: [DONE] })
+    await runTask(
+      { id: 't3', prompt: 'anything', verify: [] },
+      {
+        adapter,
+        events: h.events,
+        plan: h.plan,
+        files: h.files,
+        root: h.root,
+        maxIterations: 2,
+        tools: new ToolDispatcher({
+          tools: [probe('git-log', 'git:read').tool, probe('http-get', 'net:http').tool],
+          granted: ['git:read'],
+          root: h.root,
+          events: h.events,
+        }),
+      },
+    )
+
+    const seen = (adapter.lastMessages ?? []).map((message) => message.content).join('\n')
+    expect(seen).toContain('git-log')
+    expect(seen).not.toContain('http-get')
+    expect(seen).toContain('checked at execution time')
+  })
+
+  it('keeps the old refusal when the build has no tool layer at all', async () => {
+    // The default path, unchanged: `deps.tools` omitted means every tool action is
+    // refused with the reason this engine has always given.
+    const h = await harness()
+    const { runTask, TOOL_UNAVAILABLE_REASON } = await import('../src/loop/index.js')
+    const { FakeChatAdapter } = await import('../src/providers/fake.js')
+
+    const adapter = new FakeChatAdapter({ script: [toolAction('anything'), DONE] })
+    const result = await runTask(
+      { id: 't4', prompt: 'x', verify: [] },
+      {
+        adapter,
+        events: h.events,
+        plan: h.plan,
+        files: h.files,
+        root: h.root,
+        maxIterations: 4,
+      },
+    )
+
+    const denied = result.events.filter((event) => event.kind === 'tool_denied')
+    expect(denied).toHaveLength(1)
+    expect(denied[0]!.payload.reason).toBe(TOOL_UNAVAILABLE_REASON)
+    void PLAN
   })
 })

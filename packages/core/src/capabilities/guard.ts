@@ -186,10 +186,22 @@ export class ToolDispatcher {
   /**
    * Authorise and run one tool call.
    *
+   * `options.runId` overrides the dispatcher's default for this call. That is how
+   * the agent loop correlates: it mints its own run id internally, so a dispatcher
+   * built before `runTask` was called cannot know it, and events logged under a
+   * different id would be invisible to `forRun(runId)` — present in the log,
+   * missing from the run. The correlation is a property of the CALL, not of the
+   * dispatcher, so it is passed per call rather than by mutating anything.
+   *
    * Never throws: a tool that throws is caught and reported as `tool_error`, so
    * a badly written tool cannot take the run down with it.
    */
-  async call(name: string, args: Record<string, unknown> = {}): Promise<ToolCallResult> {
+  async call(
+    name: string,
+    args: Record<string, unknown> = {},
+    options: { runId?: string } = {},
+  ): Promise<ToolCallResult> {
+    const runId = options.runId ?? this.runId
     const tool = this.#tools.get(name)
 
     if (tool === undefined) {
@@ -198,7 +210,7 @@ export class ToolDispatcher {
         known.length === 0
           ? `TOOL DENIED (${name}) — no tools are registered in this build, so there is nothing to call.`
           : `TOOL DENIED (${name}) — no such tool. Available: ${known.join(', ')}.`
-      await this.#deny(name, 'unknown_tool', output)
+      await this.#deny(runId, name, 'unknown_tool', output)
       return { ok: false, name, output, denied: 'unknown_tool' }
     }
 
@@ -209,16 +221,36 @@ export class ToolDispatcher {
         `(${CAPABILITY_DESCRIPTIONS[tool.requires]}). ` +
         `Granted: ${this.granted.length === 0 ? 'nothing' : this.granted.join(', ')}. ` +
         `Continue without it.`
-      await this.#deny(name, 'capability_denied', output, tool.requires)
+      await this.#deny(runId, name, 'capability_denied', output, tool.requires)
       return { ok: false, name, output, denied: 'capability_denied', missing: tool.requires }
     }
 
     const context: ToolContext = {
       root: this.root,
-      runId: this.runId,
+      runId,
       granted: this.granted,
       ...(this.#signal !== undefined ? { signal: this.#signal } : {}),
     }
+
+    // EVENT BEFORE ACTION (Requirement 3.3), and here it earns its keep: a tool
+    // call is the most side-effecting thing in this system, so if the process dies
+    // mid-call the log has to show that the call was attempted. The outcome follows
+    // as a second event.
+    //
+    // SPEC GAP, recorded rather than patched: the `EventKind` contract has
+    // `tool_called` and `tool_denied` and no `tool_result`, so the pair that
+    // `verify_started` / `verify_result` gets is expressed here as two
+    // `tool_called` events told apart by `phase`. Adding a kind needs a spec
+    // change; inventing one here does not.
+    //
+    // ARGUMENT KEYS ONLY, never values. A tool argument routinely carries a path,
+    // a query, or a token, and this payload is durable.
+    await this.#emit(runId, 'tool_called', {
+      name,
+      requires: tool.requires,
+      phase: 'start',
+      argKeys: Object.keys(args).sort(),
+    })
 
     let outcome: ToolOutcome
     try {
@@ -226,20 +258,23 @@ export class ToolDispatcher {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       const output = `TOOL FAILED (${name}) — ${message}`
-      // `tool_called`, not `tool_denied`: the gate permitted this, and pretending
-      // otherwise would make a buggy tool look like a security event.
-      await this.#emit('tool_called', {
+      // Still `tool_called`, not `tool_denied`: the gate permitted this, and
+      // recording it as a denial would make a buggy tool look like a security
+      // event and hide the real ones.
+      await this.#emit(runId, 'tool_called', {
         name,
         requires: tool.requires,
+        phase: 'result',
         ok: false,
         error: message,
       })
       return { ok: false, name, output, denied: 'tool_error' }
     }
 
-    await this.#emit('tool_called', {
+    await this.#emit(runId, 'tool_called', {
       name,
       requires: tool.requires,
+      phase: 'result',
       ok: outcome.ok,
       ...(outcome.detail !== undefined ? { detail: outcome.detail } : {}),
     })
@@ -247,12 +282,13 @@ export class ToolDispatcher {
   }
 
   async #deny(
+    runId: string,
     name: string,
     reason: DenialReason,
     output: string,
     missing?: Capability,
   ): Promise<void> {
-    await this.#emit('tool_denied', {
+    await this.#emit(runId, 'tool_denied', {
       name,
       reason,
       detail: output,
@@ -261,11 +297,12 @@ export class ToolDispatcher {
   }
 
   async #emit(
+    runId: string,
     kind: 'tool_called' | 'tool_denied',
     payload: Record<string, unknown>,
   ): Promise<void> {
     await this.#events?.emit({
-      runId: this.runId,
+      runId,
       kind,
       payload: {
         ...(this.skill !== null ? { skill: this.skill } : {}),
