@@ -172,6 +172,45 @@ async function defaultWriteFileBytes(path: string, bytes: Buffer): Promise<void>
 }
 
 /**
+ * Why an entry may not be installed on review grounds, or null.
+ *
+ * Exported because the review rule is a policy a caller may want to show before the
+ * user clicks anything, and a second copy of it in a UI would be a second policy.
+ */
+export function reviewRefusalFor(
+  manifest: Pick<RegistryManifest, 'distribution' | 'registry'>,
+  entry: ManifestEntry,
+): string | null {
+  if (manifest.distribution !== 'open') return null
+
+  const review = entry.review
+  if (review === undefined) {
+    return (
+      `refusing to install "${entry.name}": it comes from the open registry ` +
+      `"${manifest.registry}" and carries no review record. An open marketplace ships ` +
+      `with a review queue (Requirement 11.6); an unreviewed submission is not installable`
+    )
+  }
+  if (review.decision !== 'approved') {
+    return (
+      `refusing to install "${entry.name}": its review is "${review.decision}", not "approved" ` +
+      `(reviewed by ${review.by} on ${review.date})` +
+      (review.notes === undefined ? '' : ` — ${review.notes}`)
+    )
+  }
+  if (review.digest !== undefined && review.digest !== entry.digest) {
+    // The submitter got an approval and then re-pinned. Approving bytes is the only
+    // approval that means anything, so the review does not carry over.
+    return (
+      `refusing to install "${entry.name}": its content changed after review. ` +
+      `${review.by} approved ${review.digest} on ${review.date}, and the manifest now pins ` +
+      `${entry.digest}. It needs reviewing again`
+    )
+  }
+  return null
+}
+
+/**
  * Install one pinned skill into a project.
  *
  * Verify → check the capability grant is parseable → copy → load it back. The
@@ -190,6 +229,28 @@ export async function installSkill(options: InstallOptions): Promise<InstallResu
       reason: `no skill named "${options.name}" in registry "${options.manifest.registry}"`,
       written: [],
     }
+  }
+
+  // THE MARKETPLACE GATE (Requirement 11.6). An `open` registry accepts submissions
+  // from anyone, so an entry from one is installable only with an `approved` review
+  // of THESE BYTES. A curated registry needs no per-entry record: curation is the
+  // review, and the whole manifest is committed and diffable.
+  //
+  // This is checked before the hash, before the grant, and before any write — the
+  // cheapest refusal first, and the one that does not depend on reading the skill.
+  const reviewRefusal = reviewRefusalFor(options.manifest, entry)
+  if (reviewRefusal !== null) {
+    await options.events?.emit({
+      runId: options.runId ?? 'registry',
+      kind: 'tool_denied',
+      payload: {
+        component: 'registry',
+        name: 'skill-install',
+        skill: entry.name,
+        reason: reviewRefusal,
+      },
+    })
+    return { ok: false, name: entry.name, warnings, reason: reviewRefusal, written: [] }
   }
 
   const sourceDir = join(options.registryDir, ...entry.path.split('/'))

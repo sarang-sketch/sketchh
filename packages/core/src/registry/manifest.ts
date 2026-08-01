@@ -55,6 +55,32 @@ export function isSkillPack(value: unknown): value is SkillPack {
   return typeof value === 'string' && (SKILL_PACKS as readonly string[]).includes(value)
 }
 
+/**
+ * A reviewer's verdict on one submitted skill.
+ *
+ * Deliberately thin: who, when, what they decided, and why. It is a record that a
+ * human looked, not a claim that the skill is safe — no field here asserts safety,
+ * because nothing in a JSON file can.
+ */
+export interface ReviewRecord {
+  /** Who reviewed it. A name or handle, recorded so it can be asked about. */
+  by: string
+  /** ISO-8601 date of the review. */
+  date: string
+  decision: 'approved' | 'rejected' | 'pending'
+  /** What they checked or objected to. */
+  notes?: string
+  /**
+   * The digest the reviewer actually looked at.
+   *
+   * When present, `installSkill` requires it to equal the entry's current digest —
+   * so a submitter who gets a review approved and then re-pins new content has the
+   * review invalidated rather than inherited. Approving bytes is the only kind of
+   * approval that means anything.
+   */
+  digest?: string
+}
+
 /** One pinned skill. */
 export interface ManifestEntry {
   /** Skill name. Unique within a manifest, and the install directory name. */
@@ -80,6 +106,16 @@ export interface ManifestEntry {
   source: string
   /** SPDX identifier. A vendored file with no recorded license is a liability. */
   license: string
+  /**
+   * The review record. REQUIRED for an entry in an `open` registry.
+   *
+   * Requirement 11.6 says the open marketplace ships with a review queue, and this
+   * is what makes that enforceable rather than a promise: `installSkill` refuses an
+   * entry from an `open` registry that carries no `approved` review. A curated
+   * registry does not need one — curation IS the review, and the whole manifest is
+   * committed and diffable.
+   */
+  review?: ReviewRecord
   /**
    * Per-file digests, in canonical order.
    *
@@ -145,6 +181,30 @@ function readStringArray(source: Record<string, unknown>, key: string, what: str
     }
     return entry
   })
+}
+
+function readReview(value: unknown, what: string): ReviewRecord {
+  const where = `${what}.review`
+  const review = asObject(value, where)
+  const decision = review['decision']
+  if (decision !== 'approved' && decision !== 'rejected' && decision !== 'pending') {
+    throw new ManifestError(`${where}.decision must be "approved", "rejected" or "pending"`)
+  }
+  const notes = review['notes']
+  if (notes !== undefined && typeof notes !== 'string') {
+    throw new ManifestError(`${where}.notes must be a string when present`)
+  }
+  const digest = review['digest']
+  if (digest !== undefined && (typeof digest !== 'string' || !digest.startsWith(DIGEST_PREFIX))) {
+    throw new ManifestError(`${where}.digest must be a "${DIGEST_PREFIX}" digest when present`)
+  }
+  return {
+    by: readString(review, 'by', where),
+    date: readString(review, 'date', where),
+    decision,
+    ...(typeof notes === 'string' ? { notes } : {}),
+    ...(typeof digest === 'string' ? { digest } : {}),
+  }
 }
 
 function readFileDigests(value: unknown, what: string): FileDigest[] {
@@ -246,6 +306,7 @@ export function parseManifest(text: string): RegistryManifest {
       capabilities: readStringArray(entry, 'capabilities', what),
       source: readString(entry, 'source', what),
       license: readString(entry, 'license', what),
+      ...(entry['review'] === undefined ? {} : { review: readReview(entry['review'], what) }),
       ...(entry['files'] === undefined ? {} : { files: readFileDigests(entry['files'], what) }),
     }
   })
@@ -290,6 +351,17 @@ export function serializeManifest(manifest: RegistryManifest): string {
         capabilities: [...entry.capabilities].sort(),
         source: entry.source,
         license: entry.license,
+        ...(entry.review === undefined
+          ? {}
+          : {
+              review: {
+                by: entry.review.by,
+                date: entry.review.date,
+                decision: entry.review.decision,
+                ...(entry.review.notes !== undefined ? { notes: entry.review.notes } : {}),
+                ...(entry.review.digest !== undefined ? { digest: entry.review.digest } : {}),
+              },
+            }),
         // Already in canonical (path-sorted) order from `hashSkillDirectory`;
         // re-sorted here so a hand-edited manifest still serializes canonically.
         ...(entry.files === undefined

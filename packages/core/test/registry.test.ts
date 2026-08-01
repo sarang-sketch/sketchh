@@ -30,6 +30,7 @@ import {
   MANIFEST_VERSION,
   ManifestError,
   parseManifest,
+  reviewRefusalFor,
   serializeManifest,
   skillFiles,
   verifySkill,
@@ -510,5 +511,184 @@ describe('install (Requirement 11.2)', () => {
     expect(verified.ok).toBe(false)
     expect(verified.differences).toEqual([])
     expect(verified.reason).toContain('pins only the directory digest')
+  })
+})
+
+// ── the marketplace gate (Requirement 11.6) ─────────────────────────────────
+//
+// "The open marketplace SHALL NOT ship until signing and capability scoping are
+// both in place and tested, and SHALL include a review queue when it does."
+//
+// What ships is CURATED — `registry.seed.test.ts` asserts that on the committed
+// manifest. What is tested here is the gate that an open registry has to pass, so
+// that turning `distribution` to `open` cannot silently mean "install anything".
+
+describe('an open registry requires a review per entry', () => {
+  /** The same seeded skill, offered through an `open` registry. */
+  async function openRegistry(review?: ManifestEntry['review']) {
+    const seeded = await seedRegistry()
+    const entry: ManifestEntry = { ...seeded.entry, ...(review === undefined ? {} : { review }) }
+    return {
+      ...seeded,
+      manifest: { ...seeded.manifest, distribution: 'open' as const, entries: [entry] },
+      entry,
+    }
+  }
+
+  it('refuses an entry with no review record', async () => {
+    const { registryDir, manifest, files } = await openRegistry()
+    const project = await makeDir('sketch-project-')
+
+    const result = await installSkill({
+      manifest,
+      registryDir,
+      name: 'commit-context',
+      projectRoot: project,
+      pinnedFiles: files,
+    })
+
+    expect(result.ok).toBe(false)
+    expect(result.reason).toContain('carries no review record')
+    expect(result.reason).toContain('review queue')
+    // Refused before anything was read or written.
+    expect(result.written).toEqual([])
+    await expect(readdir(installedSkillsDir(project))).rejects.toThrow()
+  })
+
+  it('refuses a pending or rejected review, naming the reviewer', async () => {
+    for (const decision of ['pending', 'rejected'] as const) {
+      const { registryDir, manifest, files } = await openRegistry({
+        by: 'reviewer-1',
+        date: '2026-08-01',
+        decision,
+        notes: 'spawns a subprocess with no stated reason',
+      })
+
+      const result = await installSkill({
+        manifest,
+        registryDir,
+        name: 'commit-context',
+        projectRoot: await makeDir('sketch-project-'),
+        pinnedFiles: files,
+      })
+
+      expect(result.ok, decision).toBe(false)
+      expect(result.reason, decision).toContain(`is "${decision}", not "approved"`)
+      expect(result.reason, decision).toContain('reviewer-1')
+      expect(result.reason, decision).toContain('spawns a subprocess')
+    }
+  })
+
+  it('installs an approved entry', async () => {
+    const { registryDir, manifest, files, entry } = await openRegistry({
+      by: 'reviewer-1',
+      date: '2026-08-01',
+      decision: 'approved',
+      digest: undefined,
+    })
+
+    const result = await installSkill({
+      manifest,
+      registryDir,
+      name: 'commit-context',
+      projectRoot: await makeDir('sketch-project-'),
+      pinnedFiles: files,
+    })
+
+    expect(result.reason).toBeNull()
+    expect(result.ok).toBe(true)
+    expect(result.digest).toBe(entry.digest)
+  })
+
+  it('invalidates a review when the content changed after it', async () => {
+    // The escalation this closes: get an approval, then re-pin new bytes and inherit
+    // the approval. Approving bytes is the only approval that means anything.
+    const { registryDir, manifest, skillDir, files } = await openRegistry({
+      by: 'reviewer-1',
+      date: '2026-08-01',
+      decision: 'approved',
+      digest: 'sha256:0000000000000000000000000000000000000000000000000000000000000000',
+    })
+    void skillDir
+
+    const result = await installSkill({
+      manifest,
+      registryDir,
+      name: 'commit-context',
+      projectRoot: await makeDir('sketch-project-'),
+      pinnedFiles: files,
+    })
+
+    expect(result.ok).toBe(false)
+    expect(result.reason).toContain('content changed after review')
+    expect(result.reason).toContain('needs reviewing again')
+  })
+
+  it('does not require a review in a curated registry', async () => {
+    // Curation IS the review there, and the manifest is committed and diffable.
+    const { registryDir, manifest, files } = await seedRegistry()
+    expect(manifest.distribution).toBe('curated')
+    expect(manifest.entries[0]!.review).toBeUndefined()
+
+    const result = await installSkill({
+      manifest,
+      registryDir,
+      name: 'commit-context',
+      projectRoot: await makeDir('sketch-project-'),
+      pinnedFiles: files,
+    })
+    expect(result.ok).toBe(true)
+  })
+
+  it('exposes the policy so a surface cannot invent a second one', async () => {
+    const { manifest, entry } = await openRegistry()
+    expect(reviewRefusalFor(manifest, entry)).toContain('no review record')
+    expect(reviewRefusalFor({ ...manifest, distribution: 'curated' }, entry)).toBeNull()
+  })
+
+  it('round-trips a review record through the manifest', async () => {
+    const { registryDir, manifest } = await openRegistry({
+      by: 'reviewer-1',
+      date: '2026-08-01',
+      decision: 'approved',
+      notes: 'local git only',
+    })
+    const bytes = serializeManifest(manifest)
+    await writeFile(join(registryDir, MANIFEST_FILENAME), bytes, 'utf8')
+
+    const loaded = await loadManifest(registryDir)
+    expect(loaded.manifest.distribution).toBe('open')
+    expect(loaded.manifest.entries[0]!.review).toEqual({
+      by: 'reviewer-1',
+      date: '2026-08-01',
+      decision: 'approved',
+      notes: 'local git only',
+    })
+  })
+
+  it('refuses a malformed review rather than ignoring it', () => {
+    const base = {
+      version: MANIFEST_VERSION,
+      registry: 'r',
+      distribution: 'open',
+      entries: [
+        {
+          name: 'a',
+          version: '1',
+          pack: 'engineering',
+          summary: 's',
+          path: 'skills/a',
+          digest: 'sha256:abc',
+          capabilities: [],
+          source: 'sketch',
+          license: 'Apache-2.0',
+          review: { by: 'r', date: '2026-08-01', decision: 'looks-fine' },
+        },
+      ],
+    }
+    // An unrecognised decision must not read as approval, and must not be dropped
+    // silently either — dropping it would leave an entry with no review at all,
+    // which the gate would then refuse for the wrong stated reason.
+    expect(() => parseManifest(JSON.stringify(base))).toThrow(/decision must be/)
   })
 })

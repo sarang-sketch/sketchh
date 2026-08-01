@@ -31,10 +31,16 @@ export type {
   ManifestEntry,
   ManifestLoadResult,
   RegistryManifest,
+  ReviewRecord,
   SkillPack,
 } from './manifest.js'
 
-export { installSkill, installedSkillsDir, verifySkill } from './install.js'
+export {
+  installSkill,
+  installedSkillsDir,
+  reviewRefusalFor,
+  verifySkill,
+} from './install.js'
 export type { InstallOptions, InstallResult, VerifyResult } from './install.js'
 
 export { pinRegistry, writePinnedRegistry } from './pin.js'
