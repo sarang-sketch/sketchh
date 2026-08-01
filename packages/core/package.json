@@ -16,13 +16,15 @@
     "sketch": "./dist/cli.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "registry"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "pin:registry": "node scripts/pin-registry.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

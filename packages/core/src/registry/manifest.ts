@@ -31,7 +31,7 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
-import { DIGEST_PREFIX } from './hash.js'
+import { DIGEST_PREFIX, type FileDigest } from './hash.js'
 
 /** Bumped when the persisted shape changes. A mismatch is a load error. */
 export const MANIFEST_VERSION = 1
@@ -80,6 +80,16 @@ export interface ManifestEntry {
   source: string
   /** SPDX identifier. A vendored file with no recorded license is a liability. */
   license: string
+  /**
+   * Per-file digests, in canonical order.
+   *
+   * Optional, and purely diagnostic: the directory `digest` above is what decides
+   * whether an install proceeds, and it covers every byte on its own. This list
+   * exists so a refusal can name THE FILE that differs instead of saying "hash
+   * mismatch" — see `describeDifference`. A manifest without it still refuses
+   * correctly and says out loud that it cannot localise.
+   */
+  files?: FileDigest[]
 }
 
 export interface RegistryManifest {
@@ -134,6 +144,25 @@ function readStringArray(source: Record<string, unknown>, key: string, what: str
       throw new ManifestError(`${what}.${key}[${index}] must be a non-empty string`)
     }
     return entry
+  })
+}
+
+function readFileDigests(value: unknown, what: string): FileDigest[] {
+  if (!Array.isArray(value)) {
+    throw new ManifestError(`${what}.files must be an array when present`)
+  }
+  return value.map((raw, index) => {
+    const where = `${what}.files[${index}]`
+    const file = asObject(raw, where)
+    const digest = readString(file, 'digest', where)
+    if (!digest.startsWith(DIGEST_PREFIX)) {
+      throw new ManifestError(`${where}.digest must start with "${DIGEST_PREFIX}"`)
+    }
+    const bytes = file['bytes']
+    if (typeof bytes !== 'number' || !Number.isInteger(bytes) || bytes < 0) {
+      throw new ManifestError(`${where}.bytes must be a non-negative integer`)
+    }
+    return { path: readString(file, 'path', where), digest, bytes }
   })
 }
 
@@ -217,6 +246,7 @@ export function parseManifest(text: string): RegistryManifest {
       capabilities: readStringArray(entry, 'capabilities', what),
       source: readString(entry, 'source', what),
       license: readString(entry, 'license', what),
+      ...(entry['files'] === undefined ? {} : { files: readFileDigests(entry['files'], what) }),
     }
   })
 
@@ -260,6 +290,15 @@ export function serializeManifest(manifest: RegistryManifest): string {
         capabilities: [...entry.capabilities].sort(),
         source: entry.source,
         license: entry.license,
+        // Already in canonical (path-sorted) order from `hashSkillDirectory`;
+        // re-sorted here so a hand-edited manifest still serializes canonically.
+        ...(entry.files === undefined
+          ? {}
+          : {
+              files: [...entry.files]
+                .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))
+                .map((file) => ({ path: file.path, digest: file.digest, bytes: file.bytes })),
+            }),
       })),
   }
   return `${JSON.stringify(ordered, null, 2)}\n`

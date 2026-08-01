@@ -36,3 +36,8 @@ export type {
 
 export { installSkill, installedSkillsDir, verifySkill } from './install.js'
 export type { InstallOptions, InstallResult, VerifyResult } from './install.js'
+
+export { pinRegistry, writePinnedRegistry } from './pin.js'
+export type { PinOptions, SeedMetadata } from './pin.js'
+
+export { SEED_REGISTRY_DIR, SEED_REGISTRY_NAME, SEED_SKILLS } from './seeds.js'

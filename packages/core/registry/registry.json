@@ -1,0 +1,149 @@
+{
+  "version": 1,
+  "registry": "sketch-curated",
+  "distribution": "curated",
+  "entries": [
+    {
+      "name": "commit-context",
+      "version": "1.0.0",
+      "pack": "engineering",
+      "summary": "Reconstruct why code exists from local git history, separating what the history says from what you infer.",
+      "path": "skills/commit-context",
+      "digest": "sha256:95bfb1c3aec99cd15e6f61ab5b1d4c9767e4277fb60967cf67a97a12dc78a68f",
+      "capabilities": [
+        "fs:read:project",
+        "git:read"
+      ],
+      "source": "sketch",
+      "license": "Apache-2.0",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "digest": "sha256:d70360c7f3be94bcaeb014f721ad966e06ba2c338e510aec455df71c5887e617",
+          "bytes": 2377
+        }
+      ]
+    },
+    {
+      "name": "context-packing",
+      "version": "1.0.0",
+      "pack": "context-packing",
+      "summary": "Choose what code the model sees under a fixed token budget, and degrade detail before coverage.",
+      "path": "skills/context-packing",
+      "digest": "sha256:921ce4f72f3c8c3711155763dc3e8d1e1c04ec18f8a30788696f717ee7111a44",
+      "capabilities": [
+        "fs:read:project"
+      ],
+      "source": "sketch",
+      "license": "Apache-2.0",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "digest": "sha256:bd79447486656573bdaa51f48d137ed0c319d7065e8d105d5b71a7b6c571b7ba",
+          "bytes": 2618
+        }
+      ]
+    },
+    {
+      "name": "finance-quant",
+      "version": "1.0.0",
+      "pack": "finance-quant",
+      "summary": "Financial and numerical code with exact money arithmetic, stated units, and no advice.",
+      "path": "skills/finance-quant",
+      "digest": "sha256:9e6550028ed36ce3f6df634d9737c7675254ef39814288a470b84def816d91ab",
+      "capabilities": [
+        "fs:read:project"
+      ],
+      "source": "sketch",
+      "license": "Apache-2.0",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "digest": "sha256:d50545afe770dac65bf8a12539ad8da988044b5271b5f557e145e35e0d883cf2",
+          "bytes": 3370
+        }
+      ]
+    },
+    {
+      "name": "frontend-design",
+      "version": "1.0.0",
+      "pack": "frontend-design",
+      "summary": "Interface code that is accessible, honest about every state, and uses the project’s own design language.",
+      "path": "skills/frontend-design",
+      "digest": "sha256:77dae1f5230e0c53a7636e6173b999e14dcc2403e86c488ccca4bfe294709bde",
+      "capabilities": [
+        "fs:read:project"
+      ],
+      "source": "sketch",
+      "license": "Apache-2.0",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "digest": "sha256:b89d1f0c0e69062ea32ef178d380e333aa8c5ee549e3f475a6140066add1658e",
+          "bytes": 3023
+        }
+      ]
+    },
+    {
+      "name": "research-stage",
+      "version": "1.0.0",
+      "pack": "research",
+      "summary": "Investigate before implementing, and keep what was verified separate from what was assumed.",
+      "path": "skills/research-stage",
+      "digest": "sha256:e0d35ae11f26533f6f8bdb4ccbad0b62ce6ae80d43eff16c0cf8035c1f1bbd00",
+      "capabilities": [
+        "fs:read:project"
+      ],
+      "source": "sketch",
+      "license": "Apache-2.0",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "digest": "sha256:0f0299c9b88ae7cd7a2726369d632b05290418386f3fad489e748394626f324e",
+          "bytes": 2494
+        }
+      ]
+    },
+    {
+      "name": "scope-discipline",
+      "version": "1.0.0",
+      "pack": "engineering",
+      "summary": "Check a diff against its stated intent and report what it touches that it did not need to.",
+      "path": "skills/scope-discipline",
+      "digest": "sha256:37885a29ccbf6c890c3dab52ea9afe4284c69b5bad4e688a04d85b798fdb4674",
+      "capabilities": [
+        "fs:read:project",
+        "git:read"
+      ],
+      "source": "sketch",
+      "license": "Apache-2.0",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "digest": "sha256:1b97323cae89444c790c9a09d7bd00476151fbbd8b3cb6f687893106132663e0",
+          "bytes": 2602
+        }
+      ]
+    },
+    {
+      "name": "web-data",
+      "version": "1.0.0",
+      "pack": "web-data",
+      "summary": "Fetch and extract data with the request budget, the failure modes and the provenance all stated.",
+      "path": "skills/web-data",
+      "digest": "sha256:d2203351091c31870131babc20a180ea24e2e090621df472a4eac8194cf50928",
+      "capabilities": [
+        "net:http"
+      ],
+      "source": "sketch",
+      "license": "Apache-2.0",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "digest": "sha256:7a5f1f4beba2a5389c5c78e1ed2c1ae8da1f74b004e83c62443f4230bd65bb23",
+          "bytes": 2543
+        }
+      ]
+    }
+  ]
+}

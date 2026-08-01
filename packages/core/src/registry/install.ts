@@ -193,7 +193,9 @@ export async function installSkill(options: InstallOptions): Promise<InstallResu
   }
 
   const sourceDir = join(options.registryDir, ...entry.path.split('/'))
-  const verified = await verifySkill(sourceDir, entry, options.pinnedFiles)
+  // The manifest's own per-file list is used when the caller does not override it,
+  // so a shipped registry gets a diagnostic that names the file for free.
+  const verified = await verifySkill(sourceDir, entry, options.pinnedFiles ?? entry.files)
 
   const emit = async (kind: 'tool_called' | 'tool_denied', payload: Record<string, unknown>) => {
     await options.events?.emit({
