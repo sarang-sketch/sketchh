@@ -288,3 +288,169 @@
 .actionButton:hover {
   background-color: var(--accent-hover);
 }
+
+/* ── task 6.4: the registry surface ─────────────────────────────────────────
+   Added when the panel stopped rendering a fixture. The classes below carry the
+   security-relevant parts of the UI: the pinned digest, the capability grant, and
+   the confirmation step. Sensitive grants get their own colour because a user
+   skim-reading ten capabilities will otherwise miss `secrets:read`. */
+
+.version {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.installedTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--success);
+}
+
+.summary {
+  padding: 6px 12px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border);
+}
+
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 8px 12px;
+  padding: 8px 10px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  background: var(--bg-hover);
+  border-radius: 4px;
+}
+
+.error {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 8px 12px;
+  padding: 8px 10px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--error);
+  background: color-mix(in srgb, var(--error) 12%, transparent);
+  border-radius: 4px;
+}
+
+.warning {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--warning);
+}
+
+/* The grant. Always visible on the card, not hidden behind a disclosure. */
+.capabilities {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.capability,
+.capabilitySensitive {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+.capabilitySensitive {
+  color: var(--warning);
+}
+
+.capability code,
+.capabilitySensitive code {
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+}
+
+.digest {
+  margin-top: 6px;
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.digestFull {
+  margin: 4px 0;
+  padding: 6px 8px;
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+  word-break: break-all;
+  white-space: pre-wrap;
+  background: var(--bg-hover);
+  border-radius: 4px;
+}
+
+/* The consent step. Deliberately not dismissible by clicking away: installing
+   third-party code is a decision, so it takes an explicit Cancel. */
+.confirm {
+  margin: 8px 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--warning);
+  border-radius: 6px;
+  background: var(--bg-secondary, var(--bg-hover));
+}
+
+.confirmTitle {
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.confirmBody {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.confirmBody p {
+  margin: 6px 0;
+}
+
+.confirmActions {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.secondaryButton {
+  padding: 4px 10px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.secondaryButton:hover {
+  background: var(--bg-hover);
+}
+
+.actionButton:disabled,
+.secondaryButton:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

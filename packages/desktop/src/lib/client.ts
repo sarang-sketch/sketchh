@@ -82,6 +82,95 @@ export interface ArchitectureResult {
   diagrams: ArchitectureDiagrams
 }
 
+/** One pinned skill, as the catalog reports it. */
+export interface SkillsCatalogEntry {
+  name: string
+  version: string
+  pack: string
+  summary: string
+  /** `sha256:<hex>` over the skill directory. Shown before the user consents. */
+  digest: string
+  /** The GRANT the registry made. Enforced at execution time, not decorative. */
+  capabilities: string[]
+  source: string
+  license: string
+  /** How many files the digest covers. */
+  files: number
+  /** Read from disk, not from anything the UI remembers. */
+  installed: boolean
+}
+
+/** One installed skill, as the loader read it back off disk. */
+export interface InstalledSkill {
+  name: string
+  description: string
+  source: string
+  capabilities: string[]
+}
+
+export interface SkillsCatalogResult {
+  root: string
+  /** Where the pinned registry was read from, or null when none is configured. */
+  registryDir: string | null
+  /** `<root>/.sketch/skills`. */
+  installedDir: string
+  registry?: string
+  /** `curated` until the open marketplace ships with a review queue (Req 11.6). */
+  distribution?: 'curated' | 'open'
+  entries: SkillsCatalogEntry[]
+  installed: InstalledSkill[]
+  /** Why the registry could not be read, when it could not. */
+  diagnostic?: string
+  /** One per skill on disk that failed to load. */
+  diagnostics: string[]
+}
+
+export interface SkillInstallResult {
+  ok: boolean
+  name: string
+  dir?: string
+  digest?: string
+  granted?: string[]
+  skill?: { name: string; description: string }
+  /** Non-fatal findings the user should see. A grant mismatch shows up here. */
+  warnings: string[]
+  /** The refusal, naming the file that differs. Null on success. */
+  reason: string | null
+  files: number
+}
+
+/** One epoch of a training run, as the trainer recorded it. */
+export interface SkillTrainEpoch {
+  epoch: number
+  verdict: 'accepted' | 'rejected' | 'no_proposal' | 'error'
+  trainScore: number
+  incumbentScore: number
+  candidateScore: number | null
+  bestScore: number
+  reason: string
+  candidateName?: string
+  error?: string
+}
+
+export interface SkillTrainResult {
+  ok: boolean
+  name: string
+  reason?: string
+  /** True only when a candidate beat the incumbent on the held-out split. */
+  improved?: boolean
+  accepted?: number
+  baselineValScore?: number
+  valScore?: number
+  cases?: number
+  split?: { train: number; val: number }
+  epochs?: SkillTrainEpoch[]
+  /** What the run actually spent. `refusal` is set when the budget stopped it. */
+  budget?: { calls: number; tokens: number; refusal: string | null }
+  artifactPath?: string
+  /** The winning body, so a surface can show it before writing anything. */
+  body?: string
+}
+
 export interface RunOptions {
   /** Project root for this run. Required by the desktop to match the open folder. */
   root?: string
@@ -188,6 +277,47 @@ export interface SketchClient {
     maxNodes?: number
     maxEdges?: number
   }): Promise<ArchitectureResult>
+
+  // ── skills ────────────────────────────────────────────────────────────────
+  //
+  // Hashing a directory, writing into `.sketch/skills/`, and scoring an eval set are
+  // machine work, so all three live in the engine and reach the panel over this
+  // seam. Optional for the same reason as the two above.
+  //
+  // THERE IS NO `force` ON `skillInstall`, here or on the wire. The install verifies
+  // the pinned content hash first and refuses on any difference; an option to skip
+  // that check is the same thing as not having it.
+
+  /** The pinned registry, plus what is installed in this project. Reads only. */
+  skillsCatalog?(params: { root: string; registryDir?: string }): Promise<SkillsCatalogResult>
+
+  /** Verify and install one pinned skill. Refuses on a hash mismatch. */
+  skillInstall?(params: {
+    root: string
+    name: string
+    registryDir?: string
+  }): Promise<SkillInstallResult>
+
+  /**
+   * Train one installed skill on this project's captured evals.
+   *
+   * THE ONLY CAPABILITY ON THIS SEAM THAT CAN REACH A PROVIDER, and therefore the
+   * only one that can cost money. Explicit user action only, never on mount, never
+   * during a task run (Requirement 9.6). `write` is opt-in: a training run the user
+   * has not looked at must not silently replace the skill they installed.
+   */
+  skillTrain?(
+    params: {
+      root: string
+      name: string
+      epochs?: number
+      guidance?: string
+      write?: boolean
+      maxCalls?: number
+      maxTokens?: number
+    },
+    options?: { signal?: AbortSignal },
+  ): Promise<SkillTrainResult>
 
   /**
    * Attach a handler to the engine's event stream. Called for every event from

@@ -33,6 +33,9 @@ import type {
   TransportKind,
   RunOptions,
   ArchitectureResult,
+  SkillsCatalogResult,
+  SkillInstallResult,
+  SkillTrainResult,
   ProviderCatalogResult,
   ProviderTestRequest,
 } from './client'
@@ -508,6 +511,52 @@ export class StdioSketchClient implements SketchClient {
       ...(params.index === true ? { index: true } : {}),
       ...(params.maxNodes !== undefined ? { maxNodes: params.maxNodes } : {}),
       ...(params.maxEdges !== undefined ? { maxEdges: params.maxEdges } : {}),
+    })
+  }
+
+  // ── skills ────────────────────────────────────────────────────────────────
+  //
+  // Pass-through to the three skills methods. `registryDir` is forwarded only when
+  // the caller supplied one: the engine has no path-relative default (a bundled
+  // sidecar has no package layout to be relative to), so it answers honestly that
+  // no registry is configured rather than guessing at one.
+
+  async skillsCatalog(params: { root: string; registryDir?: string }): Promise<SkillsCatalogResult> {
+    return this.call<SkillsCatalogResult>('skills-catalog', {
+      root: params.root,
+      ...(params.registryDir !== undefined ? { registryDir: params.registryDir } : {}),
+    })
+  }
+
+  async skillInstall(params: {
+    root: string
+    name: string
+    registryDir?: string
+  }): Promise<SkillInstallResult> {
+    return this.call<SkillInstallResult>('skill-install', {
+      root: params.root,
+      name: params.name,
+      ...(params.registryDir !== undefined ? { registryDir: params.registryDir } : {}),
+    })
+  }
+
+  async skillTrain(params: {
+    root: string
+    name: string
+    epochs?: number
+    guidance?: string
+    write?: boolean
+    maxCalls?: number
+    maxTokens?: number
+  }): Promise<SkillTrainResult> {
+    return this.call<SkillTrainResult>('skill-train', {
+      root: params.root,
+      name: params.name,
+      ...(params.epochs !== undefined ? { epochs: params.epochs } : {}),
+      ...(params.guidance !== undefined ? { guidance: params.guidance } : {}),
+      ...(params.write === true ? { write: true } : {}),
+      ...(params.maxCalls !== undefined ? { maxCalls: params.maxCalls } : {}),
+      ...(params.maxTokens !== undefined ? { maxTokens: params.maxTokens } : {}),
     })
   }
 

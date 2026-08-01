@@ -6,6 +6,9 @@ import type {
   TransportKind,
   RunOptions,
   ArchitectureResult,
+  SkillsCatalogResult,
+  SkillInstallResult,
+  SkillTrainResult,
   ProviderCatalogResult,
   ProviderTestRequest,
 } from './client'
@@ -183,6 +186,51 @@ export class HttpSketchClient implements SketchClient {
       ...(params.index === true ? { index: true } : {}),
       ...(params.maxNodes !== undefined ? { maxNodes: params.maxNodes } : {}),
       ...(params.maxEdges !== undefined ? { maxEdges: params.maxEdges } : {}),
+    })
+  }
+
+  // ── skills ────────────────────────────────────────────────────────────────
+  //
+  // The dev bridge dispatches the same three methods the sidecar does, so the
+  // Skills surface is real in the browser too. Nothing here verifies a hash or
+  // scores an eval: the engine does both.
+
+  async skillsCatalog(params: { root: string; registryDir?: string }): Promise<SkillsCatalogResult> {
+    return this.callMethod<SkillsCatalogResult>('skills-catalog', {
+      root: params.root,
+      ...(params.registryDir !== undefined ? { registryDir: params.registryDir } : {}),
+    })
+  }
+
+  async skillInstall(params: {
+    root: string
+    name: string
+    registryDir?: string
+  }): Promise<SkillInstallResult> {
+    return this.callMethod<SkillInstallResult>('skill-install', {
+      root: params.root,
+      name: params.name,
+      ...(params.registryDir !== undefined ? { registryDir: params.registryDir } : {}),
+    })
+  }
+
+  async skillTrain(params: {
+    root: string
+    name: string
+    epochs?: number
+    guidance?: string
+    write?: boolean
+    maxCalls?: number
+    maxTokens?: number
+  }): Promise<SkillTrainResult> {
+    return this.callMethod<SkillTrainResult>('skill-train', {
+      root: params.root,
+      name: params.name,
+      ...(params.epochs !== undefined ? { epochs: params.epochs } : {}),
+      ...(params.guidance !== undefined ? { guidance: params.guidance } : {}),
+      ...(params.write === true ? { write: true } : {}),
+      ...(params.maxCalls !== undefined ? { maxCalls: params.maxCalls } : {}),
+      ...(params.maxTokens !== undefined ? { maxTokens: params.maxTokens } : {}),
     })
   }
 

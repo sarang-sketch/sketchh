@@ -278,6 +278,26 @@ export class MockSketchClient implements SketchClient {
     return this.noEngine('architecture')
   }
 
+  // ── skills ────────────────────────────────────────────────────────────────
+  //
+  // The same rule, and the stakes are highest here. A fabricated catalog would
+  // invent skill names, versions and — worst — CONTENT HASHES and CAPABILITY
+  // GRANTS. A user reading a made-up grant would be consenting to nothing, and a
+  // made-up digest is a security claim with no bytes behind it. So: no engine, no
+  // catalog, and the panel says which transport it is talking to.
+
+  async skillsCatalog(): Promise<never> {
+    return this.noEngine('skills-catalog')
+  }
+
+  async skillInstall(): Promise<never> {
+    return this.noEngine('skill-install')
+  }
+
+  async skillTrain(): Promise<never> {
+    return this.noEngine('skill-train')
+  }
+
   private nextRunId(): string {
     // Time-prefixed so ids sort chronologically, matching the engine's scheme.
     this.runCounter += 1

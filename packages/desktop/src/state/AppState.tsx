@@ -131,16 +131,12 @@ export interface Agent {
   icon: string;
 }
 
-export interface Skill {
-  id: string;
-  name: string;
-  description: string;
-  version: string;
-  author: string;
-  icon: string;
-  enabled: boolean;
-  category: string;
-}
+// `Skill` was declared here with `author`, `icon`, `enabled` and `category` — four
+// fields the engine's own `Skill` does not have, invented to make a fixture render.
+// Deleted in task 6.4. The shapes the Skills panel uses are
+// `SkillsCatalogEntry` and `InstalledSkill` in `lib/client.ts`, which mirror what
+// the engine actually returns: a name, a summary, a content digest, and a capability
+// grant. A UI type richer than its source is a fixture waiting to happen.
 
 /**
  * Provider state, all of it real.
@@ -243,9 +239,9 @@ export interface AppState {
   /** Surfaced by the editor. Set by a refused read, a failed save, a bad path. */
   editorNotice: EditorNotice | null;
   
-  // Skills State
-  installedSkills: Skill[];
-  skillMarketplace: Skill[];
+  // Skills state deliberately does NOT live here. See the note where the two
+  // fixtures were deleted, below `editorNotice`'s initial value: the engine owns it,
+  // and `SkillsMarketplace` fetches it through `skills-catalog`.
   
   // Provider State — see the note above `Provider`. Nothing here holds a key.
   /** Configured providers, from `~/.sketch/providers.json`. Empty until one is added. */
@@ -317,8 +313,6 @@ export type AppAction =
   | { type: 'PROVIDER_SETTINGS_NOTICE'; payload: string | null }
   | { type: 'PROVIDER_TEST_STARTED'; payload: string }
   | { type: 'PROVIDER_TEST_SETTLED'; payload: { id: string; state: ProviderTestState } }
-  | { type: 'TOGGLE_SKILL'; payload: string }
-  | { type: 'INSTALL_SKILL'; payload: Skill }
   /** A command was just spawned, or refused before it could be. */
   | { type: 'TERMINAL_RUN_STARTED'; payload: TerminalRun }
   /** That command's outcome: an exit code, a denial, or a failure to start. */
@@ -403,34 +397,13 @@ const initialState: AppState = {
   projectRoot: null,
   editorNotice: null,
   
-  installedSkills: [
-    { id: 's1', name: 'skillopt', description: 'Optimize your code automatically', version: '1.2.0', author: 'Sketch Team', icon: 'Zap', enabled: true, category: 'Optimization' },
-    { id: 's2', name: 'superpowers', description: 'Advanced IDE features', version: '2.0.1', author: 'Community', icon: 'Star', enabled: true, category: 'Productivity' },
-    { id: 's3', name: 'tdd', description: 'Test Driven Development workflow', version: '1.0.0', author: 'Sketch Team', icon: 'Check', enabled: false, category: 'Testing' },
-    { id: 's4', name: 'grill-me', description: 'Aggressive code review', version: '0.9.5', author: 'Community', icon: 'AlertCircle', enabled: true, category: 'Review' },
-    { id: 's5', name: 'caveman', description: 'Simplify complex code', version: '1.0.0', author: 'Sketch Team', icon: 'Minus', enabled: false, category: 'Refactoring' },
-    { id: 's6', name: 'frontend-design', description: 'UI/UX best practices', version: '1.1.0', author: 'Designers', icon: 'Palette', enabled: true, category: 'Design' },
-    { id: 's7', name: 'code-reviewer', description: 'Standard code review', version: '1.5.0', author: 'Sketch Team', icon: 'MessageSquare', enabled: true, category: 'Review' },
-    { id: 's8', name: 'browser-use', description: 'Automate browser tasks', version: '2.1.0', author: 'Community', icon: 'Globe', enabled: false, category: 'Automation' },
-    { id: 's9', name: 'react-skill', description: 'React specific optimizations', version: '18.2.0', author: 'Sketch Team', icon: 'Code', enabled: true, category: 'Framework' },
-    { id: 's10', name: 'nextjs-skill', description: 'Next.js best practices', version: '13.4.0', author: 'Community', icon: 'Code', enabled: true, category: 'Framework' },
-    { id: 's11', name: 'docker-skill', description: 'Docker container management', version: '1.0.0', author: 'Sketch Team', icon: 'Package', enabled: true, category: 'DevOps' },
-    { id: 's12', name: 'security-skill', description: 'Security vulnerability scanning', version: '1.1.0', author: 'Security Pros', icon: 'Shield', enabled: true, category: 'Security' },
-    { id: 's13', name: 'git-workflow', description: 'Git branch management', version: '1.0.0', author: 'Sketch Team', icon: 'GitBranch', enabled: true, category: 'VCS' },
-    { id: 's14', name: 'api-design', description: 'RESTful API best practices', version: '1.0.0', author: 'Community', icon: 'Server', enabled: true, category: 'Architecture' },
-    { id: 's15', name: 'database-design', description: 'SQL Schema optimization', version: '1.0.0', author: 'Sketch Team', icon: 'Database', enabled: false, category: 'Architecture' }
-  ],
-  skillMarketplace: [
-    { id: 'm1', name: 'Vue Support', description: 'Vue.js development tools', version: '1.0.0', author: 'Community', icon: 'Code', enabled: false, category: 'Framework' },
-    { id: 'm2', name: 'Angular Support', description: 'Angular development tools', version: '1.0.0', author: 'Community', icon: 'Code', enabled: false, category: 'Framework' },
-    { id: 'm3', name: 'Svelte Support', description: 'Svelte development tools', version: '1.0.0', author: 'Community', icon: 'Code', enabled: false, category: 'Framework' },
-    { id: 'm4', name: 'Rust Support', description: 'Rust development tools', version: '1.0.0', author: 'Community', icon: 'FileRust', enabled: false, category: 'Language' },
-    { id: 'm5', name: 'Python Support', description: 'Python development tools', version: '1.0.0', author: 'Community', icon: 'FilePython', enabled: false, category: 'Language' },
-    { id: 'm6', name: 'Go Support', description: 'Go development tools', version: '1.0.0', author: 'Community', icon: 'Code', enabled: false, category: 'Language' },
-    { id: 'm7', name: 'AWS toolkit', description: 'AWS integration', version: '1.0.0', author: 'Community', icon: 'Cloud', enabled: false, category: 'Cloud' },
-    { id: 'm8', name: 'GCP toolkit', description: 'GCP integration', version: '1.0.0', author: 'Community', icon: 'Cloud', enabled: false, category: 'Cloud' }
-  ],
-  
+  // Task 6.4 deleted two fixtures here: `installedSkills` (15 invented skills) and
+  // `skillMarketplace` (8 more). Neither was ever read by any component, and both
+  // duplicated a third fixture inside the panel itself. Skill state now has exactly
+  // one home: the engine � the pinned manifest for what is available, the
+  // filesystem for what is installed � fetched by `SkillsMarketplace` through
+  // `skills-catalog`. Three copies of the same truth is how the copy on screen ends
+  // up being the wrong one (Requirement 14.6).
   // Nothing is configured until the settings surface loads `providers.json`, and
   // nothing is connected until the user runs a connection test. Both were asserted
   // here as facts before either had ever happened.
@@ -678,15 +651,12 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         ...state,
         providerTests: { ...state.providerTests, [action.payload.id]: action.payload.state }
       };
-    case 'TOGGLE_SKILL':
-      return {
-        ...state,
-        installedSkills: state.installedSkills.map(skill =>
-          skill.id === action.payload ? { ...skill, enabled: !skill.enabled } : skill
-        )
-      };
-    case 'INSTALL_SKILL':
-      return { ...state, installedSkills: [...state.installedSkills, action.payload] };
+    // `TOGGLE_SKILL` and `INSTALL_SKILL` were deleted in task 6.4 along with the
+    // fixtures they mutated. Installing is an engine operation that verifies a
+    // content hash and writes to disk, so it cannot be a reducer over local state;
+    // and "enabled" was never real — a skill reaches a run because the run asks for
+    // it by name (`task.skillNames`), which is the engine's existing contract.
+    // Reintroducing either would put skill state back in two places.
     case 'TERMINAL_RUN_STARTED': {
       const history = [...state.terminalHistory, action.payload];
       return {
