@@ -1202,6 +1202,44 @@ function maskLiterals(source: string): string {
   return out.join('')
 }
 
+/**
+ * Files permitted to name `package.json`, each with the reason.
+ *
+ * ── WHY THIS LIST EXISTS, AND WHY IT IS NOT A WEAKENING ─────────────────────
+ *
+ * The hazard this guard was built for is reading a package.json that WILL NOT BE
+ * THERE: the sidecar is one file copied next to the app binary, so its own manifest
+ * and its `node_modules` are gone. Reading the USER'S project manifest is a
+ * different act entirely — `join(root, 'package.json')`, where `root` came from the
+ * caller — and it is how stack detection knows a Node project from a Rust one
+ * (Requirement 4.8). Forbidding that would forbid the feature, not the hazard.
+ *
+ * The regex cannot tell the two apart, so the distinction is made explicitly here
+ * and then CHECKED: an allowed file must build the path from a caller-supplied root
+ * and must not resolve anything from its own module location. A new file that
+ * mentions `package.json` still fails, loudly, until someone adds it here with a
+ * reason — which is the review step this list is for.
+ */
+const PROJECT_MANIFEST_READERS: Readonly<Record<string, string>> = Object.freeze({
+  'src/verify/policy.ts':
+    'reads the USER project\u2019s package.json scripts to detect which verify stages ' +
+    'exist (Requirement 4.8). Path is join(root, …) from the caller\u2019s project root, ' +
+    'never relative to this module.',
+})
+
+/** True when every `package.json` mention is a project-root read, not a self read. */
+function readsOnlyProjectManifests(source: string): boolean {
+  // Module-relative forms are the actual hazard: these resolve next to the bundle.
+  if (/['"][./][^'"]*package\.json['"]/.test(source)) return false
+  if (/\bimport\s*\.\s*meta\b/.test(maskLiterals(source))) return false
+  // Every remaining mention must be joined onto something the caller supplied.
+  for (const match of source.matchAll(/package\.json/g)) {
+    const before = source.slice(Math.max(0, match.index - 40), match.index)
+    if (!/join\(\s*[A-Za-z_$][\w$]*\s*,\s*['"]$/.test(before)) return false
+  }
+  return true
+}
+
 /** The five bundle hazards in one source text. Shared by the audit and its self-test. */
 function bundleHazards(source: string, name = 'source'): string[] {
   const hazards: string[] = []
@@ -1210,7 +1248,13 @@ function bundleHazards(source: string, name = 'source'): string[] {
   if (/\bimport\s*\.\s*meta\b/.test(code)) hazards.push(`${name}: import.meta`)
   if (/\brequire\s*\(/.test(code)) hazards.push(`${name}: require()`)
   // String-shaped hazards: read as written.
-  if (/package\.json/.test(source)) hazards.push(`${name}: package.json reference`)
+  if (/package\.json/.test(source)) {
+    const declared = PROJECT_MANIFEST_READERS[name] !== undefined
+    // Declared is not enough: the reference still has to BE a project-root read.
+    if (!declared || !readsOnlyProjectManifests(source)) {
+      hazards.push(`${name}: package.json reference`)
+    }
+  }
   if (/\bfrom\s*['"][^'"]+\.json['"]/.test(source)) hazards.push(`${name}: JSON import`)
   return hazards
 }
@@ -1277,6 +1321,26 @@ describe('esbuild bundleability (Requirement 12.7)', () => {
     expect(bundleHazards("await readFile(join(dir, 'package.json'))")).toEqual([
       'source: package.json reference',
     ])
+    // An UNDECLARED file is flagged even when its read is project-shaped: the
+    // allowlist is the review step, and skipping it is how the next self-read gets in.
+    expect(bundleHazards("await readFile(join(root, 'package.json'))")).toEqual([
+      'source: package.json reference',
+    ])
+    // A DECLARED file whose read is project-shaped passes.
+    expect(
+      bundleHazards("await readFile(join(root, 'package.json'))", 'src/verify/policy.ts'),
+    ).toEqual([])
+    // A declared file that starts resolving relative to ITSELF does not: the
+    // declaration covers reading the caller's manifest, nothing else.
+    expect(
+      bundleHazards("await readFile(new URL('../package.json', import.meta.url))", 'src/verify/policy.ts'),
+    ).toEqual([
+      'src/verify/policy.ts: import.meta',
+      'src/verify/policy.ts: package.json reference',
+    ])
+    expect(
+      bundleHazards("await readFile(join(here, './package.json'))", 'src/verify/policy.ts'),
+    ).toEqual(['src/verify/policy.ts: package.json reference'])
     expect(bundleHazards("import pkg from '../package.json'")).toEqual([
       'source: package.json reference',
       'source: JSON import',

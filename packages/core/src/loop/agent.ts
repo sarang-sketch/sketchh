@@ -39,6 +39,8 @@ import { newRunId } from '../events/ids.js'
 import { redact } from '../providers/redact.js'
 import { runCommands } from '../verify/runner.js'
 import type { VerifyEventSink } from '../verify/runner.js'
+import { formatPolicyResult, runVerifyPolicy } from '../verify/policy.js'
+import type { PolicyResult, VerifyPolicy } from '../verify/policy.js'
 import type { FileWriter } from '../orchestrator/file-writer.js'
 import type {
   ChatAdapter,
@@ -123,6 +125,21 @@ export interface RunTaskDeps {
   root: string
   /** Defaults to the shell-less `runCommands`. */
   verify?: VerifyRunner
+  /**
+   * The nine-stage verification contract for this project (Requirement 4.3).
+   *
+   * When present it REPLACES `task.verify` as what a `verify` action runs, and
+   * `RunResult.ok` becomes "every non-skipped stage passed" (Requirement 4.7).
+   * `task.verify` remains the way a caller names ad-hoc commands for one task — an
+   * eval case, a scripted test — and the two are deliberately not merged: a task
+   * cannot append a tenth stage to a project's contract, and a project's contract
+   * cannot silently swallow a case's own assertions.
+   *
+   * Why the loop and not the caller: flattening the nine stages into `task.verify`
+   * would lose the ORDER's whole point, because `runCommands` has no fail-fast — a
+   * lint failure would sit behind the test suite it usually explains.
+   */
+  verifyPolicy?: VerifyPolicy
   /** Epoch-millisecond clock, injected for deterministic run ids. */
   clock?: () => number
   /** Run id generator. Defaults to `newRunId(clock())`. */
@@ -373,8 +390,24 @@ export async function runTask(task: Task, deps: RunTaskDeps): Promise<RunResult>
   let iterations = 0
   /** The MOST RECENT verify run. `RunResult.verify` reflects the last one. */
   let lastVerify: VerifyResult[] = []
+  /**
+   * The most recent policy run, when a policy is in force.
+   *
+   * Held on an object rather than in a bare `let` on purpose: it is only ever
+   * assigned inside `runVerify`, and TypeScript's flow analysis does not see
+   * through a closure — a bare `let` stays narrowed to `null` at every read site,
+   * which then types every field access as `never`. A property read is
+   * re-widened after an intervening call, which is exactly the situation here.
+   */
+  const verifyState: { policy: PolicyResult | null } = { policy: null }
   let verifyRan = false
   let terminated = false
+
+  /** The nine-stage contract, when the caller supplied one with any stage in it. */
+  const policy = deps.verifyPolicy
+  const hasPolicy = policy !== undefined && Object.keys(policy).length > 0
+  /** True when this run has anything at all to verify with. */
+  const hasVerification = hasPolicy || task.verify.length > 0
 
   const emit = async (
     kind: Parameters<EventStore['emit']>[0]['kind'],
@@ -409,20 +442,39 @@ export async function runTask(task: Task, deps: RunTaskDeps): Promise<RunResult>
     }
   }
 
-  /** Requirement 5.8: ok only when all stages passed, or none were configured. */
+  /**
+   * Requirement 5.8 and Requirement 4.7, which are the same rule at two scales:
+   * ok only when everything that was configured passed, and ok when nothing was.
+   *
+   * With a policy, `PolicyResult.ok` already encodes "every non-skipped stage
+   * passed" — a skipped stage is not a failure (4.4). Without one, the pre-existing
+   * rule stands, including its requirement that every configured command actually
+   * produced a result: a run aborted halfway through its commands has not passed.
+   */
   const verifyOk = (): boolean => {
+    if (hasPolicy) return verifyState.policy !== null && verifyState.policy.ok
     if (task.verify.length === 0) return true
     if (lastVerify.length !== task.verify.length) return false
     return lastVerify.every((r) => r.ok)
   }
 
-  const runVerify = async (): Promise<VerifyResult[]> => {
-    // `runCommands` emits verify_started before each spawn and verify_result
-    // after; the store is the sink, so nothing is emitted twice here.
+  const runVerify = async (): Promise<string> => {
+    verifyRan = true
+
+    if (hasPolicy) {
+      // The policy layer decides what runs and in what order, and stops at the
+      // first failing stage. It does not spawn: it calls the same `runCommands`,
+      // which emits `verify_started` / `verify_result` per command through this
+      // store (Requirement 4.6), so nothing is emitted twice here either.
+      const result = await runVerifyPolicy(policy!, { sink: events, runId, signal })
+      verifyState.policy = result
+      lastVerify = result.results
+      return formatPolicyResult(result)
+    }
+
     const results = await verifyRunner(task.verify, { sink: events, runId, signal })
     lastVerify = results
-    verifyRan = true
-    return results
+    return formatVerifyFeedback(results)
   }
 
   await emit('run_started', {
@@ -627,8 +679,7 @@ export async function runTask(task: Task, deps: RunTaskDeps): Promise<RunResult>
         }
 
         case 'verify': {
-          const results = await runVerify()
-          messages.push({ role: 'user', content: formatVerifyFeedback(results) })
+          messages.push({ role: 'user', content: await runVerify() })
           break
         }
 
@@ -689,14 +740,36 @@ export async function runTask(task: Task, deps: RunTaskDeps): Promise<RunResult>
           // failing the run: the model asserting completion is exactly the moment
           // the claim should be checked, and "you forgot to verify" is a worse
           // outcome than one extra verify pass. Requirement 5.8 then decides `ok`.
-          if (!verifyRan && task.verify.length > 0) {
+          if (!verifyRan && hasVerification) {
             await runVerify()
           }
           const ok = verifyOk()
           const finalText = action.text.trim() === '' ? 'Done.' : action.text
+          // Read into a local: `lastPolicy` is only ever assigned inside `runVerify`,
+          // and TypeScript's flow analysis does not see through a closure, so a
+          // direct `lastPolicy !== null` here narrows to `never`.
+          const settled = verifyState.policy
           return finish(ok, finalText, {
             reason: ok ? 'done' : 'verify_failed',
             verifiedStages: lastVerify.length,
+            ...(settled !== null
+              ? {
+                  // The gauntlet's shape, on the terminal event: which stages ran,
+                  // which were skipped, and where it stopped. A reader of the log
+                  // should not have to reconstruct that from nine verify_results.
+                  policy: {
+                    ok: settled.ok,
+                    failedStage: settled.failedStage,
+                    ranStages: settled.ranStages,
+                    verifiedAnything: settled.verifiedAnything,
+                    stages: settled.stages.map((stage) => ({
+                      stage: stage.stage,
+                      status: stage.status,
+                      durationMs: stage.durationMs,
+                    })),
+                  },
+                }
+              : {}),
           })
         }
       }

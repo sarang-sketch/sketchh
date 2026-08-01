@@ -64,6 +64,8 @@ import {
   trainSkill,
 } from '../skills/index.js'
 import { GitTool } from '../tools/index.js'
+import { parsePolicyJson, resolveVerifyPolicy } from '../verify/index.js'
+import type { VerifyPolicy } from '../verify/index.js'
 import type {
   ChatAdapter,
   Check,
@@ -436,6 +438,13 @@ async function run(params: Record<string, unknown>, ctx: MethodContext): Promise
     ctx,
   )
 
+  // THE VERIFICATION CONTRACT (Requirement 4.5). Resolved from `verify.yaml` when the
+  // project has one, from per-stack detection otherwise, and only when the caller
+  // asked — a task that named its own `verify` commands means them, and a caller
+  // scoring an eval case must not have the project's nine stages silently appended to
+  // its assertions.
+  const verifyPolicy = await resolveVerifyPolicyFor(root, params, ctx)
+
   return runTask(task, {
     adapter,
     events,
@@ -446,9 +455,61 @@ async function run(params: Record<string, unknown>, ctx: MethodContext): Promise
     skills,
     projectContext: await loadProjectContext(root),
     ...(retrievedContext !== undefined ? { retrievedContext } : {}),
+    ...(verifyPolicy !== undefined ? { verifyPolicy } : {}),
     ...(maxIterations !== undefined ? { maxIterations } : {}),
     ...(reviewEdits !== undefined ? { reviewEdits } : {}),
   })
+}
+
+/**
+ * The nine-stage contract for this run, or `undefined` to leave `task.verify` in
+ * charge.
+ *
+ * OPT-IN, via `params.verifyPolicy`. Three settings, and the reason each exists:
+ *   * absent / `false` — unchanged behaviour. `task.verify` decides, which is what
+ *     every existing caller (the eval harness above all) already depends on.
+ *   * `true` — resolve `verify.yaml`, or detect per stack. This is what a desktop
+ *     run wants: "done" should mean the project's own gauntlet passed.
+ *   * an object — an explicit policy on the wire, for a caller that already knows
+ *     the stages (the bench harness in Phase 11).
+ *
+ * Not on by default because it changes what `ok` MEANS for every existing caller,
+ * and because auto-detection can name a command the machine does not have — which
+ * would turn "the model finished" into "the model finished and `ruff` is not
+ * installed". A caller asks for the contract deliberately.
+ */
+async function resolveVerifyPolicyFor(
+  root: string,
+  params: Record<string, unknown>,
+  ctx: MethodContext,
+): Promise<VerifyPolicy | undefined> {
+  const requested = params['verifyPolicy']
+  if (requested === undefined || requested === null || requested === false) return undefined
+
+  if (requested === true) {
+    const resolved = await resolveVerifyPolicy(root)
+    for (const diagnostic of resolved.diagnostics) ctx.log(`verify policy: ${diagnostic}`)
+    ctx.log(
+      resolved.source === 'file'
+        ? `verify policy read from ${resolved.path}`
+        : resolved.source === 'detected'
+          ? `verify policy detected for a ${resolved.language} project: ${Object.keys(resolved.policy).join(', ')}`
+          : 'no verify policy: no policy file, and no stage detected for this project',
+    )
+    return resolved.policy
+  }
+
+  if (typeof requested === 'object' && !Array.isArray(requested)) {
+    // An explicit policy still goes through the JSON reader, so a caller on the wire
+    // cannot hand the runner a shape the file format would have rejected.
+    const { policy, diagnostics } = parsePolicyJson(JSON.stringify(requested))
+    for (const diagnostic of diagnostics) ctx.log(`verify policy: ${diagnostic}`)
+    return policy
+  }
+
+  throw new InvalidParamsError(
+    'params.verifyPolicy must be true, false, or an object of stage → commands',
+  )
 }
 
 /**
