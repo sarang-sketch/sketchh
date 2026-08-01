@@ -466,7 +466,16 @@ export async function runTask(task: Task, deps: RunTaskDeps): Promise<RunResult>
       // first failing stage. It does not spawn: it calls the same `runCommands`,
       // which emits `verify_started` / `verify_result` per command through this
       // store (Requirement 4.6), so nothing is emitted twice here either.
-      const result = await runVerifyPolicy(policy!, { sink: events, runId, signal })
+      // `root` matters: a policy carrying a live check starts the application THERE.
+      // Omitting it made the live check skip itself, so a run with only live feedback
+      // configured reported ok having verified nothing — which is exactly the silent
+      // pass this stage exists to prevent. A test caught it.
+      const result = await runVerifyPolicy(policy!, {
+        sink: events,
+        runId,
+        root: deps.root,
+        ...(signal !== undefined ? { signal } : {}),
+      })
       verifyState.policy = result
       lastVerify = result.results
       return formatPolicyResult(result)

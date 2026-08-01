@@ -45,6 +45,7 @@ import { join } from 'node:path'
 
 import { parseFrontmatter } from '../skills/frontmatter.js'
 import type { VerifyCommand, VerifyResult } from '../types.js'
+import { liveResultToVerifyResult, runLiveCheck, type LiveCheck, type LiveResult } from './live.js'
 import { runCommands, type VerifyEventSink } from './runner.js'
 
 /**
@@ -94,10 +95,23 @@ export interface StageResult {
   reason: string | null
 }
 
-/** Stage → the commands that constitute it. A stage with no commands is skipped. */
+/**
+ * Stage → the commands that constitute it. A stage with no commands is skipped.
+ *
+ * `live` is not a tenth stage. Requirement 4.3 fixes the nine, and live feedback is
+ * HOW the `integration` stage is performed for a project that has a runnable app: it
+ * runs after that stage's commands and its verdict counts exactly like theirs. A
+ * tenth stage would have meant either editing the contract or hiding a check outside
+ * the `ok` rule, and both are worse.
+ */
 export type VerifyPolicy = {
   [S in VerifyStage]?: VerifyCommand[]
+} & {
+  live?: LiveCheck
 }
+
+/** The stage a live check belongs to. Fixed; see the note on `VerifyPolicy.live`. */
+export const LIVE_STAGE: VerifyStage = 'integration'
 
 /** Where a policy came from. Reported so a surface never has to guess. */
 export type PolicySource = 'file' | 'detected' | 'none'
@@ -131,6 +145,14 @@ export interface PolicyResult {
   /** Flattened per-command results, for `RunResult.verify`. */
   results: VerifyResult[]
   totalDurationMs: number
+  /**
+   * The live check's full verdict, when one was configured.
+   *
+   * Its row is already in `results`; this carries what a row cannot — the status
+   * (`failed-to-start` reads differently from `runtime-error`), whether the verdict
+   * was a heuristic, and the captured output.
+   */
+  live?: LiveResult
 }
 
 // ── argv, without a shell ───────────────────────────────────────────────────
@@ -248,6 +270,122 @@ export function parsePolicyYaml(text: string): { policy: VerifyPolicy; diagnosti
 }
 
 /**
+ * Parse the `live` block of a JSON policy (Requirement 23.1).
+ *
+ * JSON only, deliberately: a live check is a nested object (start command, readiness
+ * signals, a probe) and the YAML subset this project reads on purpose does not do
+ * nested maps. Inventing a flat spelling for it — `live.cmd:`, `live.port:` — would
+ * be a second grammar nobody asked for, and the dotted keys would parse as opaque
+ * strings in every other YAML tool. So `verify.yaml` configures the nine stages and
+ * `verify.json` is where a live check goes, and that is stated rather than discovered.
+ */
+export function parseLiveCheck(value: unknown): { check: LiveCheck | null; diagnostics: string[] } {
+  const diagnostics: string[] = []
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return { check: null, diagnostics: ['live must be an object with a cmd'] }
+  }
+  const record = value as Record<string, unknown>
+
+  const cmd = record['cmd']
+  if (typeof cmd !== 'string' || cmd.trim() === '') {
+    return { check: null, diagnostics: ['live.cmd must be a non-empty string'] }
+  }
+
+  const strings = (key: string): string[] | undefined => {
+    const raw = record[key]
+    if (raw === undefined) return undefined
+    if (!Array.isArray(raw)) {
+      diagnostics.push(`live.${key} must be an array of strings`)
+      return undefined
+    }
+    return raw.map((entry) => String(entry))
+  }
+
+  /**
+   * `key` is the property to read; `label` is what a diagnostic calls it.
+   *
+   * They are separate parameters because an earlier version passed the dotted label
+   * as the key and looked up `probe['probe.expectStatus']`, which is always
+   * undefined — so `expectStatus` was silently dropped and every probe accepted any
+   * status below 500. A test caught it; the two roles are now distinct.
+   */
+  const number = (
+    key: string,
+    label = key,
+    source: Record<string, unknown> = record,
+  ): number | undefined => {
+    const raw = source[key]
+    if (raw === undefined) return undefined
+    if (typeof raw !== 'number' || !Number.isFinite(raw)) {
+      diagnostics.push(`live.${label} must be a number`)
+      return undefined
+    }
+    return raw
+  }
+
+  const check: LiveCheck = { cmd }
+  const args = strings('args')
+  if (args !== undefined) check.args = args
+  if (typeof record['name'] === 'string') check.name = record['name']
+  if (typeof record['cwd'] === 'string') check.cwd = record['cwd']
+  if (record['skip'] === true) check.skip = true
+
+  const env = record['env']
+  if (env !== undefined) {
+    if (env === null || typeof env !== 'object' || Array.isArray(env)) {
+      diagnostics.push('live.env must be an object of string values')
+    } else {
+      check.env = Object.fromEntries(
+        Object.entries(env as Record<string, unknown>).map(([key, entry]) => [key, String(entry)]),
+      )
+    }
+  }
+
+  const readyWhen = record['readyWhen']
+  if (readyWhen !== undefined) {
+    if (readyWhen === null || typeof readyWhen !== 'object' || Array.isArray(readyWhen)) {
+      diagnostics.push('live.readyWhen must be an object')
+    } else {
+      const readiness = readyWhen as Record<string, unknown>
+      const ready: LiveReadinessInput = {}
+      if (typeof readiness['output'] === 'string') ready.output = readiness['output']
+      if (typeof readiness['url'] === 'string') ready.url = readiness['url']
+      const port = number('port', 'readyWhen.port', readiness)
+      if (port !== undefined) ready.port = port
+      if (Object.keys(ready).length > 0) check.readyWhen = ready
+    }
+  }
+
+  const probe = record['probe']
+  if (probe !== undefined) {
+    if (probe === null || typeof probe !== 'object' || Array.isArray(probe)) {
+      diagnostics.push('live.probe must be an object with a url')
+    } else {
+      const source = probe as Record<string, unknown>
+      const url = source['url']
+      if (typeof url !== 'string' || url.trim() === '') {
+        diagnostics.push('live.probe.url must be a non-empty string')
+      } else {
+        const expectStatus = number('expectStatus', 'probe.expectStatus', source)
+        check.probe = { url, ...(expectStatus !== undefined ? { expectStatus } : {}) }
+      }
+    }
+  }
+
+  const readyTimeoutMs = number('readyTimeoutMs')
+  if (readyTimeoutMs !== undefined) check.readyTimeoutMs = readyTimeoutMs
+  const settleMs = number('settleMs')
+  if (settleMs !== undefined) check.settleMs = settleMs
+  const errorPatterns = strings('errorPatterns')
+  if (errorPatterns !== undefined) check.errorPatterns = errorPatterns
+
+  return { check, diagnostics }
+}
+
+/** Local alias so the readiness shape can be built up field by field. */
+type LiveReadinessInput = NonNullable<LiveCheck['readyWhen']>
+
+/**
  * Parse `verify.json`: the exact `VerifyCommand` shape, for argv a command line
  * cannot express (an argument containing a quote, a newline, or a literal `|`).
  */
@@ -268,6 +406,12 @@ export function parsePolicyJson(text: string): { policy: VerifyPolicy; diagnosti
 
   const policy: VerifyPolicy = {}
   for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (key === 'live') {
+      const parsed = parseLiveCheck(value)
+      if (parsed.check !== null) policy.live = parsed.check
+      diagnostics.push(...parsed.diagnostics)
+      continue
+    }
     if (!isVerifyStage(key)) {
       diagnostics.push(
         `unknown stage ${JSON.stringify(key)}; the nine stages are ${VERIFY_STAGES.join(', ')}`,
@@ -535,6 +679,14 @@ export interface RunPolicyOptions {
   /** The verify runner. Injectable for tests; defaults to `runCommands`. */
   run?: typeof runCommands
   /**
+   * Project root, needed only when the policy carries a `live` check: the app is
+   * started there. Without it a live check is skipped with that as the reason,
+   * rather than spawning in whatever directory the process happens to be in.
+   */
+  root?: string
+  /** Live-check runner. Injectable for tests; defaults to `runLiveCheck`. */
+  runLive?: typeof runLiveCheck
+  /**
    * Keep going after a stage fails.
    *
    * Off by default: the point of an ordered gauntlet is that the first failure is
@@ -562,10 +714,15 @@ export async function runVerifyPolicy(
   let failedStage: VerifyStage | null = null
   let totalDurationMs = 0
 
+  const liveCheck = policy.live
+  /** Set when a live check ran, so the caller can read its detail, not just its row. */
+  let live: LiveResult | null = null
+
   for (const stage of VERIFY_STAGES) {
     const commands = policy[stage] ?? []
+    const runsLive = stage === LIVE_STAGE && liveCheck !== undefined
 
-    if (commands.length === 0) {
+    if (commands.length === 0 && !runsLive) {
       // Requirement 4.4. Skipped is not a failure, and it says which stage.
       stages.push({
         stage,
@@ -589,13 +746,76 @@ export async function runVerifyPolicy(
       continue
     }
 
-    const stageResults = await run(commands, {
-      ...(options.sink !== undefined ? { sink: options.sink } : {}),
-      ...(options.runId !== undefined ? { runId: options.runId } : {}),
-      ...(options.signal !== undefined ? { signal: options.signal } : {}),
-    })
+    const stageResults =
+      commands.length === 0
+        ? []
+        : await run(commands, {
+            ...(options.sink !== undefined ? { sink: options.sink } : {}),
+            ...(options.runId !== undefined ? { runId: options.runId } : {}),
+            ...(options.signal !== undefined ? { signal: options.signal } : {}),
+          })
+
+    // The live check runs AFTER this stage's commands: an integration suite that
+    // already fails tells you more than a dev server that also fails, and starting an
+    // app takes seconds that a failing suite has already made pointless.
+    if (runsLive && (stageResults.every((result) => result.ok) || options.continueOnFailure === true)) {
+      const runner = options.runLive ?? runLiveCheck
+      live =
+        options.root === undefined
+          ? {
+              name: liveCheck!.name ?? 'live',
+              status: 'skipped',
+              ok: true,
+              // Honest rather than convenient: guessing a root would start the app in
+              // whatever directory this process happens to be in.
+              reason:
+                'the live check was skipped because no project root was supplied to the verify policy',
+              output: '',
+              heuristic: false,
+              durationMs: 0,
+            }
+          : await runner(liveCheck!, {
+              root: options.root,
+              ...(options.signal !== undefined ? { signal: options.signal } : {}),
+            })
+
+      if (live.status !== 'skipped') {
+        const asResult = liveResultToVerifyResult(live)
+        // Announced and recorded through the same sink as every command, so a live
+        // verdict appears on the Timeline like the rest of the gauntlet (4.6). The
+        // pair is emitted here rather than by `runLiveCheck`, which has no sink: the
+        // check is a long-lived process, not a command, and giving it its own sink
+        // would be a second place verify events come from.
+        await options.sink?.emit({
+          runId: options.runId ?? 'verify',
+          kind: 'verify_started',
+          payload: { name: asResult.name, live: true },
+        })
+        await options.sink?.emit({
+          runId: options.runId ?? 'verify',
+          kind: 'verify_result',
+          payload: { ...asResult, live: { status: live.status, heuristic: live.heuristic } },
+        })
+        stageResults.push(asResult)
+      }
+    }
+
+    if (stageResults.length === 0) {
+      // A stage whose only content was a live check that skipped itself is skipped,
+      // not failed. Requirement 23.4: a project the stage does not apply to must not
+      // be penalised for it.
+      stages.push({
+        stage,
+        status: 'skipped',
+        results: [],
+        durationMs: 0,
+        reason: live?.reason ?? `no ${stage} stage is configured for this project`,
+      })
+      continue
+    }
+
     const durationMs = stageResults.reduce((sum, result) => sum + result.durationMs, 0)
-    const ok = stageResults.length > 0 && stageResults.every((result) => result.ok)
+    const ok = stageResults.every((result) => result.ok)
 
     results.push(...stageResults)
     ranStages.push(stage)
@@ -612,6 +832,7 @@ export async function runVerifyPolicy(
 
   const verifiedAnything = results.length > 0
   return {
+    ...(live !== null ? { live } : {}),
     // Requirement 4.7: every non-skipped stage passed, or nothing was configured.
     ok: stages.every((entry) => entry.status === 'passed' || entry.status === 'skipped'),
     stages,
@@ -629,7 +850,9 @@ export async function verifyProject(
   options: RunPolicyOptions = {},
 ): Promise<PolicyResult & { resolved: ResolvedPolicy }> {
   const resolved = await resolveVerifyPolicy(root)
-  const result = await runVerifyPolicy(resolved.policy, options)
+  // The root is the app's cwd for a live check, and its absence is why a live check
+  // would otherwise skip itself.
+  const result = await runVerifyPolicy(resolved.policy, { root, ...options })
   return { ...result, resolved }
 }
 
