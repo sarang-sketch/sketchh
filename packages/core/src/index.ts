@@ -27,6 +27,16 @@ export * as diff from './diff/index.js'
 export * as events from './events/index.js'
 export * as skills from './skills/index.js'
 
+// The curated skill registry: a pinned manifest with a content hash per skill, and
+// an installer that REFUSES on mismatch (`registry.installSkill`). A content pin,
+// not a signature — see the header of `registry/manifest.ts`.
+export * as registry from './registry/index.js'
+
+// Capability scoping. `capabilities.ToolDispatcher` is the ONE place a tool call is
+// authorised; the vocabulary fails closed on a token it does not recognise. Phase
+// 7.3 registers real tools here and does not get to add a second dispatcher.
+export * as capabilities from './capabilities/index.js'
+
 // The ONE credential pattern table (`secrets.SECRET_KEY_SHAPES`,
 // `secrets.isSensitiveKeyName`). Public because "holds no key material" is a
 // contract this engine makes to its callers (Requirements 17.2, 3.7), and a caller
