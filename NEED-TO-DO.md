@@ -85,10 +85,11 @@ writes down what happened. Do not describe a wired interface as a working featur
 
 ## 1. Where the project actually stands
 
-**Status date: commit `90e6c57` (Phase 5 gated). 40 of 96 tasks complete. Phases 1, 1.5, 2, 3, 4 and
-5 are done and gated. Phase 6 is next.** The per-task detail below still reads from the Phase 3
-vantage point in places — where it does, `tasks-executed.md` and
-`.kiro/specs/sketch-engineering-os/HANDOFF.md` are newer and win.
+**Status date: Phase 6 gated. 48 of 96 tasks complete. Phases 1, 1.5, 2, 3, 4, 5 and 6 are done and
+gated. Phase 7 is next.** The per-task detail below still reads from the Phase 3 vantage point in
+places — where it does, `tasks-executed.md` and `.kiro/specs/sketch-engineering-os/HANDOFF.md` are
+newer and win. (The `Status date` line at the very top of this file is older still; treat this
+section as the current one.)
 
 ```
 90e6c57  phase 5 task 5.6 — phase 5 gate, context and diagram claims measured on a fifty-file fixture
@@ -104,7 +105,7 @@ d759311  phase 4 complete — self-hosted fonts, README zero-dollar recipe, gate
 ```
 
 Current suite, from a **cold install** (`node_modules` and `packages/core/dist` deleted):
-**core 631 tests / 33 files green, desktop 379 tests / 39 files green**, build 0, typecheck 0,
+**core 711 tests / 38 files green, desktop 393 tests / 40 files green**, build 0, typecheck 0,
 offline, no key, identical with `SKETCH_FAKE_PROVIDER=1` and unset.
 
 **Cold order matters: `install → build → typecheck → test`.** The desktop typecheck resolves
@@ -162,7 +163,8 @@ phantom errors. §0.2's ordering was written before this bit, and this is the co
 | `DiffReview` | **real** — core hunk parser/applier, per-hunk verdicts, run-scoped plan mirror (3.2, 3.6) | done |
 | Ghost completions | wired to the client seam, **off by default**, no provider behind it | 4.1, 8.2 |
 | Monaco widget itself | doubled in tests (cannot run in jsdom); `ModelRegistry` is what is covered | *unowned — jsdom limit, not a stub* |
-| `SkillsMarketplace` | `MOCK_SKILLS`; `TOGGLE_SKILL`/`INSTALL_SKILL` reducers are dead | **6.4** |
+| `SkillsMarketplace` | **real** � pinned registry, install verified by content hash, grant shown before consent (6.4). `MOCK_SKILLS` and both `AppState` copies deleted | done |
+| Tool layer | **still does not exist**; `capabilities.ToolDispatcher` is the enforcement point with no tools registered | **7.3** |
 | `TaskLog` | `MOCK_TASKS`, non-functional filter | **10.4** |
 | `AgentTeamPanel` | fixture data **and unreachable** — no ActivityBar item dispatches `agents` | **10.4** |
 | `ModelSelector` | hardcoded providers; `state.providers` never rendered | **4.1** |
@@ -615,7 +617,30 @@ relevant than the whole-repo baseline, **and** the held-out eval score rises. Pr
 
 ---
 
-### Phase 6 — Skills registry and trainer (7 tasks)
+### Phase 6 — Skills registry and trainer (7 tasks) — **DONE, gated**
+
+Kept below as the record of what was asked for. What shipped, and where it differs from this brief:
+
+- **§5.4 steps 1–2 were not done as written.** Community skills were **not** cloned or vendored, and
+  skill discovery was **not** widened to `.agents/skills/`. Instead all six packs are skills written
+  for this project — prose only, so the whole seed set installs before the tool layer exists without
+  running a stranger's Python. Vendoring needs a license review and a recorded commit SHA, which is
+  a deliberate act with its own step, not something to do implicitly while seeding a registry. The
+  format stays compatible, so `loadSkillsFromRoots` and vendoring remain cheap follow-ups.
+- **6.3 built the enforcement point; there are still no tools.** The adversarial suite proves the
+  gate denies an ungranted call. It does **not** prove a hostile skill cannot reach the network,
+  because nothing in this build can reach the network on a skill's behalf. That is 7.3. The
+  `last30days` install test in step 5 is therefore still outstanding and belongs after 7.3.
+- **The registry is a content pin, not a signature.** It proves what you install matches the
+  manifest, never who wrote the manifest. Signed releases are 26.3 and remain unimplemented.
+- **Requirement 9.7's cost guard is satisfied for training only.** `TrainingBudget` bounds the
+  optimizer's own calls and tokens, checked pre-flight. The loop-wide guard is 8.2.
+- **A shipped-app defect was caught by the sidecar hazard guard**: locating the registry relative to
+  `import.meta.url` works in tests and points at nothing in the bundled sidecar. There is now no
+  path-relative default — `params.registryDir` or `SKETCH_REGISTRY_DIR`, and an honest refusal
+  otherwise. Pointing the app at the shipped registry is packaging, task 12.1.
+
+Full gate result, numbers and the four mutation checks are in `tasks-executed.md`.
 
 **This is the phase that makes Sketch worth adopting.** See §5 for the concrete skill strategy and
 the community ecosystem to plug into — read that section *before* designing 6.1, because the manifest

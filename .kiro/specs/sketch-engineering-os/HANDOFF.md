@@ -19,16 +19,23 @@ Phase 3 and had gone four phases stale.
 
 ## IMMEDIATE NEXT ACTION
 
-**Phase 5 is gated and committed. The working tree is clean. Start task 6.1 (skill registry).**
+**Phase 6 is gated and committed. The working tree is clean. Start task 7.1 (the verify policy).**
 
 Cold install (`node_modules` and `packages/core/dist` deleted, then
 `npm install && npm run build && npm run typecheck && npm test`): install 0, build 0, typecheck 0,
-test 0 — **core 631 tests / 33 files, desktop 379 tests / 39 files**, offline, no API key, and
+test 0 — **core 711 tests / 38 files, desktop 393 tests / 40 files**, offline, no API key, and
 identical with `SKETCH_FAKE_PROVIDER=1` and unset.
 
 **Run `build` BEFORE `typecheck` on a cold tree.** The desktop typecheck resolves `@sketch/core`
 through its emitted `.d.ts`, so with `packages/core/dist` deleted it fails with ~43 phantom errors
 that have nothing to do with the code. Correct cold order: `install → build → typecheck → test`.
+
+The Phase 6 gate proof is `packages/core/test/phase6-gate.test.ts`, which runs install → enforce →
+train as ONE chain over the shipped registry (the joins are where the failures live). Four guards
+were mutation-verified: the digest check, the capability authorisation, the trainer's strict `>`,
+and the optimizer's frontmatter strip. **There are still no tools** — 6.3 built the enforcement
+point and 7.3 populates it, so the adversarial suite proves the gate denies an ungranted call, not
+that a hostile skill cannot reach the network.
 
 The Phase 5 gate proof is two files:
 `packages/core/test/phase5-gate.test.ts` (the fifty-file fixture, the smaller/more-relevant
@@ -75,9 +82,10 @@ because there was nothing to bisect.
 | 3 — Code surface (3.1–3.7) | **DONE**, gate green cold |
 | 4 — Settings, secrets, zero telemetry (4.1–4.5) | **DONE**, gate green cold. 4.3 superseded |
 | 5 — Intelligent context + architecture generator (5.1–5.6) | **DONE**, gate green cold |
-| 6–12 | Not started |
+| 6 — Skills registry, capability scopes, real optimizer (6.1–6.7) | **DONE**, gate green cold |
+| 7–12 | Not started |
 
-Task counts: 96 total, **40 complete**.
+Task counts: 96 total, **48 complete**.
 
 ---
 

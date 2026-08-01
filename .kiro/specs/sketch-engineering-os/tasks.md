@@ -248,27 +248,27 @@ Phase 4 numbering stays intact for anything that references it.
 
 ## Phase 6 — Skills registry and trainer
 
-- [ ] 6. Curated signed registry, capability scopes, and the real optimizer
-- [~] 6.1 Build the signed curated registry
+- [x] 6. Curated signed registry, capability scopes, and the real optimizer
+- [x] 6.1 Build the signed curated registry
   - Pinned manifest with a content hash per skill; reject installation on hash mismatch with a tamper diagnostic
   - _Requirements: 11.1, 11.2_
-- [~] 6.2 Seed the registry
+- [x] 6.2 Seed the registry
   - Context packing, web/data, general engineering pack, frontend design, research-stage pack, finance/quant pack
   - _Requirements: 11.3_
-- [~] 6.3 Enforce capability scopes
+- [x] 6.3 Enforce capability scopes
   - Enforce `capabilities:` at the tool and filesystem layer; a skill without a network capability cannot fetch, and the attempt emits `tool_denied`
   - _Requirements: 11.4, 11.5_
-- [~] 6.4 Build the real Skills surface
+- [x] 6.4 Build the real Skills surface
   - Replace `SkillsMarketplace`'s `MOCK_SKILLS` and the duplicate never-read `state.installedSkills` and `state.skillMarketplace` fixtures with registry data; wire the dead `TOGGLE_SKILL` and `INSTALL_SKILL` reducers
   - _Requirements: 14.6, 27.1, 27.3_
-- [~] 6.5 Open the marketplace behind the gate
+- [x] 6.5 Open the marketplace behind the gate
   - Ship the open marketplace with a review queue only after signing and capability scoping are both tested
   - _Requirements: 11.6_
-- [~] 6.6 Wire the real optimizer into `proposeEdit`
+- [x] 6.6 Wire the real optimizer into `proposeEdit`
   - Replace the stub with the real optimizer while keeping our strict validation gate unchanged
   - Add a "Train this skill on my project" action running `trainSkill` on captured evals over a train/validation split, behind the cost guard and off the hot path
   - _Requirements: 9.5, 9.6, 9.7_
-- [~] 6.7 Phase 6 gate
+- [x] 6.7 Phase 6 gate
   - Prove signed install and scope enforcement offline; prove the stub-optimizer trainer improves a seed skill and rejects a regression
   - The real-optimizer run in 6.6 is the one documented exception that may require a key
   - _Requirements: 11.2, 11.5, 9.8_

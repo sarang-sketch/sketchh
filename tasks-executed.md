@@ -474,10 +474,94 @@ are still there, still with no owning phase.
 
 ---
 
+## Phase 6 — Skills registry and trainer (spec: `.kiro/specs/sketch-engineering-os`)
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| 6.1 | Signed curated registry | ✅ | `registry/hash.ts` hashes the WHOLE skill directory — sorted relative paths, `sha256` per file's **bytes**, digest over `<path>\0<file-digest>\n` — with the algorithm written out so a third party can reproduce it, and a test that recomputes it by hand from `node:crypto`. Symlinks are not followed (a skill's digest must not cover bytes outside it). `registry.json` is validated field by field and **throws** rather than loading half of itself. `installSkill` verifies before it writes, has no `force`, and refuses naming the file that differs |
+| 6.2 | Seed the registry | ✅ | Seven skills across all six packs Requirement 11.3 names, **written for this project rather than vendored** — the reasoning is in the decision log. Prose only: no seeded skill ships an executable, which is what makes the set installable before the tool layer exists. Pinned by `npm run pin:registry`, and `registry.seed.test.ts` fails when the pin goes stale rather than letting a user meet it as a tamper refusal |
+| 6.3 | Enforce capability scopes | ✅ | Ten-capability vocabulary that **fails closed** on an unknown token, naming the typo. `ToolDispatcher.call` is the one authorisation point; both it and the prompt's tool list go through one private `#authorised`, and a test asserts there is exactly one grant consultation in the package. Wired into `runTask` via `deps.tools`: with it absent, the old refusal is unchanged. A denial is a RESULT, not a throw. Adversarial suite: a skill declaring nothing attempts six escalations, all denied, one `tool_denied` each, and it survives all six |
+| 6.4 | The real Skills surface | ✅ | `MOCK_SKILLS` deleted, plus the two never-read fixtures in `AppState` (15 + 8 invented skills) and the `Skill` interface with four fields the engine's `Skill` does not have. Skill state now has one home: the engine. The install dialog shows the **content hash it will verify** and **every capability it will grant** in plain words before the user confirms, with the four that reach past the project called out separately. 14 tests against the real `METHODS` table and a real pinned registry |
+| 6.5 | Open the marketplace behind the gate | ✅ | The shipped registry is `curated`, asserted. The gate an `open` registry must pass is built and tested: an entry needs an `approved` `ReviewRecord`, and a review that names a digest is **invalidated when the content changes after it** — approving bytes is the only approval that means anything. `reviewRefusalFor` is exported so a surface cannot invent a second policy |
+| 6.6 | Real optimizer into `proposeEdit` | ✅ | `providerProposeEdit` rewrites the BODY and nothing else: the candidate is `{ ...incumbent, body }` and a proposed body's own frontmatter is stripped, so training cannot widen a grant. Strict parsing (no fenced block → no proposal). Bounded by a `TrainingBudget` checked **before** each request. Requirement 9.7 is satisfied *for training* only — the loop-wide guard is 8.2 and this says so |
+| 6.7 | Phase 6 gate | ✅ | See below |
+
+### Phase 6 gate result
+
+**One chain, not three tests.** `packages/core/test/phase6-gate.test.ts` runs:
+the shipped registry → recompute and verify the pinned digest → install into a real project →
+load the installed skill back off disk → resolve **its** grant → a real `runTask` in which two
+ungranted tool calls are denied and one granted call runs → train that same skill through the
+strict gate → assert the winner's grant is still the installed one.
+
+The joins are where the interesting failures live. A skill can install and be granted the wrong
+thing; a grant can be right in the manifest and never reach the dispatcher; a trained skill can
+quietly acquire capabilities its installed version never had. Each is invisible if the three
+claims are tested apart.
+
+**Measured, printed on every run:**
+
+```
+pinned commit-context v1.0.0: sha256:95bfb1c3aec9… over 1 file(s)
+installed into <project>/.sketch/skills/commit-context, granted fs:read:project, git:read
+run r0msap14rj-…: 2 denied (net:http, fs:write:home), 1 permitted (git:read), run ok
+trained commit-context: held-out 0.000 → 1.000, grant unchanged (git:read, fs:read:project)
+```
+
+**Cold verification** (`node_modules` and `packages/core/dist` deleted, then
+`npm install && npm run build && npm run typecheck && npm test`): install 0, build 0, typecheck 0,
+test 0. **Core 711 tests / 38 files, desktop 393 tests / 40 files** — 1 104 total. Offline, no API
+key, identical with `SKETCH_FAKE_PROVIDER=1` and unset.
+
+**A shipped-app defect the sidecar guard caught mid-task.** `skills-catalog` first located the
+seeded registry with `resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')`. That resolves
+under vitest and from `dist/`, and points at nothing in the bundled sidecar — one file copied next
+to the app binary, with no package layout to be relative to. `cli.test.ts`'s hazard guard failed
+the build. There is now **no path-relative default**: the location comes from `params.registryDir`
+or `SKETCH_REGISTRY_DIR`, and with neither the catalog reports that no registry is configured and
+names the parameter. Pointing the app at the shipped copy belongs to packaging (12.1).
+
+**Mutation evidence** (each broken, watched fail, restored, watched pass):
+
+| Mutation | Result |
+|---|---|
+| Skip the digest check in `installSkill` (`if (false)`) | 3 tests fail: the gate's tamper test and both `registry.test.ts` refusal tests |
+| `ToolDispatcher`'s authorisation returns `true` unconditionally | 10 tests fail across `capabilities.test.ts` (9, including all six adversarial escalations) and the gate chain |
+| Trainer's `>` → `>=` | 5 tests fail: the gate's tie test and 4 in `trainer.test.ts`, including the empty-validation-split cases |
+| Stop stripping frontmatter from a proposed body | 1 test fails: "CANNOT widen the skill's capabilities" — the smuggled `capabilities: net:http` survives into the artifact |
+
+**Real vs seam after Phase 6.**
+
+Real: the content-pinned registry and its refusal; seven seeded skills across six packs; the
+capability vocabulary and the single enforcement point, wired into the loop; the Skills surface
+over real data with the grant and the hash shown before consent; the review gate for an open
+registry; the provider-backed optimizer behind the strict `>` gate; a reader for the captured
+evals, which is the other half of the compounding loop.
+
+**Not real, and this matters for how 6.3 is described.** There are **no tools yet**. 6.3 built the
+enforcement POINT; 7.3 populates it. So the adversarial suite proves the gate denies an ungranted
+call — it does not prove a hostile skill cannot reach the network, because nothing in this build can
+reach the network on a skill's behalf at all. Saying otherwise would overstate it by a whole phase.
+
+Also still open: the registry is a **content pin, not a signature** — it proves what you install
+matches the manifest, not who wrote the manifest, and signed releases (26.3) remain unimplemented.
+The desktop does not yet point at the shipped registry (12.1). `skill-train` can reach a provider
+and is the one documented exception to "nothing calls a provider", though every test of it runs on
+the fake. And **nothing in this project has ever run against a real provider.**
+
+---
+
 ## Decision Log
 
 | Date | Decision | Rationale |
 |---|---|---|
+| 2026-08-01 | The registry hashes the **whole skill directory**, bytes not strings, and calls itself a content pin rather than a signature | A skill is prose plus executables — the folder layout has `tools/`, `workflows/`, `tests/` — so hashing `SKILL.md` alone protects the half that does not run. Files are read as bytes because a CRLF checkout genuinely is a different artifact, and normalising would mean a tampered file could match. The path is hashed with the content, so moving a script into a name the manifest trusts is not free. And it is named honestly: it proves *what* you install, never *who* wrote the manifest — a homemade signature scheme would be worse than an honest pin, and the trust root is the signed release that 26.3 still owes (Requirements 11.1, 11.2) |
+| 2026-08-01 | The six packs are **written for this project, not vendored** from a community repo | Vendoring means a network fetch, a license review, a recorded commit SHA, and shipping scripts that will eventually run with the user's permissions — none of it work to do implicitly while seeding a registry. Every seed here is prose, so the whole set is installable before the tool layer exists without anyone running a stranger's Python. The format stays compatible on purpose: any `SKILL.md` directory can be pinned by `pinRegistry` and installed by `installSkill` with no change to either, so adapting community skills is a later deliberate act with its own review step (Requirement 11.3) |
+| 2026-08-01 | The capability vocabulary **fails closed**, and an absent key differs from an empty one | Ignoring an unrecognised token reads as safe and is not: the skill installs, is granted nothing, and behaves inexplicably while the user believes it has access. The same leniency across versions means an old build silently drops a capability a newer manifest granted, so a skill audited as sandboxed on one version is something else on another. An unknown token is therefore an error in both directions. `capabilities:` absent → `fs:read:project` only, because a skill that cannot read the project can do nothing and a useless default pushes publishers into asking for everything; `capabilities: []` → nothing, because the publisher said so (Requirements 11.4, 10.6) |
+| 2026-08-01 | Enforcement is **one function**, and a denial is a **result** | Third time this codebase has made the bet — one `hasPlan` in `runTask`, one `resolve_within` in `command_policy.rs`, now one `#authorised` in `ToolDispatcher`. What makes it work is not the check but that there is nowhere else to look; a capability system with two dispatch paths has one hole. The prompt's tool list goes through the same predicate so the two cannot drift. And `call` returns `{ ok: false }` rather than throwing: the most demanding community skill reads ~20 network sources and must still be useful when nineteen are denied, because a sandbox that turns "did less" into "broke your task" is a sandbox users switch off (Requirements 11.5, 22.4) |
+| 2026-08-01 | The optimizer may rewrite the **body and nothing else** | An optimizer that could rewrite `capabilities:` would be a privilege escalation with a training run as its delivery mechanism: propose a body that also asks for `net:http`, score well on unrelated cases, and the strict gate accepts a skill that can now reach the network. Closed twice — the candidate is built as `{ ...incumbent, body }`, and a proposed body's own frontmatter is stripped so the written artifact cannot contain a second block the loader would read instead of ours. The mutation run confirms the second guard is load-bearing, not decorative (Requirements 9.1, 9.5) |
+| 2026-08-01 | An **open** registry requires an approved review OF THE PINNED BYTES | Requirement 11.6's review queue is only real if something refuses. So an entry from an `open` registry is installable only with `decision: "approved"`, and a review that records the digest it examined is **invalidated when the content changes after it** — otherwise a submitter gets one approval and inherits it for every later re-pin. Curated registries need no per-entry record: curation is the review and the manifest is committed and diffable. The shipped registry stays `curated`, asserted by test, so flipping one string cannot quietly mean "install anything" |
+| 2026-08-01 | `SKETCH_REGISTRY_DIR` and an explicit param, with **no path-relative default** | The sidecar is one esbuild-bundled file copied next to the app binary: no `node_modules`, no package layout, nothing at a path relative to `import.meta.url`. A default computed that way resolves in tests, resolves from `dist/`, and points at nothing in the shipped app — and `cli.test.ts`'s sidecar-hazard guard caught exactly that during this task. With no registry configured the catalog reports it and names the parameter, which is an honest nothing rather than an empty list that reads as "there are no skills" (Requirements 12.7, 27.3) |
 | 2026-07-31 | Retrieved context reaches the loop as a **string**, and the RPC assembles it only when asked | The loop does no retrieval, owns no budget and reads no index: `assembleContext` enforces the budget *before* the text is built, and re-deciding it inside the loop would mean discovering an overrun after the money was spent. It is kept separate from `projectContext` because `AGENTS.md` is a standing instruction the user wrote while this is a retriever's guess for one query, and a model that reads a guess as a rule will obey a file it merely happened to find. Opt-in via `contextBudgetTokens` rather than on by default: retrieval adds tokens to every request on a paid provider, and the guard that would bound that spend is Phase 8 (Requirements 18.4, 18.6) |
 | 2026-07-31 | The lexical channel searches query TERMS, ranked by coverage, with per-term smart case | Searching the whole prompt as one fixed string found nothing, so hybrid retrieval silently became vector-only for every natural-language task — 18.2's failure mode arriving through the front door rather than through a config flag. Terms are identifier-shaped runs with stopwords removed, capped at eight (each costs a scan or a spawn), and `termsMatched` is the **first** sort key: a chunk mentioning `payments`, `retry` and `budget` once each is the answer, and a chunk repeating `budget` twelve times is not. Smart case is per term because prose is lower-case and the constant is `RETRY_BUDGET_MS`; an explicit `ignoreCase` still wins in both directions, and a single-identifier query behaves exactly as before (Requirement 18.2) |
 | 2026-07-31 | The gate's baseline is allowed to win a case, and does | A whole-repo baseline truncated at the budget reaches whatever sorts first, so the fixture's `auth` domain is answerable from it — and `auth` is deliberately in the **held-out** split, making the reported rise 0.333 → 1.000 rather than 0 → 1. A comparison whose baseline scores zero measures the fixture's construction, not the retriever. For the same reason the dev split's numbers are printed next to the held-out ones instead of being quietly dropped (Requirement 18.7) |
