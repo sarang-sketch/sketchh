@@ -26,6 +26,20 @@ A symbol may be qualified in words where the plain symbol would overstate — fo
 "✅ built, insecure" or "🔁 partially built, fixtures". A row that says "seam" means the
 interface exists and no real implementation does.
 
+### Ledger time and counting conventions
+
+- **Milestones 1–5 are immutable pre-spec snapshots.** They record what was true when the repository
+  was first inventoried; their old paths, fixtures, and deferred items are historical evidence, not
+  current status. The numbered Phase 1–13 sections below supersede them.
+- **Phase gate sections are immutable checkpoint evidence.** A seam or test count in “Real vs seam
+  after Phase N” describes that gate, even when a later phase implemented the seam.
+- **Current progress counts actionable leaves only.** `tasks.md` has 96 checkbox rows: 83 leaves and
+  13 phase-summary rows. Superseded leaf 4.3 is excluded, leaving 82 actionable leaves. After task
+  13.5, 78 are complete and four—12.1 through 12.4—remain evidence-gated. The normalized raw row
+  state is 90 complete, 4 evidence-gated, 1 superseded, and 1 open Phase 12 summary.
+- Historical `/96` counters below are retained as legacy checkpoint text; they were manually
+  maintained and are not the current counting convention.
+
 ---
 
 ## Milestone 0 — Project Foundation
@@ -42,7 +56,7 @@ interface exists and no real implementation does.
 
 ---
 
-## Milestone 1 — Provider Adapter Layer
+## Milestone 1 — Provider Adapter Layer (historical pre-spec snapshot)
 
 | # | Task | Status | Notes |
 |---|---|---|---|
@@ -64,7 +78,7 @@ directory was relocated in Phase 1 (spec task 1.1).
 
 ---
 
-## Milestone 2 — Context Engine
+## Milestone 2 — Context Engine (historical pre-spec snapshot)
 
 | # | Task | Status | Notes |
 |---|---|---|---|
@@ -85,7 +99,7 @@ callers. Revisit when repo scale demands cross-session persistence.
 
 ---
 
-## Milestone 3 — Verify Loop
+## Milestone 3 — Verify Loop (historical pre-spec snapshot)
 
 | # | Task | Status | Notes |
 |---|---|---|---|
@@ -112,7 +126,10 @@ DetectedProject injectable (for testing without real filesystem).
 
 ---
 
-## Milestone 4 — Desktop App Shell
+## Milestone 4 — Desktop App Shell (historical 2026-07-26 snapshot)
+
+**This table is intentionally not current.** It records the baseline that Phases 1.5, 2, 3, 4, 6,
+8, and 10 subsequently replaced; use those phase sections for current behavior.
 
 **These rows were wrong until 2026-07-26.** They claimed nothing had been started while a
 substantial Tauri + React application already existed on disk. Corrected below against the
@@ -141,7 +158,12 @@ hardcoded `{ connected: 5, total: 8 }` in `AppState`.
 
 ---
 
-## Milestone 5 — Orchestrator + Memory
+## Milestone 5 — Orchestrator + Memory (historical pre-spec snapshot)
+
+**This table is intentionally not current.** Phases 5, 7, 9, and 10 delivered context, tools,
+versioned memory, and strategies after this inventory. Current limitations remain: automatic
+live-run memory ingestion is absent, and the legacy orchestrator/verifier still coexists with the
+canonical loop/verify path.
 
 | # | Task | Status | Notes |
 |---|---|---|---|
@@ -1073,7 +1095,7 @@ Mutation evidence, each restored and re-run green:
 | Remove Monaco `setMonarchTokensProvider` | production language registration test failed; restored focused test and typecheck passed |
 | Remove `sanitizePayload` from `JsonlEventStore.emit` | 3 on-disk redaction tests failed; restored store suite passed 24/24 |
 
-Task 12.5 is complete and the task count at that checkpoint was **79/96**. The boundary remains explicit: these are host code-registration contracts, not a filesystem-installed executable plugin manager or plugin store. MCP entries remain exact-version, structured-argv, capability-gated host data; the positive handshake uses a repository-local script through the launch-override test seam and is not execution or audit evidence for an actual third-party MCP package. Memory persistence/sharing/lifetime belongs to the host factory. Registered workflows are explicit and do not change built-in `single` or enable `swarm`.
+Task 12.5 is complete; the legacy task counter recorded **79/96** at that checkpoint. The boundary remains explicit: these are host code-registration contracts, not a filesystem-installed executable plugin manager or plugin store. MCP entries remain exact-version, structured-argv, capability-gated host data; the positive handshake uses a repository-local script through the launch-override test seam and is not execution or audit evidence for an actual third-party MCP package. Memory persistence/sharing/lifetime belongs to the host factory. Registered workflows are explicit and do not change built-in `single` or enable `swarm`.
 
 ### Task 12.6 completion result
 
@@ -1095,7 +1117,7 @@ Mutation evidence, each restored and re-run green:
 | Stop treating `strategy_selected{phase:"outcome"}` as terminal in the Timeline | desktop gate failed because `timeline-swarm` rendered as `running`; restored focused gate passed |
 | Remove `sanitizePayload` from `JsonlEventStore.emit` | 3 on-disk redaction tests failed; restored store suite passed 24/24 |
 
-Task 12.6 is complete and the task count at that checkpoint was **80/96**. Tasks 12.1–12.4 remain evidence-gated on native artifacts, installed-app clean-machine/Ollama evidence, a real verified tag release, and genuine third-party skill provenance respectively.
+Task 12.6 is complete; the legacy task counter recorded **80/96** at that checkpoint. Tasks 12.1–12.4 remain evidence-gated on native artifacts, installed-app clean-machine/Ollama evidence, a real verified tag release, and genuine third-party skill provenance respectively.
 
 ---
 
@@ -1107,6 +1129,7 @@ Task 12.6 is complete and the task count at that checkpoint was **80/96**. Tasks
 | 13.2 | Reconcile `what-not-we-are-building.md` | ✅ complete | The curated pinned/content-hash registry and discovery/install surface are allowed as the v1-family foundation delivered in the v1.5 implementation phase. Open community publishing remains v2-only behind tested integrity and capability scopes, a review queue, exact-digest approvals, and separately persisted digest-bound grants. The document does not claim public-key author signatures. |
 | 13.3 | Reconcile `trd.md` and `architecture.md` | ✅ complete | The documents now match the npm workspace, zero-runtime-dependency core, seam-plus-implementation persistence/vector/credential/MCP boundaries, event-sourced JSONL run log, on-demand `.sketch/` layout, versioned date-sharded memory, and fixed nine-stage verification contract. |
 | 13.4 | Reconcile `prd.md` | ✅ complete | Cowork and Code are now documented as two presentations over one client/event/project substrate. Product optimization is defined by same-model lift, fixed-budget reliability distributions, and strict held-out compounding; adoption counts are not capability evidence. |
+| 13.5 | Audit and reconcile the living log | ✅ complete | Historical snapshots and immutable gate evidence are labelled; all spec conflict/authority decisions are mapped; the task count is reproducible at 78/82 actionable leaves, with only evidence-gated 12.1–12.4 open. |
 
 ### Task 13.1 completion result
 
@@ -1114,7 +1137,7 @@ No production code changed. The stale phrases `Multi-model consensus logic`, `st
 
 Focused behavioral validation passes: core **31 tests / 2 files** (`phase10-gate`, `secrets.store`) and desktop **49 tests / 2 files** (`ProviderSettings`, `security`). Canonical order also passes with hosted-provider keys unset: `npm run build`, `npm run typecheck`, core **1,036 tests / 54 files**, and desktop **503 tests / 54 files**. Both complete workspace suites pass at the same counts with `SKETCH_FAKE_PROVIDER=1`.
 
-This task copies already-resolved Requirements 17.3–17.4 and 24.1/24.8/24.9 plus design conflicts 4 and 10 into the contributor rules; it introduces no new architecture. Task 13.1 is complete and the task count at that checkpoint was **81/96**.
+This task copies already-resolved Requirements 17.3–17.4 and 24.1/24.8/24.9 plus design conflicts 4 and 10 into the contributor rules; it introduces no new architecture. Task 13.1 is complete; the legacy task counter recorded **81/96** at that checkpoint.
 
 ### Task 13.2 completion result
 
@@ -1124,7 +1147,7 @@ Focused validation passes: core **42 tests / 4 files** (`registry`, seed pins, P
 
 The first unset core attempt reproduced the documented Windows `verify-live` port-release flake: the listener remained visible after the 300 ms post-kill wait. The prescribed recurring-flake fix was committed separately as `012e109`: only the settle allowance changed to 1,000 ms, while the exact `isPortListening(port) === false` assertion stayed intact. The file passed **28/28** three consecutive focused runs and the final full core suites in both provider environments. No assertion was weakened.
 
-Task 13.2 copies the already-resolved Requirement 11/28.2 and design conflict 5 boundary into the scope document; it creates no new marketplace architecture and does not complete evidence-gated task 12.4. Task 13.2 is complete and the task count at that checkpoint was **82/96**.
+Task 13.2 copies the already-resolved Requirement 11/28.2 and design conflict 5 boundary into the scope document; it creates no new marketplace architecture and does not complete evidence-gated task 12.4. Task 13.2 is complete; the legacy task counter recorded **82/96** at that checkpoint.
 
 ### Task 13.3 completion result
 
@@ -1134,7 +1157,7 @@ The reconciliation preserves implementation limits rather than copying an aspira
 
 Validation passes in canonical order: `npm run build`, `npm run typecheck`, core **1,036 tests / 54 files**, and desktop **503 tests / 54 files** with `SKETCH_FAKE_PROVIDER` unset; both full suites pass at the same counts with it set to `1`. Focused source-contract validation passes **163 tests / 6 files** (`deps`, event store/redaction, verification policy, memory, MCP, and secret store). Both amended documents have no diagnostics and `git diff --check` passes. No guard or production path changed, so no guard mutation was required; the mandatory `sanitizePayload` phase-gate mutation rule remains unchanged.
 
-Task 13.3 copies Requirements 1, 3, 4, 17, 21, 22, and 28.3–28.4 plus design conflicts 1, 2, 6, and 7 into the prior-generation architecture documents. It introduces no new architecture and completes no external Phase 12 evidence gate. Task 13.3 is complete and the task count at that checkpoint was **83/96**.
+Task 13.3 copies Requirements 1, 3, 4, 17, 21, 22, and 28.3–28.4 plus design conflicts 1, 2, 6, and 7 into the prior-generation architecture documents. It introduces no new architecture and completes no external Phase 12 evidence gate. Task 13.3 is complete; the legacy task counter recorded **83/96** at that checkpoint.
 
 ### Task 13.4 completion result
 
@@ -1144,7 +1167,19 @@ The PRD now makes the three authoritative optimization metrics explicit: same-mo
 
 Validation passes in canonical order: `npm run build`, `npm run typecheck`, core **1,036 tests / 54 files**, and desktop **503 tests / 54 files** with `SKETCH_FAKE_PROVIDER` unset; both full suites pass at the same counts with it set to `1`. Focused validation passes core **43 tests / 3 files** (`phase10-gate`, `phase11-gate`, trainer) and desktop **3 tests / 2 files** (shared `SketchClientProvider` and the real Cowork-run-to-Code-file flow). `prd.md` has no diagnostics and `git diff --check` passes. No guard or source path changed, so no guard mutation was required.
 
-Task 13.4 copies Requirements 14, 24.8, 25, and 28.5 into the prior-generation product document without adding a new product surface or making a new capability claim. It completes no external Phase 12 evidence gate. Task 13.4 is complete and the task count is **84/96**.
+Task 13.4 copies Requirements 14, 24.8, 25, and 28.5 into the prior-generation product document without adding a new product surface or making a new capability claim. It completes no external Phase 12 evidence gate. The legacy counter recorded **84/96** at that checkpoint; task 13.5 replaces that counter with the reproducible actionable-leaf convention.
+
+### Task 13.5 completion result
+
+No production code changed. The audit distinguishes historical truth from current truth instead of rewriting either: Milestones 1–5 are explicitly immutable pre-spec snapshots, each numbered phase section remains immutable checkpoint evidence, and the Phase 12/13 tables carry current status. The old Milestone 4 fixture/security inventory and Milestone 5 deferred MCP/context/memory notes therefore no longer read as present-day claims.
+
+The Decision Log now covers all ten resolved conflicts and all five decisions the design made on its own authority. Existing rows were expanded for the MCP-SDK seam, always-on planning with optional human approval, and deleted keytar-shaped storage; stale sqlite-vec and blanket no-consensus decisions are explicitly superseded. New rows record eval-gated `swarm`, curated-registry versus open-publishing boundaries, the exact nine-stage verification order, historical-baseline reconciliation, the unrestricted-shell defect pulled forward to Phase 1.5, and collision-resistant time-sortable run ids.
+
+Progress is now mechanical rather than manually inferred. `tasks.md` contains 96 rows: 83 leaves plus 13 phase summaries. Excluding superseded leaf 4.3 yields 82 actionable leaves; **78 are complete and four remain open** (12.1–12.4). Parent rows for completed Phases 1, 4, and 13 are normalized to complete. The raw row state is **90 complete, 4 evidence-gated, 1 superseded, and 1 open Phase 12 summary**. Earlier `/96` numbers remain labelled as legacy checkpoint counters.
+
+Validation is documentation-focused and canonical source validation remains green at the unchanged `437d004` source tree: `npm run build`, `npm run typecheck`, core **1,036 tests / 54 files**, and desktop **503 tests / 54 files** with `SKETCH_FAKE_PROVIDER` unset and set to `1`. Markdown diagnostics are clean except for the pre-existing `tasks.md` heading/dependency-graph diagnostics; the checkbox/count audit and required-decision scan pass; `git diff --check` passes. No guard or source path changed, so no guard mutation was required.
+
+Task 13.5 completes Requirement 28.6 and the Phase 13 documentation-reconciliation parent. It does not complete any Phase 12 evidence gate. Tasks 12.1–12.4 remain open on native installer artifacts, installed-app clean-machine/Ollama plus process-attributed no-egress evidence, a real independently verified tag release, and genuine third-party skill source/license provenance respectively. Current progress is **78/82 actionable leaves complete**.
 
 ---
 
@@ -1152,6 +1187,13 @@ Task 13.4 copies Requirements 14, 24.8, 25, and 28.5 into the prior-generation p
 
 | Date | Decision | Rationale |
 |---|---|---|
+| 2026-08-03 | Single-agent remains the default; roles and consensus exist only through eval-gated `swarm` | This supersedes the blanket 2025 “cut consensus” decision without enabling it by default. Consensus runs only inside `swarm`, and `swarm` remains off for a task class until strict measured pass@k lift over `single` justifies the extra cost and complexity. |
+| 2026-08-03 | Curated registry discovery is allowed; open publishing remains digest-gated | The shipped v1-family surface installs pinned content-hash-verified bytes with separately persisted digest-bound grants. Open community publishing remains v2-only behind tested integrity and capability scopes, a review queue, and exact-digest approvals. A content pin is not public-key author identity. |
+| 2026-08-03 | Verification has one fixed nine-stage order | The canonical order is `format → lint → typecheck → build → unit → integration → security → performance → dependency-audit`; build follows typecheck because later integration/security/performance checks may require its artifact. The legacy four-check verifier remains compatibility history, not the canonical policy. |
+| 2026-08-03 | Milestones 1–5 are historical snapshots; numbered phase sections are current authority | The pre-spec inventory is valuable evidence of what changed but became misleading when its fixture/deferred rows were read as current. Labelling snapshots preserves history while satisfying Rule 9's requirement that the living log identify present truth. |
+| 2026-08-03 | The unrestricted `run_command` shell was a defect pulled forward to Phase 1.5 | A real bridge into `cmd /C`/`sh -c` before capabilities, containment, confirmation, and CSP would have exposed an unsandboxed execution path. Hardening therefore landed before the transport, with one shell-less policy path, rather than waiting for the later MCP phase. |
+| 2026-08-03 | Run ids are random and time-sortable, never a process-local counter | Concurrent CLI, desktop, eval, and dispatcher processes can write the same event directory. Random time-sortable ids avoid cross-process collisions while preserving readable chronology without shared mutable state. |
+| 2026-08-03 | Progress counts actionable leaves, not phase-summary rows | `tasks.md` contains 83 leaves and 13 summaries. Excluding superseded leaf 4.3 yields 82 actionable leaves; this makes 78 complete plus four evidence-gated leaves reproducible, unlike the old manually maintained `/96` counter. |
 | 2026-08-03 | Dispatcher completion is a durable `strategy_selected{phase:"outcome"}` event with bounded evidence summaries | Dispatcher slices do not emit `run_completed`. Persisting consensus, merge, and verification summaries makes the event log sufficient for Timeline reconstruction without adding a new EventKind or retaining unbounded model output. |
 | 2026-08-03 | The canonical booking acceptance is **scripted contract evidence**, not model-capability evidence | Real filesystem bytes, child processes, merge/consensus, budgets, and UI reconstruction test the production joins deterministically offline. Scripted turns cannot establish that any real provider can build the product, so `swarm` remains off and the claim stays narrow. |
 | 2026-08-03 | Extension registration is **host-scoped code composition**, not global plugin loading | `createEngineExtensionRegistry` constructs immutable provider/MCP/memory/agent/workflow registries that both production transports carry; the editor host supplies its own theme/language registry to `prepareMonaco`. Importing a package changes no global state, unknown selectors fail closed, custom providers are fresh per call, and workflows are explicit. This satisfies the nine production extension contracts without claiming a plugin store, arbitrary executable package loader, or third-party MCP execution evidence. |
@@ -1240,17 +1282,17 @@ Task 13.4 copies Requirements 14, 24.8, 25, and 28.5 into the prior-generation p
 | 2026-07-30 | Every panel renders engine and command output as text nodes only | Terminal output, search hits, diff hunks and git output are all attacker-influenced — model output or process output about file contents — and the app's CSP still carries `script-src 'unsafe-inline'`, which makes an injection an execution. No `dangerouslySetInnerHTML`, no `innerHTML`, no `insertAdjacentHTML`, no `DOMParser` in any Phase 3 panel, asserted by a source-level guard so a future "nicer highlighting" change has to argue with a red test first |
 |---|---|---|
 | 2025-07-25 | Use Tauri over Electron | Smaller binary, native OS APIs, Rust security |
-| 2025-07-25 | Use sqlite-vec over external vector DB | Local-first, zero-config, sufficient for repo scale |
-| 2025-07-25 | Cut multi-model consensus from v1 | Unproven, expensive, complex — defer with evidence |
+| 2025-07-25 | **SUPERSEDED** — Use sqlite-vec over an external vector DB | This was the original local-first preference. The dependency-free core decision supersedes the implementation mandate: `MemoryVectorStore` is the shipped default, graph metadata persists separately, and any future durable vector backend must stay behind `VectorStore`. |
+| 2025-07-25 | **SUPERSEDED** — Cut multi-model consensus from v1 | The cost/complexity concern remains, but the blanket prohibition is superseded by eval-gated `swarm`: `single` stays default, consensus runs only in `swarm`, and no task class enables it without measured pass@k lift. |
 | 2025-07-25 | Lead with verify loop as differentiator | No existing tool owns "AI that verifies its own output" |
 | 2025-07-25 | Use OpenRouter as onboarding path | One key covers many models, reduces friction for new users |
 | 2026-07-26 | Migrate to an npm workspace under `packages/` | One root `npm install`, one `npm test` that covers both packages, and a `@sketch/core` the desktop package consumes by name instead of by relative path. The move also gave the migration a safety net: the pre-existing tests had to keep passing |
-| 2026-07-26 | Dependency-free core; `better-sqlite3`, `sqlite-vec`, and `keytar` replaced by seams | Three native modules would have meant a compiler on every contributor's machine, a rebuild per Node version, and a sidecar that cannot be a single bundled file. `SecretStore` and the existing `VectorStore` / `Store` interfaces give the same capability with the platform-specific half pushed outside core — where Rust already lives. Supersedes `trd.md`'s mandated dependency list (spec task 13.3) |
-| 2026-07-26 | keytar dropped outright | Never installed, unmaintained, and native. The OS credential store is reached through the Rust side in spec task 4.2; `KeychainCredentialStore` is a seam awaiting deletion. Supersedes Rule 6's keytar-specific wording (spec task 13.1) |
+| 2026-07-26 | Dependency-free core; `better-sqlite3`, `sqlite-vec`, `keytar`, and the MCP SDK replaced by seams | Native/runtime packages would have meant a compiler on contributors' machines, rebuilds per Node version, and a sidecar that cannot be one bundled file. `EventStore`/`MemoryStore` use JSONL/file defaults, `VectorStore` uses a memory default, `SecretStore` is implemented by the Rust host, and MCP uses hand-rolled JSON-RPC 2.0 over stdio. Future backends may drop in behind those seams without becoming mandatory core dependencies. Supersedes `trd.md`'s dependency list (task 13.3). |
+| 2026-07-26 | keytar dropped outright | It was never installed, is native, and is not required to express the security boundary. Phase 4 deleted the keytar-shaped `KeychainCredentialStore`; core retains only `SecretStore` plus ephemeral/test implementations, while the Rust host persists to the OS credential store with no file fallback. Stored hosted-key invocation remains half-wired and is not overstated. Supersedes Rule 6's keytar-specific wording (task 13.1). |
 | 2026-07-26 | Keep the legacy `ProviderAdapter` alongside the canonical `ChatAdapter` | The legacy surface has live callers (the orchestrator, 34 provider tests) and carries streaming and cost data the canonical seam does not. Deleting it to reach one interface would have meant rewriting working, tested code inside a migration. Both surfaces are implemented by the same adapter classes; the loop only ever sees `ChatAdapter` |
 | 2026-07-26 | Rename `VerifyResult` → `VerifySummary` and `RunResult` → `OrchestratorRunResult` | The canonical contracts need those two names, and the design reproduces them verbatim. Renaming the pre-existing aggregates was mechanical; bending the contract to dodge a collision would have made `types.ts` no longer the spec |
 | 2026-07-26 | The event log is the single source of truth | The Timeline, replay, cost accounting, eval capture, and benchmarks are all projections of one append-only JSONL stream. No subsystem gets a private log, so the dashboard cannot disagree with the log — there is nothing else to disagree with |
-| 2026-07-26 | The plan gate is enforced in the engine, not the UI | `edit` asks `PlanWriter.hasPlan(runId)` — the filesystem, not an in-memory flag — inside `runTask`. Every caller (CLI, eval harness, desktop) goes through that one function, so there is no second path that could skip the check. The UI mirror is spec task 3.6 and is defence in depth only |
+| 2026-07-26 | Planning is always on; the engine plan gate is authoritative and human approval is optional | Every task persists plan artifacts before an edit, and `edit` asks `PlanWriter.hasPlan(runId)`—the filesystem, not an in-memory flag—inside `runTask`. Every caller goes through that one gate. A surface may ask a person to review/approve, but approval is not the safety precondition; the UI mirror is defense in depth only. |
 | 2026-07-26 | Unsupplied plan documents are omitted, not stubbed | The gate is stated as "directory absent or empty". Writing stubs for the eight documents a `plan` action never supplies would make an empty plan structurally identical to a real one and force `hasPlan` to sniff file bodies for stub markers — a content heuristic guarding a safety precondition. With omission the invariant is flat: a document file exists iff that document was planned |
 | 2026-07-26 | `verify-pass` fails when nothing was verified | The loop's `RunResult.ok` is true when no verify commands were configured, which is correct for a run. A `verify-pass` **check** asserts verification happened and passed. Inheriting the loop's reading would score an empty `verify: []` case at 1.0, and since the trainer accepts on a strictly greater validation mean, a split of such cases would hand every candidate a perfect score and turn the gate into a coin flip |
 | 2026-07-26 | Strict `>` in the trainer, no epsilon | A tie keeps the incumbent. An epsilon would need a defensible value, and any value large enough to matter accepts noise as improvement. `meanScore` returns 0 rather than NaN on an empty split so the comparison stays meaningful |

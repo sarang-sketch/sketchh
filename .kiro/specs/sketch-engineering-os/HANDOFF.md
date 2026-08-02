@@ -19,29 +19,28 @@ Phase 3 and had gone four phases stale.
 
 ## IMMEDIATE NEXT ACTION
 
-**Tasks 12.1–12.4 remain evidence-gated. Run the native package matrix first. Then run
-the no-fallback Ollama preflight and retained installed-app clean-machine procedure against those
-exact installer bytes. For 12.3, push a package-version-matching semantic tag only after the matrix
-is green, retain every release asset/hash/attestation verification result, and do not call GitHub
-provenance Authenticode or Apple Developer ID signing/notarization. For 12.4, retain a genuine
-third-party community skill's source and license provenance and run it through the existing gate.
-Source tests, workflow configuration, and local fixtures alone complete none of those claims.**
+**Tasks 12.1–12.4 are the only remaining actionable leaves, and all are external
+evidence gates. Run the native package matrix first. Then run the no-fallback Ollama preflight and
+retained installed-app clean-machine procedure against those exact installer bytes. For 12.3, push
+a package-version-matching semantic tag only after the matrix is green, retain every release
+asset/hash/attestation verification result, and do not call GitHub provenance Authenticode or Apple
+Developer ID signing/notarization. For 12.4, retain a genuine third-party community skill's source
+and license provenance and run its exact bytes through the existing gate. Source tests, workflow
+configuration, local fixtures, and documentation complete none of those claims.**
 
-While those external evidence tasks are blocked, the next local documentation leaf is **13.5**:
-audit `tasks-executed.md` against every completed phase gate and architectural decision, keeping the
-living log current without treating documentation as external evidence.
+**78 of 82 actionable leaves are complete.** `tasks.md` has 96 raw checkbox rows: 83 leaves and 13
+phase summaries. Excluding superseded leaf 4.3 leaves 82 actionable leaves. The normalized raw state
+is 90 complete, four evidence-gated leaves, one superseded row, and one open Phase 12 summary.
+Phases 1–11 and 13 are complete; Phase 12 remains open only for 12.1–12.4.
 
-**84 of 96 tasks complete.** Phases 1 through 11, tasks 12.5–12.6, and tasks 13.1–13.4 are done; 12.1 through 12.4 are in progress.
-
-Current source verification: build and typecheck pass; **core 1,036 tests / 54 files, desktop 503
-tests / 54 files** with `SKETCH_FAKE_PROVIDER` both unset and set to `1`. Task 13.4 replaces the
-one-surface, four-check, SQLite-memory, absolute no-consensus/no-marketplace, and adoption-vanity PRD
-with the shipped Cowork/Code presentation over one client/event/project substrate and the three
-optimization metrics: same-model lift, fixed-budget pass@k reliability distributions, and strict
-held-out compounding. It records retrieval/memory/provider and external-evidence limits rather than
-claiming them complete. No production behavior changed. Tasks 12.1–12.4 remain blocked on native
-artifacts, installed-app no-egress/Ollama evidence, a verified real tag release, and genuine
-third-party skill provenance respectively.
+Task 13.5 reconciled the living ledger: Milestones 1–5 are labelled historical snapshots, phase-gate
+sections remain immutable checkpoint evidence, all ten design conflicts and all five design-authority
+decisions are represented in the Decision Log, and old `/96` figures are explicitly legacy counters.
+No production behavior changed. Current source verification remains **core 1,036 tests / 54 files,
+desktop 503 tests / 54 files**, with build and typecheck green and both suites passing with
+`SKETCH_FAKE_PROVIDER` unset and set to `1`. Tasks 12.1–12.4 remain blocked on native artifacts,
+installed-app no-egress/Ollama evidence, a verified real tag release, and genuine third-party skill
+provenance respectively.
 
 Task 12.1 now has native Windows/NSIS, macOS/DMG, and Ubuntu 22.04/AppImage jobs. Each rebuilds and
 smoke-tests its own host-native sidecar, packages with Tauri, enforces a strict `<100,000,000-byte`
@@ -187,7 +186,8 @@ Seven guards were mutation-verified at this gate — see the Phase 5 gate result
 ## Git state
 
 ```
-(Current task 13.4 completion commit containing this file)                       <- HEAD
+(Current task 13.5 completion commit containing this file)                       <- HEAD
+437d004  sketch: phase 13 task 13.4 - reconcile product metrics
 8d45899  sketch: phase 13 task 13.3 - reconcile architecture contracts
 27f1e2f  sketch: phase 13 task 13.2 - reconcile marketplace scope
 012e109  test: stabilize live app port release check
@@ -237,9 +237,10 @@ because there was nothing to bisect.
 | 10 — Eval-gated multi-agent (10.1–10.5) | **DONE**, gate green. `swarm` ships **off**: no measured strategy lift |
 | 11 — Honest benchmarks (11.1–11.6) | **DONE**, gate green cold. CI result is synthetic only; real-provider public matrix unperformed |
 | 12 — Packaging and open flywheel | **IN PROGRESS** — 12.1 native artifacts required; 12.2 forwarding/preflight built with installed-app clean-machine evidence required; 12.3 deterministic release/provenance path built with real tag-release evidence and native signing identities absent; 12.4 production flywheel proved with a local community-format fixture, with genuine third-party source/license evidence absent; **12.5 DONE** with production-consumed contracts for all nine categories and behavioral/mutation evidence; **12.6 DONE** with scripted offline canonical acceptance and Timeline evidence, not real-provider capability evidence |
-| 13 — Documentation reconciliation | **IN PROGRESS** — **13.1–13.4 DONE**: contributor rules, marketplace scope, architecture contracts, and two-surface/optimization PRD are reconciled; 13.5 living-log audit is next |
+| 13 — Documentation reconciliation | **DONE** — 13.1–13.5 reconciled contributor rules, marketplace scope, architecture contracts, product metrics, and the living-log/decision/counting conventions |
 
-Task counts: 96 total, **84 complete**.
+Task counts: **78 of 82 actionable leaves complete**. Raw checkbox state: 90 complete, four
+evidence-gated, one superseded, and one open Phase 12 summary.
 
 ---
 
@@ -257,28 +258,22 @@ persisted incremental repo graph; hybrid lexical+vector retrieval with RRF and r
 embeddings; budgeted context assembly that degrades detail before coverage; the seven-view
 architecture generator and the Live Architecture panel.
 
-**Seam / stub / absent, with the phase that makes each real:**
-- `proposeEdit` in the trainer has only the offline scripted stub → **6.6**
-- No tool layer at all; `tool` actions emit `tool_denied` → **7.3**
-- `ask` terminates the run (no interactive channel); there is no `cancel` verb on the CLI wire
-- **Retrieval is opt-in on the wire.** `run` assembles context only when given
-  `contextBudgetTokens`, and the desktop does not pass it, so a default desktop run still sends no
-  repository context. That is deliberate until the Phase 8 cost guard exists → **8.x**
-- Ghost completions are real but **off by default** with no provider behind the client seam
-- `SkillsMarketplace` (`MOCK_SKILLS`) → **6.4**
-- `TaskLog` (`MOCK_TASKS`), `AgentTeamPanel` (fixture, and unreachable — no ActivityBar item
-  dispatches `agents`) → **10.4**
-- Cost dashboard absent; `StatusBar` hardcodes `$1.4025` → **8.4**
-- **Requirement 17.4 remains half-wired for keyed hosted providers.** Key-free local providers now
-  reach a desktop run through the selected persisted entry. A hosted key can be stored and its
-  presence reported, and the engine can resolve a key from an injected `SecretStore` at call time —
-  but there is deliberately **no read command**, so a stored hosted key cannot reach a model call
-  today. Closing it needs a spec decision about where the key crosses (Rust → sidecar stdin, or the
-  sidecar reading the OS store itself)
-- `src/memory/` and the legacy `verifier/` + `orchestrator/` state machine are pre-existing code
-  **not wired into the new loop** → **9, 10**
-- The eval harness has **no per-case context seam**: `runEvalSet` takes one `deps` for all cases, so
-  the Phase 5 gate calls `runEval` per case instead
+**Current limitations / unclosed evidence, with no implied completion:**
+- `ask` still terminates a run; the CLI wire still has no cancellation verb even though `runTask`
+  accepts an `AbortSignal`.
+- Repository retrieval is opt-in through `contextBudgetTokens`, and the desktop does not enable it
+  by default. Versioned memory likewise is not automatically ingested from or injected into every
+  live run.
+- Budgets are enforced when configured, but the desktop does not yet supply a default budget.
+- Ghost completions are implemented but off by default.
+- Hosted credentials can be persisted by the Rust host and presence can be reported, but no read
+  command returns a key; the hosted-key invocation crossing remains intentionally half-wired.
+- The curated MCP catalog and local hang/contract scripts are not execution or audit evidence for
+  the named third-party MCP packages.
+- The legacy `ProviderAdapter`/canonical `ChatAdapter` and legacy `verifier/`/canonical `verify/`
+  pairs still coexist; convergence has no owning task.
+- Native installers, installed-app Ollama/no-egress proof, a real verified release tag, and genuine
+  third-party community-skill provenance remain evidence-gated under 12.1–12.4.
 
 **Nothing has ever run against a real provider.** The production local-provider route is now wired,
 but this host has no Ollama installation; every executed adapter test/run still used
@@ -339,9 +334,10 @@ report the gap.
 
 ## Open risks
 
-1. **Retrieval reaches no shipped surface yet.** The engine can be handed context and the RPC can
-   assemble it, but nothing in the desktop asks for it. Until Phase 8's guard, turning it on by
-   default would spend the user's money on a default they never chose.
+1. **Retrieval reaches no default desktop run yet.** The engine and RPC can assemble it when
+   `contextBudgetTokens` is supplied, and the Phase 8 spend guard exists, but the desktop still does
+   not opt in. Enabling it needs an explicit product/default-budget decision rather than an old phase
+   dependency.
 2. **The token estimate is `chars/4`**, stated as such in the payload. It is not a tokenizer count,
    and a provider's real count will differ. Anything that bills off this number is wrong.
 3. **The hashing embedder is not semantic search** and says so. Retrieval quality currently rests on
@@ -382,15 +378,17 @@ report the gap.
 
 ## Verification ritual before declaring anything done
 
-```
-npm run build        # must exit 0 — FIRST, the desktop typecheck needs core's .d.ts
-npm run typecheck    # must exit 0
-npm test             # must exit 0, offline, with no API key
+```powershell
+npm run build
+npm run typecheck
+npm test -w @sketch/core
+npm test -w @sketch/desktop
 ```
 
-Plus, for a phase gate: delete `node_modules` and `packages/core/dist`, then
-`npm install && npm run build && npm run typecheck && npm test` from cold. The Phase 1 gate found a
-real security regression that a warm tree hid.
+Run the two workspace suites again with `SKETCH_FAKE_PROVIDER=1`; the unset environment is the first
+pass. For a phase gate, delete `node_modules` and `packages/core/dist`, then run `npm install` and the
+same canonical sequence from cold. The Phase 1 gate found a real security regression that a warm
+tree hid.
 
 **Green output alone is not evidence.** Break each guard, watch it fail, restore it, watch it pass,
 and record both. Run the `sanitizePayload` mutation at **every** gate — that is the regression that

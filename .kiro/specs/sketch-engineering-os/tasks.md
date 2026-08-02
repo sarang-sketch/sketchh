@@ -6,7 +6,7 @@ Phase gates are hard. No phase begins until the previous phase's gate task is gr
 
 ## Phase 1 — Engine baseline
 
-- [ ] 1. Engine baseline: contracts, providers, events, verify, loop, evals, trainer, CLI, shell
+- [x] 1. Engine baseline: contracts, providers, events, verify, loop, evals, trainer, CLI, shell
 - [x] 1.1 Create the npm workspace root and relocate both packages
   - Write root `package.json` with `workspaces: ["packages/*"]` and scripts `build`, `test`, `typecheck`, `lint` that fan out to both packages
   - Move `engine/` to `packages/core`, rename the package to `@sketch/core`, add `exports`, `types`, and a `bin` entry pointing at the built CLI
@@ -186,7 +186,7 @@ Phase 4 numbering stays intact for anything that references it.
 
 ## Phase 4 — Settings, secrets, zero telemetry
 
-- [ ] 4. Provider settings, OS-keychain secrets, and provable zero telemetry
+- [x] 4. Provider settings, OS-keychain secrets, and provable zero telemetry
 - [x] 4.1 Build the Provider Settings surface
   - List the full provider matrix, allow adding a custom endpoint, and offer a per-provider connection test
   - Persist key-free configuration to `~/.sketch/providers.json`
@@ -425,7 +425,7 @@ Phase 4 numbering stays intact for anything that references it.
 
 ## Documentation reconciliation (runs alongside, gated per phase)
 
-- [ ] 13. Reconcile the prior-generation documents with this build
+- [x] 13. Reconcile the prior-generation documents with this build
 - [x] 13.1 Amend `rules.md`
   - Permit consensus and multi-agent code from v2 behind the eval gate, replacing the blanket v1 prohibition while keeping single-agent as the default
   - Replace the keytar-specific credential rule with "the OS credential store, accessed outside the core"
@@ -444,6 +444,7 @@ Phase 4 numbering stays intact for anything that references it.
   - Reflect the two-surface product and the three optimization metrics of lift, reliability, and compounding
   - Completed: the PRD now defines Cowork and Code as two presentations over one client/event/project substrate; replaces adoption vanity metrics with same-model lift, fixed-budget reliability distributions, and strict held-out compounding; and labels native, clean-machine, third-party, release, MCP, and real-provider evidence limits explicitly.
   - _Requirements: 28.5_
-- [~] 13.5 Keep `tasks-executed.md` current
+- [x] 13.5 Keep `tasks-executed.md` current
   - Update at each phase gate, with a decision-log row for every architectural decision recorded in this spec
+  - Completed: the ledger now labels Milestones 1–5 as historical pre-spec snapshots, preserves phase-gate sections as immutable checkpoint evidence, maps all ten resolved conflicts and all five design-authority decisions into the Decision Log, and uses a reproducible actionable-leaf count. Current state is 78/82 actionable leaves complete; only 12.1–12.4 remain evidence-gated.
   - _Requirements: 28.6_

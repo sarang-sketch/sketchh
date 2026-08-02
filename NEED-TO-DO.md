@@ -1,7 +1,7 @@
 # NEED TO DO — Sketch, from here to done
 
 **Audience:** the developer who is going to write this code.
-**Status date:** task 13.4 complete; the PRD now defines Cowork and Code over one substrate and makes lift, fixed-budget reliability, and strict held-out compounding the product metrics. Third-party, native, release, clean-machine, and real-provider evidence remain open.
+**Status date:** task 13.5 complete; the living log now distinguishes historical snapshots from current phase truth, covers every spec decision, and reports reproducible actionable-leaf progress. **78 of 82 actionable leaves are complete; only evidence-gated 12.1–12.4 remain open.**
 **Authority:** `.kiro/specs/sketch-engineering-os/{requirements,design,tasks}.md` are the contract.
 This file is the working plan on top of them. Where this file and the spec disagree, the spec wins
 and you should fix this file.
@@ -36,12 +36,13 @@ exists because something broke. None of them are style preferences.
 
 ### 0.2 The verification ritual
 
-Run all three, from the repository root, in this order, every time, before you claim anything:
+Run all four, from the repository root, in this order, every time, before you claim anything:
 
-```bash
-npm run build         # must exit 0 — FIRST: the desktop typecheck needs core's emitted .d.ts
-npm run typecheck     # must exit 0
-npm test              # must exit 0 — offline, with NO API key in the environment
+```powershell
+npm run build                         # must exit 0 — FIRST: desktop needs core's emitted .d.ts
+npm run typecheck                     # must exit 0
+npm test -w @sketch/core              # must exit 0 — offline, with NO hosted-provider key
+npm test -w @sketch/desktop           # must exit 0 — offline, with NO hosted-provider key
 ```
 
 **Build precedes typecheck.** This order is a correction made at the Phase 5 gate: `@sketch/core` is
@@ -51,9 +52,13 @@ typecheck first, which is fine on a warm tree and misleading on a cold one.
 
 For a **phase gate**, that is not enough. Do it cold:
 
-```bash
-rm -rf node_modules packages/core/dist        # PowerShell: Remove-Item -Recurse -Force
-npm install && npm run build && npm run typecheck && npm test
+```powershell
+Remove-Item -Recurse -Force node_modules, packages/core/dist
+npm install
+npm run build
+npm run typecheck
+npm test -w @sketch/core
+npm test -w @sketch/desktop
 ```
 
 The Phase 1 gate found a real security regression that a warm `dist` had been hiding. A warm tree
@@ -85,17 +90,20 @@ writes down what happened. Do not describe a wired interface as a working featur
 
 ## 1. Where the project actually stands
 
-**Status date: Phase 11 gated; tasks 12.1 through 12.4 in progress, tasks 12.5–12.6 complete, and documentation tasks 13.1–13.4 complete. 84 of 96 tasks complete.** Core
-1,036 tests / 54 files, desktop 503 tests / 54 files, build and typecheck green with
-`SKETCH_FAKE_PROVIDER` both unset and set to `1`. Task 13.4 is documentation-only and defines Cowork
-and Code over one shared client/event/project substrate, with same-model lift, fixed-budget
-reliability distributions, and strict held-out compounding as the product metrics. It keeps
-retrieval, memory ingestion, `swarm`, benchmark, provider, native, and third-party evidence limits
-explicit. The recurring Windows `verify-live` port-release flake was stabilized separately in
-`012e109` without weakening the exact closed-port assertion. Task 12.6 remains scripted offline
-harness evidence, not real-provider capability evidence. Cross-platform package jobs and the strict
-`<100,000,000-byte` size gate are implemented, but 12.1 remains open until native Windows, macOS,
-and Linux workflow jobs produce uploaded installers and passing size manifests.
+**Status date: Phase 13 complete; only evidence-gated tasks 12.1–12.4 remain open. 78 of 82
+actionable leaves are complete.** `tasks.md` has 96 raw checkbox rows: 83 leaves and 13 phase
+summaries. Superseded leaf 4.3 is excluded, leaving 82 actionable leaves; the normalized raw state is
+90 complete, four evidence-gated leaves, one superseded row, and one open Phase 12 summary. Core
+1,036 tests / 54 files and desktop 503 tests / 54 files pass with build and typecheck green and
+`SKETCH_FAKE_PROVIDER` both unset and set to `1`. Task 13.5 is documentation-only: it labels the old
+milestones as historical snapshots, preserves phase-gate text as checkpoint evidence, maps every
+spec conflict and design-authority decision into the living log, and replaces manually maintained
+`/96` progress with the reproducible actionable-leaf count. The recurring Windows `verify-live`
+port-release flake was stabilized separately in `012e109` without weakening the exact closed-port
+assertion. Task 12.6 remains scripted offline harness evidence, not real-provider capability
+evidence. Cross-platform package jobs and the strict `<100,000,000-byte` size gate are implemented,
+but 12.1 remains open until native Windows, macOS, and Linux workflow jobs produce uploaded
+installers and passing size manifests.
 
 **Packaging evidence is honest.** The local Windows Tauri attempt reached Rust compilation but this
 host's Application Control blocked Cargo build scripts (OS error 4551) and `dlltool.exe` is absent.
@@ -112,10 +120,9 @@ runs are deliberately authorized and recorded.
 **`swarm` still ships OFF.** Phase 10's strategy gate found no strategy-level lift over `single`.
 Phase 11's synthetic harness lift does not change that verdict and is not a license to enable swarm.
 
-The per-task detail below still reads
-from the Phase 3 vantage point in places — where it does, `tasks-executed.md` and
-`.kiro/specs/sketch-engineering-os/HANDOFF.md` are newer and win. (The `Status date` line at the
-very top of this file is older still; treat this section as the current one.)
+The detailed task expansions below are retained as historical implementation guidance from earlier
+phase vantage points. They are not a current backlog. Current status comes from this section,
+`tasks.md`, `tasks-executed.md`, and `HANDOFF.md`; only evidence-gated 12.1–12.4 remain open.
 
 ```
 c13967d  phase 11 task 11.6 — read-only benchmark report panel
@@ -136,15 +143,16 @@ f89bc67  phase 8 task 8.1 — usage accounting, one price table, nine duplicates
 d759311  phase 4 complete — self-hosted fonts, README zero-dollar recipe, gate green cold
 ```
 
-Current suite, from a **cold reinstall** (`node_modules`, both workspace `node_modules`, and
-`packages/core/dist` deleted): **core 1,028 tests / 51 files green, desktop 481 tests / 48 files
-green**, build 0, typecheck 0, `bench:check` 0, no known provider key variable present, and
-identical with `SKETCH_FAKE_PROVIDER=1` set and unset. The install completed, but cache/network
-conditions were not instrumented, so do not cite it as proof of an offline install.
+**Historical cold-gate checkpoint:** an earlier cold reinstall recorded core 1,028 tests / 51
+files and desktop 481 tests / 48 files, with build, typecheck, and `bench:check` green in both
+provider environments. Later documentation-task validation records the current 1,036 / 54 core and
+503 / 54 desktop counts above. The cold install's cache/network conditions were not instrumented, so
+neither checkpoint is proof of an offline install.
 
-**One known flake**: `verify-live.test.ts`'s "starts, answers its probe, survives the settle window"
-binds a real port and failed once on a cold run, passing on every re-run. If it recurs, lengthen the
-readiness window — do not weaken the assertion.
+**Previously recurring Windows timing issue, now stabilized:** `verify-live.test.ts` binds a real
+port. Commit `012e109` increased only the post-kill settle allowance from 300 ms to 1,000 ms; the
+exact assertion that the port is closed remains. If it recurs, investigate process cleanup rather
+than weakening that assertion.
 
 **Run the suites per workspace** — `npm test -w @sketch/core`, `npm test -w @sketch/desktop`. Not
 `npx vitest run --root packages/<x>` from the repo root: several guard tests read source relative to
@@ -191,34 +199,22 @@ phantom errors. §0.2's ordering was written before this bit, and this is the co
   porcelain parsing for renames, quoted and non-ASCII paths, detached HEAD, no upstream; real
   stage/unstage/commit; a diff pane; two distinct empty states (clean repo vs not-a-repo).
 
-### 1.2 What is a seam, a stub, or absent — and which phase fixes it
+### 1.2 Current seams, limits, and evidence gaps
 
-| Thing | Current reality | Fixed by |
+| Thing | Current reality | Status |
 |---|---|---|
-| `proposeEdit` in the trainer | **wired** — provider-backed, body-only rewrites behind the strict `>` gate | done (6.6) |
-| Tool layer | **wired** — curated MCP catalog, per-run host, hang latch, all behind the one capability gate. Opt-in on the wire (`params.mcpServers`), and the catalogued servers are unaudited third-party packages pinned by version | done (7.3) |
-| `ask` action | terminates the run; there is no interactive channel | *unowned — see §4.1* |
-| Run cancellation | `runTask` accepts an `AbortSignal` the CLI wire cannot reach | *unowned — see §4.1* |
-| `FileExplorer` | **real** — lazy `read_dir`, opens files (3.4) | done |
-| `Terminal` | **real** — input, scoped `run_command`, ring-buffered output (3.4) | done |
-| `SearchPanel` | **real** — shell-less spawn, query as argv, capped results (3.4) | done |
-| `DiffReview` | **real** — core hunk parser/applier, per-hunk verdicts, run-scoped plan mirror (3.2, 3.6) | done |
-| Ghost completions | wired to the client seam, **off by default**, no provider behind it | 4.1, 8.2 |
-| Monaco widget itself | doubled in tests (cannot run in jsdom); `ModelRegistry` is what is covered | *unowned — jsdom limit, not a stub* |
-| `SkillsMarketplace` | **real** — pinned registry, install verified by content hash, grant shown before consent (6.4). `MOCK_SKILLS` and both `AppState` copies deleted | done |
-| Test Results panel | **real** — nine stages from the project's own contract, failures expanding to captured stderr (7.4) | done |
-| MCP badge and tooltip | **deleted** — `AppState.mcpToolsStatus` (`{ connected: 5, total: 8 }`), the ActivityBar badge, and the tooltip naming four non-existent servers. Replaced by an `McpTools` panel reporting `configured`, never `connected` (7.4) | done |
-| Tool layer | **still does not exist**; `capabilities.ToolDispatcher` is the enforcement point with no tools registered | **7.3** |
-| `TaskLog` | `MOCK_TASKS`, non-functional filter | **10.4** |
-| `AgentTeamPanel` | fixture data **and unreachable** — no ActivityBar item dispatches `agents` | **10.4** |
-| `ModelSelector` | hardcoded providers; `state.providers` never rendered | **4.1** |
-| Cost dashboard | **real** — summed from the event log, unknown shown as unknown, every row linked to its event id (8.4). All three fake figures are deleted: both `$1.4025` strings and `AppState.totalCost` | done |
-| Cost guard | **real** — checked before every call, deterministic by configuration, projection learns from the run (8.2). But **opt-in**: a run with no `budget` is unbounded and the desktop does not set one | done (8.2); desktop wiring open |
-| Response cache | **real** — content-addressed under `.sketch/cache/responses`, stores the response and only the hash of the prompt (8.3). Applied as an adapter decorator, so no caller is required to use it | done |
-| `SecretStore` | interface with no persisting implementation | **4.2** |
-| `src/context/` | **wired** — graph, hybrid retrieval, embeddings, assembly, generator, and a `retrievedContext` seam into `runTask`. But retrieval is **opt-in on the wire** (`contextBudgetTokens`) and the desktop does not pass it, so a default desktop run sends no repository context | done (5); default-on was blocked on **8**, which is now gated — the spend guard exists, so this is unblocked and simply not switched on yet |
-| `src/memory/` | **real** — versioned rows with validity windows, append-only superseding with a recorded reason, per-kind expiry, a reporting lint pass, reranked retrieval, and the Memory panel (9.1–9.4). But **memory does not reach a live run**: `memoryDigest` fills the `assembleContext({ memory })` seam and the `run` RPC does not pass it, and nothing writes memory during a run | done (9); run wiring open |
-| Legacy `verifier/` and the legacy `orchestrator/` state machine | pre-existing code **not wired into the new loop**. The orchestrator now gets versioned memory through `legacyProjectMemory` without being modified | **10** |
+| `proposeEdit` trainer path | Provider-backed body-only rewrites behind strict held-out `>` acceptance | implemented (6.6); no real-provider run |
+| Tool/MCP layer | Curated exact-version catalog, per-run host, capability gate, timeout latch | implemented (7.3); named third-party packages unaudited/unexecuted here |
+| `ask` action | Terminates the run; there is no interactive reply channel | unowned |
+| Run cancellation | `runTask` accepts an `AbortSignal` the CLI wire cannot reach | unowned |
+| Ghost completions | Implemented and off by default | no default provider path |
+| Monaco widget | Doubled in jsdom; `ModelRegistry` owns tested state synchronization | test-environment limit |
+| Provider settings / selector | Real key-free persisted entries and selection; local provider forwarding works | hosted stored-key invocation remains half-wired |
+| Cost guard | Enforced before calls when configured; no default desktop budget | desktop default open |
+| Retrieval | Graph/search/assembly are real, but desktop does not send `contextBudgetTokens` by default | default wiring open |
+| Versioned memory | Persistence, hygiene, retrieval, and panel are real | automatic live-run ingestion/injection open |
+| Native/release/offline/community evidence | Workflows and deterministic gates exist | evidence-gated 12.1–12.4 |
+| Legacy compatibility paths | `ProviderAdapter` coexists with `ChatAdapter`; `verifier/` coexists with `verify/` | convergence unowned |
 
 ### 1.3 Two deliberate duplications
 
@@ -263,11 +259,11 @@ and this project's worst incident was invisible precisely because there was noth
 
 ---
 
-## 3. The remaining work, task by task
+## 3. Historical implementation expansion (written from the Phase 3 vantage point)
 
-73 tasks remain. Below, each is expanded into what a developer actually has to build, the traps
-specific to it, and how to know it is done. Requirement IDs in `_italics_` are the acceptance
-criteria — go read them.
+At this checkpoint, 73 tasks remained. The prose below is retained for rationale and failure traps,
+not as a current backlog. Current progress is 78/82 actionable leaves with only 12.1–12.4 open.
+Requirement IDs in `_italics_` remain useful historical acceptance references.
 
 ### Phase 3 — Code surface (4 tasks left)
 
@@ -1117,16 +1113,18 @@ true**, not in a batch at the end — a doc amended before the code is just a di
   client/event/project substrate. Same-model lift, fixed-budget pass@k reliability distributions,
   and strict held-out compounding replace adoption counts as product optimization metrics, with
   external evidence limits stated explicitly.
-- **13.5 `tasks-executed.md`** — update at **each** phase gate, with a decision-log row for every
-  architectural decision. It has been wrong before. It is Rule 9's single source of truth for what is
-  built, so a wrong entry there is worse than a missing one.
+- **13.5 `tasks-executed.md`** — **complete.** The ledger labels Milestones 1–5 as historical
+  snapshots, preserves phase-gate sections as checkpoint evidence, covers all ten design conflicts
+  and all five design-authority decisions, and reports reproducible 78/82 actionable-leaf progress.
+  Earlier `/96` figures are retained only as explicitly legacy checkpoint counters.
 
 ---
 
-## 3. The remaining work, task by task
+## 3. Historical per-task expansion (retained for rationale)
 
-73 tasks left. Below, each one gets what the spec does not give you: the files you will touch, the
-decision you have to make, and the trap that is waiting.
+At the time this duplicate planning section was written, 73 tasks remained. It is not current
+status; use `tasks.md` and the status section above. The detail remains because it records files,
+decisions, and known traps from the implementation checkpoint.
 
 ### Phase 3 — Code surface (4 tasks left)
 
@@ -1511,12 +1509,12 @@ cost guard all observable in the Timeline.
 ### Phase 13 — Documentation reconciliation (5 tasks, runs alongside)
 
 The prior-generation documents (`rules.md`, `what-not-we-are-building.md`, `trd.md`,
-`architecture.md`, `prd.md`) contradict this build in ten known places, resolved in `design.md`'s
-conflicts table. 13.1–13.4 amend them. **13.5 keeps `tasks-executed.md` current** — update at every
-phase gate with a decision-log row for every architectural decision.
+`architecture.md`, `prd.md`) conflicted with this build in ten known places. Tasks 13.1–13.4
+reconciled those documents, and **13.5 completed the living-log audit**, including every design
+conflict and design-authority decision plus the reproducible actionable-leaf count.
 
-Do not skip Phase 13. Stale documents that contradict the code are worse than no documents, because
-the next person believes them.
+Phase 13 is complete. Continue keeping the ledger current at future evidence gates; do not rewrite
+historical checkpoint evidence as if it were current behavior.
 
 ---
 
@@ -1922,34 +1920,49 @@ Every one of these has already happened here, or is one commit away. Read it bef
 - [ ] Any new debt added to §4 rather than left in someone's head.
 
 ### Whole project
-- [ ] 96 of 96 tasks.
-- [ ] 12.6 canonical acceptance green: plan gate, verification contract, consensus, and cost guard all
-      observable in the Timeline for one real end-to-end build.
-- [ ] Cross-platform installers within a **stated and met** size budget (§4.5).
-- [ ] `PRIVACY.md`, `CONTRIBUTING.md`, `README.md` $0 recipe, all five prior-generation documents
-      reconciled.
-- [ ] A community skill installs, runs, and trains with no Sketch server involved.
+- [ ] 82 of 82 actionable leaves. Current state: 78 complete; evidence-gated 12.1–12.4 remain.
+- [x] 12.6 canonical scripted acceptance is green: plan gate, verification contract, consensus, and
+      cost guard are observable in the Timeline. This is harness evidence, not real-provider proof.
+- [ ] Native Windows, macOS, and Linux installers retained within the strict
+      **`<100,000,000-byte` per-deliverable** budget (§4.5).
+- [ ] Installed-app clean-machine Ollama run retained with process-attributed DNS/socket/packet
+      evidence showing no non-loopback attempt.
+- [ ] A package-version-matching release tag publishes and independently verifies all native assets
+      and GitHub attestations; do not conflate provenance with Authenticode or Apple notarization.
+- [x] `PRIVACY.md`, `CONTRIBUTING.md`, the `README.md` $0 recipe, and all five prior-generation
+      documents are reconciled.
+- [ ] A genuine third-party community skill with retained source/license provenance installs, runs,
+      captures evals, trains, and promotes with no Sketch server involved.
 
 ---
 
 ## 9. Start here
 
-```bash
-# 1. Confirm the tree is where this document says it is.
-git log --oneline -3          # expect aad0c8e at HEAD
-npm run typecheck             # expect 0
-npm run build                 # expect 0
-npm test                      # expect 0 — core 405, desktop 175
+```powershell
+# 1. Confirm the committed task-13.5 checkpoint and clean tree.
+git status --short
+git log --oneline -3
 
-# 2. Read, in this order:
-#    .kiro/specs/sketch-engineering-os/requirements.md   (28 requirements — the acceptance criteria)
-#    .kiro/specs/sketch-engineering-os/design.md         (§7 canonical contracts, resolved conflicts)
-#    .kiro/specs/sketch-engineering-os/HANDOFF.md        (session state and risks)
-#    packages/desktop/src/panels/GitPanel.tsx            (the pattern for converting a fixture panel)
-#    packages/desktop/src/panels/GitPanel.test.tsx       (the pattern for proving you converted it)
+# 2. Read current authority in this order:
+#    .kiro/specs/sketch-engineering-os/tasks.md
+#    .kiro/specs/sketch-engineering-os/HANDOFF.md
+#    tasks-executed.md
+#    PACKAGING.md, OFFLINE-PROOF.md, RELEASES.md
 
-# 3. Your first task is 3.4 — Explorer, Terminal, Search.
-#    Not 3.2. See §3 for why: nothing in the running app can open a file yet.
+# 3. The next actionable work is external evidence-gated task 12.1.
+#    Run the native package matrix; do not mark it complete from workflow source alone.
+#    After retaining all three installer artifacts and passing size manifests, proceed to 12.2,
+#    12.3, and 12.4 using those exact bytes and the documented evidence procedures.
+
+# 4. Before recording a green checkpoint, validate in canonical order in both environments.
+npm run build
+npm run typecheck
+npm test -w @sketch/core
+npm test -w @sketch/desktop
+$env:SKETCH_FAKE_PROVIDER = "1"
+npm test -w @sketch/core
+npm test -w @sketch/desktop
+Remove-Item Env:SKETCH_FAKE_PROVIDER
 ```
 
 **If you are ever unsure whether to weaken a check to make progress: don't.** Stop, write down what
