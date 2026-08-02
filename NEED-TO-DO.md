@@ -1,7 +1,7 @@
 # NEED TO DO — Sketch, from here to done
 
 **Audience:** the developer who is going to write this code.
-**Status date:** commit `aad0c8e` (Phase 3, task 3.3 complete).
+**Status date:** Phase 11 gated; implementation commits `fc51f5e`, `2a5f0f9`, `c13967d`.
 **Authority:** `.kiro/specs/sketch-engineering-os/{requirements,design,tasks}.md` are the contract.
 This file is the working plan on top of them. Where this file and the spec disagree, the spec wins
 and you should fix this file.
@@ -85,14 +85,20 @@ writes down what happened. Do not describe a wired interface as a working featur
 
 ## 1. Where the project actually stands
 
-**Status date: Phase 10 gated. 71 of 96 tasks complete. Phases 1, 1.5, 2, 3, 4, 5, 6, 7, 8, 9 and 10
-are done and gated. Phase 11 (honest benchmarks) is next.** Core 1 012 tests / 49 files, desktop 478
-tests / 47 files, offline and with no API key.
+**Status date: Phase 11 gated. 78 of 96 tasks complete. Phases 1 through 11 are done and gated;
+Phase 12 (packaging and the open flywheel) is next.** Core 1,028 tests / 51 files, desktop 481
+tests / 48 files, build and typecheck green from a cold reinstall, and identical with
+`SKETCH_FAKE_PROVIDER=1` set and unset. `bench:check` is green with synthetic pass@2 lift 1.000.
 
-**`swarm` ships OFF.** Phase 10's gate measured pass@k over the internal suite under `single` and
-under `swarm` and found no lift, so Requirement 24.8 keeps the swarm off and
-`shouldDefaultToSwarm` has no override parameter. That is the honest result, and Phase 11's
-benchmarks are where it either changes on evidence or stays.
+**Benchmark evidence is deliberately narrow.** The internal CI result compares
+`offline-scripted-v1 + Sketch` with the same scripted model plus `naive`. It is deterministic
+synthetic regression evidence, not evidence about a real provider. No several-model public matrix
+has been run, no provider claim is made, unknown cost remains `null`, and unobserved manual edits
+remain `null`. The reporting mechanism is ready for repeated same-model pairs when real-provider
+runs are deliberately authorized and recorded.
+
+**`swarm` still ships OFF.** Phase 10's strategy gate found no strategy-level lift over `single`.
+Phase 11's synthetic harness lift does not change that verdict and is not a license to enable swarm.
 
 The per-task detail below still reads
 from the Phase 3 vantage point in places — where it does, `tasks-executed.md` and
@@ -100,6 +106,9 @@ from the Phase 3 vantage point in places — where it does, `tasks-executed.md` 
 very top of this file is older still; treat this section as the current one.)
 
 ```
+c13967d  phase 11 task 11.6 — read-only benchmark report panel
+2a5f0f9  phase 11 task 11.5 — artifact script and lift regression gate
+fc51f5e  phase 11 tasks 11.1-11.4 — fixed-budget honest benchmark substrate
 511df18  phase 10 task 10.5 — Phase 10 gate, swarm stays off with no measured pass@k lift
 9d6a9c7  phase 10 task 10.4 — AI Team and Tasks panels over real dispatcher events
 56aa748  phase 10 tasks 10.1-10.3 — dispatcher, thirteen verifiable roles, merge, pass@k
@@ -115,9 +124,11 @@ f89bc67  phase 8 task 8.1 — usage accounting, one price table, nine duplicates
 d759311  phase 4 complete — self-hosted fonts, README zero-dollar recipe, gate green cold
 ```
 
-Current suite, from a **cold install** (`node_modules`, `packages/core/dist` and both workspace
-`node_modules` deleted): **core 927 tests / 47 files green, desktop 453 tests / 45 files green**,
-build 0, typecheck 0, offline, no key, identical with `SKETCH_FAKE_PROVIDER=1` and unset.
+Current suite, from a **cold reinstall** (`node_modules`, both workspace `node_modules`, and
+`packages/core/dist` deleted): **core 1,028 tests / 51 files green, desktop 481 tests / 48 files
+green**, build 0, typecheck 0, `bench:check` 0, no known provider key variable present, and
+identical with `SKETCH_FAKE_PROVIDER=1` set and unset. The install completed, but cache/network
+conditions were not instrumented, so do not cite it as proof of an offline install.
 
 **One known flake**: `verify-live.test.ts`'s "starts, answers its probe, survives the settle window"
 binds a real port and failed once on a cold run, passing on every re-run. If it recurs, lengthen the

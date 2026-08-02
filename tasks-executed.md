@@ -955,10 +955,53 @@ project has ever run against a real provider.**
 
 ---
 
+## Phase 11 — Honest benchmarks (spec: `.kiro/specs/sketch-engineering-os`)
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| 11.1 | Internal eval suite | ✅ | Two ordered repair cases with non-empty verification commands, mandatory `verify-pass`, real `build` and `unit` stages, and SHA-256 pins covering every regular fixture file. Every case/attempt receives a fresh copied workspace; symlinks and special entries are refused. The invalid legacy captures with `verify: []` remain untouched and excluded. |
+| 11.2 | Measurable outcomes | ✅ | Reports task completion, canonical-stage build success and test pass rates, time, calls/tokens, manual edits and cost. Manual edits and unpriced cost are explicit `null` when unobserved/unknown—never fabricated as zero. Completion comes only from `EvalResult.passed`. |
+| 11.3 | Fixed-budget pass@k | ✅ | One aggregate budget fixes `k`, calls, tokens, attempt timeout and suite timeout. Reports pass@1, pass@k and every `0..k` distribution bucket; exhausted, skipped, timed-out and errored attempts remain in the artifact. |
+| 11.4 | Same-model lift framing | ✅ | Versioned `naive@1` and `sketch@1` harnesses compare only identical suite digest, ordered cases, provider, model, `k` and every budget field. Lift is strict `>`; ties retain the incumbent. The mechanism supports repeated same-model pairs across several models. **No real-provider/public matrix was run**; the committed result is synthetic offline CI evidence only. |
+| 11.5 | Bench script and CI gate | ✅ | `npm run bench` writes an atomic validated artifact; `bench:check` rejects internal lift regression after build/typecheck/core/desktop tests. CI uploads `.sketch/bench/*.json`. |
+| 11.6 | Benchmarks panel | ✅ | Reachable read-only panel over the latest validated artifact. It has honest no-folder/no-engine/no-report/invalid-report states, renders all required metrics and identities, and never runs a model, eval, build or test on mount. |
+
+### Phase 11 gate result
+
+`packages/core/test/phase11-gate.test.ts` proves the pinned verifiable suite, fresh workspaces, eval/verification join, required nullable metrics, fixed-budget distribution, strict same-model comparison, full-budget comparability, validated artifacts, read-only RPC, CI ordering and panel behavior.
+
+**Cold verification** (root and workspace `node_modules` plus `packages/core/dist` removed): `npm install` 0, `npm run build` 0, `npm run typecheck` 0, core **1,028 tests / 51 files**, desktop **481 tests / 48 files**, and `npm run bench:check` 0. The suites are identical with `SKETCH_FAKE_PROVIDER=1` and unset; known provider-key variables were absent. The install succeeded, but cache/network conditions were not instrumented, so this is **not claimed as proof of an offline install**. `npm install` reported five dependency-audit findings (3 moderate, 1 high, 1 critical); Phase 11 did not run an automatic breaking audit fix.
+
+The deterministic gate result is `offline-scripted-v1 + Sketch` versus the same synthetic model plus `naive`: pass@2 lift **1.000**, candidate distribution `{0:0, 1:0, 2:2}`. Cost remains unknown (`null`) and manual edits remain unobserved (`null`). **Nothing ran against a real provider.** This result guards the harness in CI; it is not public evidence about any provider model and must not be placed in a several-model public matrix.
+
+**Mutation evidence** (each broken, watched fail, restored, watched pass):
+
+| Mutation | Result |
+|---|---|
+| Strict lift `>` changed to `>=` | 2 tests failed; restored targeted core tests passed |
+| Full fixed-budget comparability guard disabled | 2 tests failed; restored targeted core tests passed |
+| Mandatory `verify-pass` suite guard disabled | 1 test failed; restored targeted core tests passed |
+| Automated manual edits changed from `null` to `0` | 2 tests failed; restored targeted core tests passed |
+| Benchmarks panel called `eval([])` on mount | 1 desktop test failed; restored panel tests passed |
+| `sanitizePayload` removed from the JSONL write path | 3 store tests failed; restored store tests passed |
+| Runtime dependency `left-pad` added to core | 1 dependency test failed; restored dependency tests passed |
+
+---
+
 ## Decision Log
 
 | Date | Decision | Rationale |
 |---|---|---|
+| 2026-08-02 | The detailed eval seam is **additive** | `runEvalDetailed` returns both the score and actual run while `runEval` remains the result-only wrapper. Existing callers and exactly-one `eval_scored` semantics remain unchanged, while benchmarks can project real timing, events and verification. |
+| 2026-08-02 | Fixtures are **content-pinned and freshly copied per attempt** | Formatting-independent suite identity is not enough if fixture bytes drift or one attempt contaminates another. Every regular fixture file participates in the digest; symlinks/special entries are refused; every attempt starts in a new workspace. |
+| 2026-08-02 | Unknown manual edits and cost are **`null`, never zero** | An automated run did not observe human edits, and an unpriced model is not free. Null preserves the distinction between measured zero and not measured. |
+| 2026-08-02 | Benchmark completion comes only from **`EvalResult.passed`** | A completed process, a model saying done, or green unrelated stages are not task completion. The same eval checks that define the case define completion. |
+| 2026-08-02 | Build and test metrics use the **canonical verification stages** | Re-parsing command names would create a second verification vocabulary and eventually report a green benchmark beside a red verification contract. |
+| 2026-08-02 | The **entire fixed budget** is comparison identity | Same model and same `k` are insufficient if one side receives more calls, tokens or time. Any budget-field mismatch is refused rather than subtracted as lift. |
+| 2026-08-02 | Lift is strict `>` and a tie retains the incumbent | More orchestration without measured improvement is extra cost and complexity, not a win. `>=` was mutation-tested and failed two tests. |
+| 2026-08-02 | Offline CI evidence is labelled **synthetic, never public model evidence** | The scripted executor proves harness plumbing and catches regressions deterministically. It says nothing about a real provider, so public reporting remains blocked until several real same-model pairs are deliberately run and recorded. |
+| 2026-08-02 | The Benchmarks panel is **read-only** | Mounting a reporting surface must not spend tokens or execute project code. Only an explicit bench command writes reports; the panel validates and renders the latest artifact. |
+| 2026-08-02 | Benchmark artifacts are **validated and atomic** | Reports are parsed against an exact schema, recomputed metrics and forbidden secret/config-shaped keys before a temporary file is renamed into place; readers never accept half-written or self-inconsistent evidence. |
 | 2026-08-03 | A role's verification signal is a **union of three kinds**, not a verify stage | The first draft assigned each of the thirteen roles a stage and claimed the assignment was pairwise-unique. It cannot be: thirteen roles over nine stages. What it actually bought was the Planner graded by `typecheck` and the Research role graded by `lint` — checks that never look at a document, running green for reasons unrelated to the role's output, which is the exact failure this project keeps finding. So `RoleSignal` is `verify-stage` for roles that write or measure code, `plan-artifact` for the ones whose output IS the plan, and `citations` for the findings roles. "Distinct" means each role has a signal of its own, and a test asserts the impossible uniqueness claim is gone (Requirement 24.6) |
 | 2026-08-03 | A role that cannot be checked is **skipped, twice**, and never run-then-believed | `runTask` returns `ok: true` for a task with no verification configured, which is right for the single-agent case and catastrophic for a role: hand thirteen roles an empty policy and you get thirteen confident nothings that read as unanimity, and it is invisible from outside. So there are two independent refusals — `partitionRoles` before a token is spent, and `gradeRole` refusing a `verify-stage` role with zero verify results however `run.ok` reads. Two guards for one hazard, because this is the one failure mode of a multi-agent system that cannot be seen in the output (Requirements 24.5, 24.6) |
 | 2026-08-03 | Two proposals for one path is a **conflict, full stop**, and file granularity is the honest limit | Requirement 24.7 says a conflict is never guessed, and the temptation is a three-way merge. But `loop/edits.ts` emits whole-file replacements deliberately — one hunk, so a reviewer cannot accept a grouping the model never proposed — so two of those for one path, computed from the same base, cannot be combined without inventing which lines belonged to whom. Splitting them into finer hunks by heuristic IS the guess. So the rule is one proposer per path or nobody, including the case of one role proposing twice, and the conflict leaves as a task with both sub-run ids on it. Coarse, and stated as coarse rather than discovered later |

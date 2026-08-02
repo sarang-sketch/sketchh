@@ -371,23 +371,24 @@ Phase 4 numbering stays intact for anything that references it.
 
 ## Phase 11 — Honest benchmarks
 
-- [ ] 11. Benchmarks and lift-regression protection
-- [~] 11.1 Build the internal eval suite
+- [x] 11. Benchmarks and lift-regression protection
+- [x] 11.1 Build the internal eval suite
   - Scored by the eval harness and the verification contract
   - _Requirements: 25.1_
-- [~] 11.2 Report the measurable outcomes
+- [x] 11.2 Report the measurable outcomes
   - Task completion rate, build success rate, test pass rate, manual edits required, time to completion, and cost
   - _Requirements: 25.2_
-- [~] 11.3 Report pass@k under a fixed budget
+- [x] 11.3 Report pass@k under a fixed budget
   - Include the distribution, not only the best case
   - _Requirements: 25.3_
-- [~] 11.4 Frame public benchmarks as lift
+- [x] 11.4 Frame public benchmarks as lift
   - Present `M + Sketch` versus `M + naive` across several models; never claim to beat a model
   - _Requirements: 25.4_
-- [~] 11.5 Add the bench script and CI gate
+  - The report/comparison contract supports repeated same-model pairs across a model matrix. No real-provider public matrix has been run; the committed CI evidence is explicitly synthetic and must not be presented as public model evidence.
+- [x] 11.5 Add the bench script and CI gate
   - `bench` produces a report artifact; CI fails on internal-suite lift regression
   - _Requirements: 25.5, 25.6_
-- [~] 11.6 Build the Benchmarks panel
+- [x] 11.6 Build the Benchmarks panel
   - _Requirements: 27.1_
 
 ---

@@ -19,37 +19,35 @@ Phase 3 and had gone four phases stale.
 
 ## IMMEDIATE NEXT ACTION
 
-**Phase 10 is gated and committed. The working tree is clean. Start task 11.1 (the internal eval
-suite).**
+**Phase 11 is gated and its implementation is committed. Commit the gate/docs update, then start
+Phase 12.1 (cross-platform packaging).**
 
-**71 of 96 tasks complete.** Phases 1, 1.5, 2, 3, 4, 5, 6, 7, 8, 9 and 10 are done and gated.
+**78 of 96 tasks complete.** Phases 1 through 11 are done and gated.
 
-`npm run build && npm run typecheck && npm test` per workspace: build 0, typecheck 0, test 0 —
-**core 1 012 tests / 49 files, desktop 478 tests / 47 files**, offline, no API key, and identical
-with `SKETCH_FAKE_PROVIDER=1` and unset.
+Cold reinstall verification, in order: `npm install`, build, typecheck, core tests, desktop tests,
+`bench:check` — all exit 0. **Core 1,028 tests / 51 files; desktop 481 tests / 48 files.** The suites
+are identical with `SKETCH_FAKE_PROVIDER=1` set and unset, and known provider-key variables were
+absent. Cache/network conditions were not instrumented, so the successful install is **not proof of
+offline installation**.
 
-The Phase 10 gate proof is `packages/core/test/phase10-gate.test.ts`, and its §5 verdict is the
-headline: **`swarm` is OFF, because no pass@k lift has been measured on this repository's suite.**
-Requirement 24.8 does not permit shipping it without one, and `shouldDefaultToSwarm` has no override
-parameter. §6 proves the gate is not merely stuck shut — given a genuinely better report it opens.
+The Phase 11 gate proof is `packages/core/test/phase11-gate.test.ts`. The internal suite has two
+content-pinned repair cases, fresh workspaces per attempt, mandatory `verify-pass`, the canonical
+verification contract, fixed aggregate call/token/time budgets, pass@1/pass@k plus the full
+`0..k` distribution, and strict same-model comparison over the entire budget identity. Reports are
+validated and atomically written; the Benchmarks panel only reads the latest validated artifact.
 
-**Phase 10 in one paragraph.** `strategy.dispatch(task, deps)` runs `single` (the default),
-`plan-then-code`, or `swarm`, escalating only when the lighter attempt failed **within** its budget —
-a money-ceiling breach, an abort and a provider error explicitly do not escalate, because escalating
-one ceiling into thirteen bills is a money bug. The thirteen roles each carry a REQUIRED
-verification signal, one of `verify-stage` / `plan-artifact` / `citations`, and a role whose signal
-this project cannot resolve is skipped before a token is spent AND refused again by the grader — two
-guards, because `runTask` returns `ok: true` for a task with nothing configured and an unchecked role
-would report confident nothing. The merge is a union of non-conflicting edits at file granularity;
-two proposals for one path is a conflict that writes nothing and leaves a follow-up task. Consensus
-exists only inside `swarm` and it **gates the merge**, so a Security objection arrives before the
-bytes do.
+**Phase 11 in one paragraph.** The committed CI result compares `offline-scripted-v1 + Sketch`
+with the same scripted model plus `naive`, producing pass@2 lift **1.000** and distribution
+`{0:0, 1:0, 2:2}`. This is deterministic **synthetic offline CI evidence** for harness regression,
+not evidence about any real provider model. No several-model public matrix has been run. Unknown
+cost and unobserved manual edits remain `null`, never zero. Public runs, when deliberately executed,
+must remain `M + Sketch` versus the same `M + naive`; no report may say Sketch beats a model.
 
-**Three Phase 10 gaps worth knowing.** Role sub-runs get **no tools** unless the caller supplies a
-`toolsForRole` factory — the dispatcher will not build a `ToolDispatcher`, for the same reason the
-loop will not. A `citations` signal proves a finding is **anchored in this repository, not correct**;
-nothing mechanical proves the latter. And the roles neither read nor write memory: the Phase 9 digest
-still fills a seam the `run` RPC does not pass.
+**Phase 11 limits worth knowing.** The report schema supports one same-model pair at a time and can
+be repeated across models, but the public several-model execution remains unperformed. The fixture
+suite has two intentionally small repair tasks, so its synthetic lift is a regression sentinel, not
+a general capability claim. `npm install` reported five dependency-audit findings (3 moderate,
+1 high, 1 critical); no breaking `npm audit fix --force` was run.
 
 The Phase 9 gate proof is `packages/core/test/phase9-gate.test.ts`: record a decision, record the
 contradicting one, and prove a RELATED query returns the newer while the older is marked superseded
@@ -129,24 +127,18 @@ Seven guards were mutation-verified at this gate — see the Phase 5 gate result
 ## Git state
 
 ```
-(phase 10 complete)                                                                    <- HEAD
+(phase 11 gate/docs commit containing this file)                                      <- HEAD
+c13967d  sketch: phase 11 task 11.6 - read-only benchmark report panel
+2a5f0f9  sketch: phase 11 task 11.5 - artifact script and lift regression gate
+fc51f5e  sketch: phase 11 tasks 11.1-11.4 - fixed-budget honest benchmark substrate
+f7c15aa  sketch: phase 10 complete - tasks ticked, gate result and decisions logged
 511df18  sketch: phase 10 task 10.5 - phase 10 gate, swarm stays off with no measured pass@k lift
 9d6a9c7  sketch: phase 10 task 10.4 - AI Team and Tasks panels over real dispatcher events
 56aa748  sketch: phase 10 tasks 10.1-10.3 - strategy dispatcher, thirteen verifiable roles, merge, pass@k
-54dbb20  sketch: phase 9 task 9.5 - Phase 9 gate, the contradiction chain end to end
-adf1505  sketch: phase 9 task 9.4 - Memory panel, and four memory RPC methods
-f864e9a  sketch: phase 9 tasks 9.1-9.3 - versioned memory, hygiene, reranked retrieval
-287a767  sketch: phase 8 complete - gate green cold, tasks ticked, gate result and eight decisions logged
-c58dcf9  sketch: phase 8 task 8.5 - Phase 8 gate, plus a real overshoot the gate found
-3decd9c  sketch: phase 8 task 8.4 - Cost Dashboard, and three fake cost numbers deleted
-3ab3a59  sketch: phase 8 tasks 8.2 and 8.3 - cost guard checked before the call, router, response cache
-f89bc67  sketch: phase 8 task 8.1 - usage accounting, one price table, nine duplicates deleted
-94aa773  sketch: phase 7 complete - gate green cold, gate result and eight decisions logged
-d759311  sketch: phase 4 complete - self-hosted fonts remove Google egress, README zero-dollar recipe, gate green cold
 ```
 
-The working tree is clean at HEAD. **Commit at every green point** — git was initialised 16 tasks
-late in this project, and in that gap a cancelled sub-agent silently deleted the `sanitizePayload()`
+The implementation commits are protected and this file is part of the final gate/docs commit.
+**Commit at every green point** — git was initialised 16 tasks late in this project, and in that gap a cancelled sub-agent silently deleted the `sanitizePayload()`
 call from `JsonlEventStore.emit`, writing API keys to disk unredacted for an unknown number of
 commits. Only a cold rebuild caught it. Uncommitted work is unprotected work.
 
@@ -169,10 +161,11 @@ because there was nothing to bisect.
 | 7 — Verification contract, live feedback, curated MCP (7.1–7.5) | **DONE**, gate green cold |
 | 8 — Cost accounting, budget guard, router, cache (8.1–8.5) | **DONE**, gate green cold |
 | 9 — Versioned memory with hygiene (9.1–9.5) | **DONE**, gate green cold |
-| 10 — Eval-gated multi-agent (10.1–10.5) | **DONE**, gate green. `swarm` ships **off**: no measured pass@k lift |
-| 11–12 | Not started |
+| 10 — Eval-gated multi-agent (10.1–10.5) | **DONE**, gate green. `swarm` ships **off**: no measured strategy lift |
+| 11 — Honest benchmarks (11.1–11.6) | **DONE**, gate green cold. CI result is synthetic only; real-provider public matrix unperformed |
+| 12 | Not started |
 
-Task counts: 96 total, **71 complete**.
+Task counts: 96 total, **78 complete**.
 
 ---
 
