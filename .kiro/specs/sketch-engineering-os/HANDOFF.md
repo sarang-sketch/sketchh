@@ -27,13 +27,13 @@ provenance Authenticode or Apple Developer ID signing/notarization. For 12.4, re
 third-party community skill's source and license provenance and run it through the existing gate.
 Source tests, workflow configuration, and local fixtures alone complete none of those claims.**
 
-**79 of 96 tasks complete.** Phases 1 through 11 and task 12.5 are done; 12.1 through 12.4 are in progress.
+**80 of 96 tasks complete.** Phases 1 through 11 and tasks 12.5–12.6 are done; 12.1 through 12.4 are in progress.
 
-Current source verification: build and typecheck pass; **core 1,034 tests / 53 files, desktop 502
-tests / 53 files** with `SKETCH_FAKE_PROVIDER` both unset and set to `1`. One unset core attempt hit
-the documented `verify-live` port-release timing flake and passed on immediate focused and full
-reruns. One fake-enabled core attempt timed out in the event-store property test under parallel
-load; that file and the complete suite passed on rerun. No assertion was weakened. The native
+Current source verification: build and typecheck pass; **core 1,036 tests / 54 files, desktop 503
+tests / 54 files** with `SKETCH_FAKE_PROVIDER` both unset and set to `1`. The Phase 12.6 canonical
+acceptance uses scripted offline model turns over real filesystem bytes, real Node child processes,
+durable JSONL events, production dispatch/merge/consensus/budget contracts, and Timeline rendering.
+It is harness evidence, not evidence that a real provider can build a booking product. The native
 Windows sidecar is 87 MiB and its protocol smoke test passes. The first Tauri package attempt fixed
 an invalid v2 window `name` field, then reached Rust compilation but was blocked by this host's
 Application Control policy (OS error 4551) and missing `dlltool.exe`. No Windows installer was
@@ -70,6 +70,18 @@ new-language, and declarative Monarch tokenizer registrations. The behavioral ga
 mutations pass. These are host code-registration contracts, not a plugin store or arbitrary
 executable package loader. The local MCP script proves the contract path, not actual third-party
 server execution or audit evidence.
+
+Task 12.6 is complete. `packages/core/test/phase12-acceptance-gate.test.ts` drives scripted offline
+model turns over a fresh real filesystem project and real Node child processes. It proves the engine
+plan gate, twelve persisted plan documents, correct-code success and wrong-code unit failure, six
+verified swarm roles, deterministic non-conflicting merge, conflict refusal with untouched bytes and
+a follow-up task, deterministic budget stop with no heavier-strategy escalation, and seven final
+checks over five modules. Dispatcher outcome events now persist bounded consensus, merge, and
+verification summaries. `packages/desktop/src/phase12-acceptance-gate.test.tsx` generates events
+through the real core and proves the Timeline reconstructs plan, verification, swarm, and budget
+evidence plus terminal outcomes from the event log alone. Every model turn is scripted: this is
+contract/harness evidence, not evidence that a real provider can build a booking product. `swarm`
+remains off by default.
 
 The Phase 11 gate proof is `packages/core/test/phase11-gate.test.ts`. The internal suite has two
 content-pinned repair cases, fresh workspaces per attempt, mandatory `verify-pass`, the canonical
@@ -168,7 +180,8 @@ Seven guards were mutation-verified at this gate — see the Phase 5 gate result
 ## Git state
 
 ```
-(Current Phase 12.5 completion commit containing this file)                       <- HEAD
+(Current Phase 12.6 completion commit containing this file)                       <- HEAD
+4488ba7  sketch: phase 12 task 12.5 - complete extension registries
 87a5889  sketch: phase 12 task 12.5 - add editor extension registries
 64f626a  sketch: phase 12 task 12.5 - audit production extensibility honestly
 c9947b7  sketch: phase 12 task 12.4 - persist grants and prove local skill flywheel
@@ -211,9 +224,9 @@ because there was nothing to bisect.
 | 9 — Versioned memory with hygiene (9.1–9.5) | **DONE**, gate green cold |
 | 10 — Eval-gated multi-agent (10.1–10.5) | **DONE**, gate green. `swarm` ships **off**: no measured strategy lift |
 | 11 — Honest benchmarks (11.1–11.6) | **DONE**, gate green cold. CI result is synthetic only; real-provider public matrix unperformed |
-| 12 — Packaging and open flywheel | **IN PROGRESS** — 12.1 native artifacts required; 12.2 forwarding/preflight built with installed-app clean-machine evidence required; 12.3 deterministic release/provenance path built with real tag-release evidence and native signing identities absent; 12.4 production flywheel proved with a local community-format fixture, with genuine third-party source/license evidence absent; **12.5 DONE** with production-consumed contracts for all nine categories and behavioral/mutation evidence |
+| 12 — Packaging and open flywheel | **IN PROGRESS** — 12.1 native artifacts required; 12.2 forwarding/preflight built with installed-app clean-machine evidence required; 12.3 deterministic release/provenance path built with real tag-release evidence and native signing identities absent; 12.4 production flywheel proved with a local community-format fixture, with genuine third-party source/license evidence absent; **12.5 DONE** with production-consumed contracts for all nine categories and behavioral/mutation evidence; **12.6 DONE** with scripted offline canonical acceptance and Timeline evidence, not real-provider capability evidence |
 
-Task counts: 96 total, **79 complete**.
+Task counts: 96 total, **80 complete**.
 
 ---
 

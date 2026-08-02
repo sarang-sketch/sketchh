@@ -416,8 +416,9 @@ Phase 4 numbering stays intact for anything that references it.
   - Confirm and document an extension point for providers, agents, skills, tools, models, memory, workflows, themes, and languages
   - `EXTENSIBILITY.md` documents production-consumed contracts for all nine categories. Core now exposes host-scoped canonical provider, validated MCP catalog, memory-store, registered-agent, and explicit versioned-workflow registries through both production transports; desktop production consumes theme, extension mapping, new-language, and declarative Monarch tokenizer registrations. Skills remain filesystem-discovered and model IDs remain runtime configuration. The behavioral gate and fail-then-pass mutations are green. These are host code-registration contracts, not a plugin store or arbitrary executable package loader; the local MCP script is contract evidence, not third-party-server execution evidence.
   - _Requirements: 26.5_
-- [~] 12.6 Run the canonical end-to-end acceptance
+- [x] 12.6 Run the canonical end-to-end acceptance
   - The "build an Airbnb clone" flow runs end to end with the plan gate, verification contract, consensus, and cost guard all observable in the Timeline, completing with every check green
+  - Completed with scripted offline adapters over a fresh real filesystem project, real Node child-process checks, durable JSONL events, deterministic swarm merge/conflict handling, and deterministic budget stops. The gate proves the production contracts and Timeline reconstruction; it does **not** prove that a real provider can build a booking product.
   - _Requirements: 24.7, 6.4, 4.7, 20.4_
 
 ---

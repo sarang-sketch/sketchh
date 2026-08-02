@@ -1,7 +1,7 @@
 # NEED TO DO — Sketch, from here to done
 
 **Audience:** the developer who is going to write this code.
-**Status date:** task 12.5 complete with production-consumed host registries and behavioral/mutation evidence; third-party, native, release, and clean-machine evidence remain open.
+**Status date:** task 12.6 complete with a scripted offline canonical acceptance gate; third-party, native, release, clean-machine, and real-provider evidence remain open.
 **Authority:** `.kiro/specs/sketch-engineering-os/{requirements,design,tasks}.md` are the contract.
 This file is the working plan on top of them. Where this file and the spec disagree, the spec wins
 and you should fix this file.
@@ -85,11 +85,14 @@ writes down what happened. Do not describe a wired interface as a working featur
 
 ## 1. Where the project actually stands
 
-**Status date: Phase 11 gated; tasks 12.1 through 12.4 in progress and task 12.5 complete. 79 of 96 tasks complete.** Core
-1,034 tests / 53 files, desktop 502 tests / 53 files, build and typecheck green. The native sidecar build
-and protocol smoke check pass. Cross-platform package jobs and the strict `<100,000,000-byte` size
-gate are implemented, but 12.1 remains open until native Windows, macOS, and Linux workflow jobs
-produce uploaded installers and passing size manifests.
+**Status date: Phase 11 gated; tasks 12.1 through 12.4 in progress and tasks 12.5–12.6 complete. 80 of 96 tasks complete.** Core
+1,036 tests / 54 files, desktop 503 tests / 54 files, build and typecheck green with
+`SKETCH_FAKE_PROVIDER` both unset and set to `1`. Task 12.6 is a scripted offline harness over real
+filesystem bytes, child processes, JSONL events, dispatch/merge/consensus/budget contracts, and
+Timeline rendering; it is not evidence that a real provider can build a booking product. The native
+sidecar build and protocol smoke check pass. Cross-platform package jobs and the strict
+`<100,000,000-byte` size gate are implemented, but 12.1 remains open until native Windows, macOS,
+and Linux workflow jobs produce uploaded installers and passing size manifests.
 
 **Packaging evidence is honest.** The local Windows Tauri attempt reached Rust compilation but this
 host's Application Control blocked Cargo build scripts (OS error 4551) and `dlltool.exe` is absent.
@@ -1074,9 +1077,15 @@ because it demos well. The plan forbids that.
   These are host code-registration contracts, not a plugin store or arbitrary executable package
   loader; memory lifetime belongs to the host factory, built-in `single` remains the default, and
   the local MCP script is not evidence for an actual third-party server.
-- **12.6 Canonical end-to-end acceptance** _(24.7, 6.4, 4.7, 20.4)_ — the "build an Airbnb clone" flow
-  runs end to end with the plan gate, verification contract, consensus, and cost guard **all
-  observable in the Timeline**, completing with every check green.
+- **12.6 Canonical end-to-end acceptance** _(24.7, 6.4, 4.7, 20.4)_ — **complete.**
+  Scripted offline adapters drive a fresh booking project through the engine plan gate, twelve real
+  plan documents, real child-process verification, correct-code success and wrong-code unit
+  failure, six-role consensus, deterministic non-conflicting merge, conflict refusal with untouched
+  bytes and a follow-up task, deterministic budget stop without escalation, and seven final checks
+  over five modules. Dispatcher outcome events persist bounded consensus/merge/verify summaries,
+  and the Timeline reconstructs plan, verification, swarm, merge, and budget evidence plus terminal
+  state from the real event log. This is contract/harness evidence, not proof that a real provider
+  can build a booking product; `swarm` remains off by default.
 
 ---
 

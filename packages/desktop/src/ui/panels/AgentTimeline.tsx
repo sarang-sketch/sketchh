@@ -42,13 +42,17 @@ export function formatOffset(ms: number): string {
   return `+${(ms / 1000).toFixed(1)}s`
 }
 
-/** Terminal events tell us the outcome; nothing else is consulted. */
+/** Terminal events tell us the outcome; dispatcher outcomes are terminal for their own slice. */
 function runOutcome(events: SketchEvent[]): 'running' | 'completed' | 'failed' {
+  let dispatcherOutcome: 'completed' | 'failed' | null = null
   for (const event of events) {
     if (event.kind === 'run_failed') return 'failed'
     if (event.kind === 'run_completed') return 'completed'
+    if (event.kind === 'strategy_selected' && event.payload['phase'] === 'outcome') {
+      dispatcherOutcome = event.payload['ok'] === true ? 'completed' : 'failed'
+    }
   }
-  return 'running'
+  return dispatcherOutcome ?? 'running'
 }
 
 /** One-line gist of an event, pulled from its payload with no assumptions. */
@@ -72,10 +76,30 @@ function summarize(event: SketchEvent): string {
       return Array.isArray(p.commands) ? p.commands.join(', ') : ''
     case 'verify_result':
       return `${p.name ?? 'verify'} — ${p.ok ? 'pass' : `fail (exit ${p.exitCode ?? '?'})`}`
+    case 'strategy_selected': {
+      const phase = typeof p.phase === 'string' ? p.phase : 'selection'
+      if (phase === 'roles') {
+        const verifiable = Array.isArray(p.verifiable) ? p.verifiable.length : 0
+        const skipped = Array.isArray(p.skipped) ? p.skipped.length : 0
+        return `${p.strategy ?? 'strategy'} · ${verifiable} verifiable · ${skipped} skipped`
+      }
+      if (phase === 'outcome') {
+        return `${p.succeeded ?? 'no strategy'} · ${p.ok ? 'completed' : 'failed'}`
+      }
+      return `${p.strategy ?? 'strategy'} · ${phase}`
+    }
+    case 'budget_exceeded':
+      return `${p.limit ?? 'budget'} · ${p.outcome ?? 'stopped'}`
     case 'run_completed':
       return `${p.ok ? 'ok' : 'not ok'} · ${p.iterations ?? '?'} iterations`
     case 'run_failed':
-      return typeof p.error === 'string' ? p.error : 'run failed'
+      return typeof p.error === 'string'
+        ? p.error
+        : typeof p.detail === 'string'
+          ? p.detail
+          : typeof p.reason === 'string'
+            ? p.reason
+            : 'run failed'
     default:
       return ''
   }

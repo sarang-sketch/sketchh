@@ -699,6 +699,40 @@ export async function dispatch(task: Task, deps: DispatchDeps): Promise<Dispatch
       ok: entry.ok,
       reason: entry.reason,
       runIds: entry.runIds,
+      ...(entry.consensus !== null
+        ? {
+            consensus: {
+              reached: entry.consensus.reached,
+              agreeing: entry.consensus.agreeing,
+              dissenting: entry.consensus.dissenting,
+              blockerRoles: entry.consensus.blockers.map((blocker) => blocker.role),
+              reason: entry.consensus.reason,
+            },
+          }
+        : {}),
+      ...(entry.merge !== null
+        ? {
+            merge: {
+              ok: entry.merge.ok,
+              applied: entry.merge.applied.map((edit) => edit.path),
+              conflicts: entry.merge.conflicts.map((conflict) => ({
+                path: conflict.path,
+                code: conflict.code,
+                roles: conflict.roles,
+              })),
+            },
+          }
+        : {}),
+      ...(entry.verify !== null
+        ? {
+            verify: {
+              ok: entry.verify.ok,
+              failedStage: entry.verify.failedStage,
+              ranStages: entry.verify.ranStages,
+              verifiedAnything: entry.verify.verifiedAnything,
+            },
+          }
+        : {}),
     })),
     followUps: followUps.map((entry) => ({ id: entry.id, origin: entry.origin, reason: entry.reason })),
     ...(stopped !== null ? { stopped } : {}),
