@@ -38,7 +38,7 @@ interface exists and no real implementation does.
 | 0.4 | Write `prd.md` | ✅ | Product requirements, features, milestones |
 | 0.5 | Write `trd.md` | ✅ | Technical requirements, interfaces, schemas |
 | 0.6 | Write `tasks-executed.md` | ✅ | This file |
-| 0.7 | Write `rules.md` | ✅ | `rules.md` exists at the repo root. Rules 6 and 4 are superseded in part by Phase 1 decisions (keytar dropped; v2 consensus behind the eval gate) — reconciliation is spec task 13.1 |
+| 0.7 | Write and reconcile `rules.md` | ✅ | `rules.md` exists at the repo root. Task 13.1 reconciled Rules 4 and 6: `single` remains default; roles/consensus are permitted only through eval-gated `swarm`, which stays off without measured pass@k lift; credentials persist only in the OS store through a host outside core, with key transit limited to purpose-bound credential/invocation channels and no log/event/return exposure. |
 
 ---
 
@@ -1095,7 +1095,23 @@ Mutation evidence, each restored and re-run green:
 | Stop treating `strategy_selected{phase:"outcome"}` as terminal in the Timeline | desktop gate failed because `timeline-swarm` rendered as `running`; restored focused gate passed |
 | Remove `sanitizePayload` from `JsonlEventStore.emit` | 3 on-disk redaction tests failed; restored store suite passed 24/24 |
 
-Task 12.6 is complete and the task count is **80/96**. Tasks 12.1–12.4 remain evidence-gated on native artifacts, installed-app clean-machine/Ollama evidence, a real verified tag release, and genuine third-party skill provenance respectively.
+Task 12.6 is complete and the task count at that checkpoint was **80/96**. Tasks 12.1–12.4 remain evidence-gated on native artifacts, installed-app clean-machine/Ollama evidence, a real verified tag release, and genuine third-party skill provenance respectively.
+
+---
+
+## Phase 13 — Documentation reconciliation (spec: `.kiro/specs/sketch-engineering-os`)
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| 13.1 | Reconcile `rules.md` | ✅ complete | Rule 4 now permits roles and consensus only through eval-gated `swarm`, keeps `single` as the default, and keeps `swarm` off without measured pass@k lift. Rule 6 replaces the keytar mandate with the OS credential store through a host outside core, limits key transit to purpose-bound credential/invocation channels, and preserves no-log/no-event/no-return guarantees. |
+
+### Task 13.1 completion result
+
+No production code changed. The stale phrases `Multi-model consensus logic`, `stored only via keytar`, and the absolute IPC prohibition are absent from `rules.md`; the required `single`, eval-gated `swarm`, pass@k, consensus-only-in-swarm, OS credential-store, outside-core, and purpose-bound transit language is present. Markdown diagnostics are clean for `rules.md`, `NEED-TO-DO.md`, and `tasks-executed.md`; `tasks.md` retains only its known legacy heading/dependency-graph diagnostics. `git diff --check` passes.
+
+Focused behavioral validation passes: core **31 tests / 2 files** (`phase10-gate`, `secrets.store`) and desktop **49 tests / 2 files** (`ProviderSettings`, `security`). Canonical order also passes with hosted-provider keys unset: `npm run build`, `npm run typecheck`, core **1,036 tests / 54 files**, and desktop **503 tests / 54 files**. Both complete workspace suites pass at the same counts with `SKETCH_FAKE_PROVIDER=1`.
+
+This task copies already-resolved Requirements 17.3–17.4 and 24.1/24.8/24.9 plus design conflicts 4 and 10 into the contributor rules; it introduces no new architecture. Task 13.1 is complete and the task count is **81/96**.
 
 ---
 

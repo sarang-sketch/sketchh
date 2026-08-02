@@ -1,7 +1,7 @@
 # NEED TO DO — Sketch, from here to done
 
 **Audience:** the developer who is going to write this code.
-**Status date:** task 12.6 complete with a scripted offline canonical acceptance gate; third-party, native, release, clean-machine, and real-provider evidence remain open.
+**Status date:** task 13.1 complete; Rules 4 and 6 now match the eval-gated strategy and host-owned OS credential-store contracts. Third-party, native, release, clean-machine, and real-provider evidence remain open.
 **Authority:** `.kiro/specs/sketch-engineering-os/{requirements,design,tasks}.md` are the contract.
 This file is the working plan on top of them. Where this file and the spec disagree, the spec wins
 and you should fix this file.
@@ -85,14 +85,16 @@ writes down what happened. Do not describe a wired interface as a working featur
 
 ## 1. Where the project actually stands
 
-**Status date: Phase 11 gated; tasks 12.1 through 12.4 in progress and tasks 12.5–12.6 complete. 80 of 96 tasks complete.** Core
+**Status date: Phase 11 gated; tasks 12.1 through 12.4 in progress, tasks 12.5–12.6 complete, and documentation task 13.1 complete. 81 of 96 tasks complete.** Core
 1,036 tests / 54 files, desktop 503 tests / 54 files, build and typecheck green with
-`SKETCH_FAKE_PROVIDER` both unset and set to `1`. Task 12.6 is a scripted offline harness over real
-filesystem bytes, child processes, JSONL events, dispatch/merge/consensus/budget contracts, and
-Timeline rendering; it is not evidence that a real provider can build a booking product. The native
-sidecar build and protocol smoke check pass. Cross-platform package jobs and the strict
-`<100,000,000-byte` size gate are implemented, but 12.1 remains open until native Windows, macOS,
-and Linux workflow jobs produce uploaded installers and passing size manifests.
+`SKETCH_FAKE_PROVIDER` both unset and set to `1`. Task 13.1 is documentation-only and reconciles the
+strategy and credential rules with already-tested production contracts. Task 12.6 remains scripted
+offline harness evidence over real filesystem bytes, child processes, JSONL events,
+dispatch/merge/consensus/budget contracts, and Timeline rendering; it is not evidence that a real
+provider can build a booking product. The native sidecar build and protocol smoke check pass.
+Cross-platform package jobs and the strict `<100,000,000-byte` size gate are implemented, but 12.1
+remains open until native Windows, macOS, and Linux workflow jobs produce uploaded installers and
+passing size manifests.
 
 **Packaging evidence is honest.** The local Windows Tauri attempt reached Rust compilation but this
 host's Application Control blocked Cargo build scripts (OS error 4551) and `dlltool.exe` is absent.
@@ -1095,9 +1097,11 @@ The prior-generation documents contradict the current build in ten places, resol
 conflicts table. These tasks make the docs match reality. Do them **at the phase gate that makes each
 true**, not in a batch at the end — a doc amended before the code is just a different lie.
 
-- **13.1 `rules.md`** — permit consensus and multi-agent from v2 behind the eval gate, replacing the
-  blanket v1 prohibition, keeping single-agent as default. Replace the keytar-specific credential rule
-  with "the OS credential store, accessed outside the core".
+- **13.1 `rules.md`** — **complete.** Rule 4 permits roles and consensus only through the
+  eval-gated `swarm` strategy, keeps `single` as the default, and keeps `swarm` off without measured
+  pass@k lift. Rule 6 now requires the OS credential store through a host outside core, limits key
+  transit to purpose-bound credential/invocation channels, and preserves no-log/no-event/no-return
+  guarantees.
 - **13.2 `what-not-we-are-building.md`** — scope the skills registry to v1 and the open marketplace to
   v2, with signing and capability scoping as preconditions.
 - **13.3 `trd.md` and `architecture.md`** — record the dependency-free core decision, replacing

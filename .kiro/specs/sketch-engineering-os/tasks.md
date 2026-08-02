@@ -426,9 +426,10 @@ Phase 4 numbering stays intact for anything that references it.
 ## Documentation reconciliation (runs alongside, gated per phase)
 
 - [ ] 13. Reconcile the prior-generation documents with this build
-- [~] 13.1 Amend `rules.md`
+- [x] 13.1 Amend `rules.md`
   - Permit consensus and multi-agent code from v2 behind the eval gate, replacing the blanket v1 prohibition while keeping single-agent as the default
   - Replace the keytar-specific credential rule with "the OS credential store, accessed outside the core"
+  - Completed: Rule 4 now permits roles and consensus only through eval-gated `swarm`, preserves `single` as the default, and keeps `swarm` off without measured pass@k lift. Rule 6 now names the OS credential store and the host-outside-core boundary, limits key transit to purpose-bound credential/invocation channels, and preserves no-log/no-return guarantees.
   - _Requirements: 28.1_
 - [~] 13.2 Amend `what-not-we-are-building.md`
   - Scope the skills registry to v1 and the open marketplace to v2 with signing and capability scoping as preconditions

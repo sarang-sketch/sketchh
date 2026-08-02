@@ -41,8 +41,9 @@ If the verify loop cannot pass, the task is not done.
 
 If a task requires building something listed in `what-not-we-are-building.md`, stop immediately. Do not build it. Do not work around it. Ask the user whether the scope has changed.
 
+Single-agent remains the default. Multi-agent roles and multi-model consensus are v2 functionality permitted only through the eval-gated `swarm` strategy. `swarm` may become the default for a task class only after measured pass@k improvement over `single` on the internal suite; otherwise it remains off. Consensus runs only inside `swarm`.
+
 Examples of things that must never appear in v1 code:
-- Multi-model consensus logic
 - Sketch cloud API calls
 - Sketch account/auth system
 - Skills marketplace backend
@@ -63,8 +64,8 @@ Each provider adapter must:
 
 ## Rule 6 — Credentials Are Sacred
 
-- API keys are stored only via `keytar` (OS keychain)
-- API keys never appear in: logs, error messages, IPC messages, git commits, console output
+- API keys are stored only in the operating system credential store, accessed through a host implementation outside the core; core exposes only the `SecretStore` seam and never persists credentials
+- API keys may cross only a purpose-bound host credential command or engine-invocation channel; they never appear in logs, error messages, event or protocol responses, git commits, or console output, and credential-store reads exposed to the webview report presence only
 - If a credential is accidentally logged, treat it as a security incident: rotate the key, scrub the log
 - No `.env` files with real credentials are ever committed
 
