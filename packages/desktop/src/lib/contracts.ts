@@ -8,7 +8,7 @@
 // bundle takes on no runtime dependency on @sketch/core. The engine is reached
 // through the SketchClient seam (see ./client.ts) and never imported directly.
 
-import type { context, providers, settings, tools } from '@sketch/core'
+import type { context, providers, settings, tools, bench } from '@sketch/core'
 
 /**
  * The git shapes, taken from the engine's parser rather than restated.
@@ -44,6 +44,11 @@ export type ProviderSettingsEntry = settings.ProviderSettingsEntry
 export type ProviderSettingsFile = settings.ProviderSettingsFile
 export type ProviderTestResult = settings.ProviderTestResult
 export type ProviderTestCode = settings.ProviderTestCode
+
+/** Validated benchmark artifact types, sourced from the engine rather than restated. */
+export type BenchmarkReport = bench.BenchReport
+export type BenchmarkMetrics = bench.BenchMetrics
+export type BenchmarkAttempt = bench.BenchAttempt
 
 export type {
   // Events — the spine the Timeline and the Agent Console read.

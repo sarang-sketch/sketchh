@@ -15,6 +15,7 @@ import { ProviderSettings } from '../../panels/ProviderSettings';
 import { McpTools } from '../../panels/McpTools';
 import { TestResults } from '../../panels/TestResults';
 import { CostDashboard } from '../../panels/CostDashboard';
+import { BenchmarksPanel } from '../../panels/BenchmarksPanel';
 import { MemoryPanel } from '../../panels/MemoryPanel';
 
 export default function SidePanel() {
@@ -86,6 +87,10 @@ export default function SidePanel() {
       // Task 8.4: the total, summed from the event log. The one cost source.
       title = 'Cost';
       content = <CostDashboard />;
+      break;
+    case 'benchmarks':
+      title = 'Benchmarks';
+      content = <BenchmarksPanel />;
       break;
     case 'memory':
       // Task 9.4: what the project remembers, with validity windows. Retracted rows are

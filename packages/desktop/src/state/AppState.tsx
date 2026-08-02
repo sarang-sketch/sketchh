@@ -221,7 +221,8 @@ export interface AppState {
     | 'mcp'
     /** Cost: the total, summed from the event log. The ONE source (Req 20.2, 20.8). */
     | 'cost'
-    /** Memory: what the project remembers, and what superseded what (Req 21.1, 27.1). */
+    /** Benchmarks: latest validated artifact only. Reading never starts a benchmark. */
+    | 'benchmarks'
     | 'memory'
     | null;
   terminalOpen: boolean;

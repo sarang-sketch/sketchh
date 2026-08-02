@@ -17,6 +17,7 @@ import type {
   MemorySearchResult,
   MemoryRememberResult,
   MemorySupersedeResult,
+  BenchmarkReportResult,
   ProviderCatalogResult,
   ProviderTestRequest,
 } from './client'
@@ -276,6 +277,10 @@ export class HttpSketchClient implements SketchClient {
       root: params.root,
       ...(params.runId !== undefined ? { runId: params.runId } : {}),
     })
+  }
+
+  async benchmarkReport(params: { root: string }): Promise<BenchmarkReportResult> {
+    return this.callMethod<BenchmarkReportResult>('benchmark-report', { root: params.root })
   }
 
   // ── memory ────────────────────────────────────────────────────────────────

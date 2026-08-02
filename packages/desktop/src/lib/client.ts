@@ -9,6 +9,7 @@
 
 import type {
   ArchitectureDiagrams,
+  BenchmarkReport,
   EvalCase,
   EvalResult,
   GitStatusResult,
@@ -398,6 +399,14 @@ export interface CostReport {
   entries: CostEntry[]
 }
 
+export interface BenchmarkReportResult {
+  root: string
+  /** The validated artifact path, or null when no report exists yet. */
+  path: string | null
+  report: BenchmarkReport | null
+  note: string
+}
+
 // ── memory, as a surface sees it ────────────────────────────────────────────
 
 /** The nine kinds Requirement 21.1 names. */
@@ -725,6 +734,9 @@ export interface SketchClient {
 
   /** What this project's runs have cost, derived from the durable log. */
   cost?(params: { root: string; runId?: string }): Promise<CostReport>
+
+  /** Latest validated benchmark artifact. Read-only: never starts work on mount. */
+  benchmarkReport?(params: { root: string }): Promise<BenchmarkReportResult>
 
   // ── memory ────────────────────────────────────────────────────────────────
   //

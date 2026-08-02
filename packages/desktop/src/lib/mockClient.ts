@@ -330,6 +330,12 @@ export class MockSketchClient implements SketchClient {
     return this.noEngine('cost')
   }
 
+  // Benchmark artifacts cannot be fabricated either. The mock has no project state and
+  // therefore no `.sketch/bench` directory to validate.
+  async benchmarkReport(): Promise<never> {
+    return this.noEngine('benchmark-report')
+  }
+
   // ── memory ────────────────────────────────────────────────────────────────
   //
   // A fabricated memory is the most damaging fixture of all: the panel's whole purpose is

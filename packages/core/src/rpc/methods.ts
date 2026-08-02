@@ -25,6 +25,7 @@ import { dirname, join, resolve } from 'node:path'
 
 import { ToolDispatcher, capabilitiesForSkill } from '../capabilities/index.js'
 import { describeLedger, ledgerFor, ledgerForRun } from '../cost/index.js'
+import { latestBenchArtifactPath, loadLatestBenchArtifact } from '../bench/index.js'
 import * as memory from '../memory/index.js'
 import type { Capability, CapabilitySet } from '../capabilities/index.js'
 import { MCP_CATALOG, McpHost, catalogIds, findCatalogEntry, missingEnv } from '../mcp/index.js'
@@ -1822,6 +1823,24 @@ async function captureEval(params: unknown): Promise<unknown> {
   })
 }
 
+async function benchmarkReport(
+  params: Record<string, unknown>,
+  ctx: MethodContext,
+): Promise<unknown> {
+  const root = resolve(optionalString(params, 'root', 'params.root') ?? ctx.cwd())
+  const path = await latestBenchArtifactPath(root)
+  const report = await loadLatestBenchArtifact(root)
+  return {
+    root,
+    path,
+    report,
+    note:
+      report === null
+        ? 'No benchmark artifact exists. Run the bench script explicitly; reading this method never starts a model call, build, or test.'
+        : `${report.model} + ${report.harness.id === 'sketch' ? 'Sketch' : 'naive'} under a fixed pass@${report.budget.k} budget. This is an input report, not a claim that Sketch beats a model.`,
+  }
+}
+
 /**
  * The method table.
  *
@@ -1877,6 +1896,9 @@ export const METHODS: Readonly<Record<string, MethodHandler>> = {
   // roles exist only inside a dispatch — the same reason `mcp-catalog` reports `configured`
   // and never `connected`. A role's live state comes from `strategy_selected` events.
   'strategy-catalog': strategyCatalog,
+  // Phase 11 Benchmarks panel. READ-ONLY: validates and returns the latest artifact;
+  // it never runs a model, build, or test because a panel mounted.
+  'benchmark-report': benchmarkReport,
 }
 
 /** The five the protocol contract names. Every build answers at least these. */
