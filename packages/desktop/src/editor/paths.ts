@@ -29,10 +29,12 @@
 // paths that differ by more than spelling, `path → Uri` is one-to-one, which is
 // what makes `Map<path, model>` and Monaco's own model registry agree.
 //
-// This module deliberately imports nothing. It is pure string work so it can be
-// tested without Monaco and without a filesystem.
+// This module only imports the synchronous editor extension registry. It remains
+// free of Monaco and filesystem work.
 //
 // Validates: Requirements 15.1, 15.2
+
+import { editorExtensionRegistry } from './extensionRegistry'
 
 /** A drive-letter path (`C:\...`, `c:/...`). */
 const WINDOWS_DRIVE = /^[A-Za-z]:[/\\]/
@@ -146,58 +148,15 @@ export function pathSegments(root: string, absolutePath: string): string[] {
 }
 
 /**
- * Monaco language id for a path. Only extensions whose grammar we actually
- * register are listed (see monacoSetup.ts); anything else opens as `plaintext`,
- * which is honest — a wrong grammar looks like broken highlighting.
+ * Monaco language id for a path. Mappings come from the same process-local
+ * registry the production loader consumes; unknown extensions remain plaintext.
  */
-const LANGUAGE_BY_EXTENSION: Record<string, string> = {
-  ts: 'typescript',
-  tsx: 'typescript',
-  mts: 'typescript',
-  cts: 'typescript',
-  js: 'javascript',
-  jsx: 'javascript',
-  mjs: 'javascript',
-  cjs: 'javascript',
-  json: 'json',
-  jsonc: 'json',
-  css: 'css',
-  scss: 'scss',
-  less: 'less',
-  html: 'html',
-  htm: 'html',
-  md: 'markdown',
-  markdown: 'markdown',
-  py: 'python',
-  rs: 'rust',
-  go: 'go',
-  java: 'java',
-  rb: 'ruby',
-  php: 'php',
-  sh: 'shell',
-  bash: 'shell',
-  zsh: 'shell',
-  ps1: 'powershell',
-  yaml: 'yaml',
-  yml: 'yaml',
-  toml: 'ini',
-  ini: 'ini',
-  xml: 'xml',
-  sql: 'sql',
-  c: 'cpp',
-  h: 'cpp',
-  cpp: 'cpp',
-  hpp: 'cpp',
-  cs: 'csharp',
-  swift: 'swift',
-  kt: 'kotlin',
-  dockerfile: 'dockerfile',
-}
-
 export function languageForPath(path: string): string {
   const name = basename(path).toLowerCase()
-  if (name === 'dockerfile') return 'dockerfile'
+  if (name === 'dockerfile') {
+    return editorExtensionRegistry.languageForExtension('dockerfile') ?? 'plaintext'
+  }
   const dot = name.lastIndexOf('.')
   if (dot <= 0) return 'plaintext'
-  return LANGUAGE_BY_EXTENSION[name.slice(dot + 1)] ?? 'plaintext'
+  return editorExtensionRegistry.languageForExtension(name.slice(dot + 1)) ?? 'plaintext'
 }

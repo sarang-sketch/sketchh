@@ -76,9 +76,7 @@ import 'monaco-editor/esm/vs/basic-languages/kotlin/kotlin.contribution'
 import 'monaco-editor/esm/vs/basic-languages/dockerfile/dockerfile.contribution'
 
 import type { MonacoApi } from './monacoApi'
-
-/** The name registered with Monaco, used by `CodeEditor`. */
-export const SKETCH_THEME = 'sketch-dark'
+export { SKETCH_THEME } from './extensionRegistry'
 
 /**
  * Workers are same-origin module scripts emitted by Vite's `?worker` transform —
@@ -89,42 +87,6 @@ export const SKETCH_THEME = 'sketch-dark'
     return new EditorWorker()
   },
 }
-
-// The palette is lifted from the hand-written syntax spans this editor replaces, so
-// real tokenization looks like what the shell already looked like.
-monaco.editor.defineTheme(SKETCH_THEME, {
-  base: 'vs-dark',
-  inherit: true,
-  rules: [
-    { token: '', foreground: 'e5e5e5' },
-    { token: 'comment', foreground: '737373', fontStyle: 'italic' },
-    { token: 'keyword', foreground: 'f43f5e' },
-    { token: 'string', foreground: '34d399' },
-    { token: 'number', foreground: 'fbbf24' },
-    { token: 'type', foreground: 'fbbf24' },
-    { token: 'type.identifier', foreground: 'fbbf24' },
-    { token: 'function', foreground: '38bdf8' },
-    { token: 'variable', foreground: 'e5e5e5' },
-    { token: 'delimiter', foreground: 'a3a3a3' },
-    { token: 'tag', foreground: 'f43f5e' },
-    { token: 'attribute.name', foreground: '38bdf8' },
-    { token: 'attribute.value', foreground: '34d399' },
-  ],
-  colors: {
-    'editor.background': '#121212',
-    'editor.foreground': '#e5e5e5',
-    'editorLineNumber.foreground': '#525252',
-    'editorLineNumber.activeForeground': '#a3a3a3',
-    'editorGutter.background': '#121212',
-    'editor.lineHighlightBackground': '#171717',
-    'editor.selectionBackground': '#2d3f4f',
-    'editorCursor.foreground': '#ea580c',
-    'editorWidget.background': '#171717',
-    'editorWidget.border': '#262626',
-    'editorIndentGuide.background1': '#262626',
-    'scrollbarSlider.background': '#26262699',
-  },
-})
 
 /**
  * The real Monaco, behind the narrow api the editor talks to (./monacoApi.ts).
@@ -144,10 +106,20 @@ monaco.editor.defineTheme(SKETCH_THEME, {
  */
 export const monacoApi: MonacoApi = {
   editor: {
+    defineTheme: (name, definition) => monaco.editor.defineTheme(name, definition),
     getModel: (path) => monaco.editor.getModel(monaco.Uri.file(path)),
     createModel: (value, language, path) =>
       monaco.editor.createModel(value, language, monaco.Uri.file(path)),
     create: (container, options) => monaco.editor.create(container, options),
+  },
+  languages: {
+    register: (definition) => monaco.languages.register(definition),
+    setMonarchTokensProvider: (id, rules) =>
+      monaco.languages.setMonarchTokensProvider(id, {
+        tokenizer: {
+          root: rules.map((rule) => [new RegExp(rule.regex), rule.token]),
+        },
+      }),
   },
 }
 

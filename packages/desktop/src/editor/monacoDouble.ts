@@ -22,7 +22,9 @@ import type {
   ModelUri,
   MonacoApi,
   TextModel,
+  EditorCreateOptions,
 } from './monacoApi'
+import type { EditorLanguageRule, EditorThemeDefinition } from './extensionRegistry'
 
 /**
  * What the double's model offers ON TOP of `TextModel`, declared so a test can reach
@@ -48,6 +50,7 @@ export interface FakeTextModel extends TextModel {
 /** What the double's editor offers on top of `CodeEditor`, for the same reason. */
 export interface FakeCodeEditor extends CodeEditor {
   readonly container: HTMLElement
+  readonly options: EditorCreateOptions
   readonly disposed: boolean
   /** Move the caret as Monaco would, so a test can prove the readout is real. */
   moveTo(lineNumber: number, column: number): void
@@ -129,7 +132,10 @@ export class FakeEditor implements FakeCodeEditor {
   private cursorListeners = new Set<() => void>()
   disposed = false
 
-  constructor(readonly container: HTMLElement) {}
+  constructor(
+    readonly container: HTMLElement,
+    readonly options: EditorCreateOptions,
+  ) {}
 
   setModel(model: TextModel | null): void {
     this.model = model
@@ -173,6 +179,10 @@ export interface MonacoDouble {
   created: Map<string, FakeTextModel>
   /** Models Monaco still has, i.e. not disposed. Mirrors Monaco's own registry. */
   live: Map<string, FakeTextModel>
+  /** Theme definitions supplied through Monaco's real registration surface. */
+  definedThemes: Map<string, EditorThemeDefinition>
+  /** Host languages whose id, extensions, and tokenizer reached Monaco setup. */
+  registeredLanguages: Map<string, { extensions: string[]; rules: EditorLanguageRule[] }>
   editors: FakeCodeEditor[]
   lastEditor(): FakeCodeEditor
   /**
@@ -186,10 +196,16 @@ export interface MonacoDouble {
 export function createMonacoDouble(): MonacoDouble {
   const created = new Map<string, FakeModel>()
   const live = new Map<string, FakeModel>()
+  const definedThemes = new Map<string, EditorThemeDefinition>()
+  const languageExtensions = new Map<string, string[]>()
+  const registeredLanguages = new Map<string, { extensions: string[]; rules: EditorLanguageRule[] }>()
   const editors: FakeEditor[] = []
 
   const api: MonacoApi = {
     editor: {
+      defineTheme(name, definition) {
+        definedThemes.set(name, definition)
+      },
       createModel(value, language, path) {
         if (live.has(path)) {
           // Monaco throws on a duplicate uri. Reproduced so a test would catch a
@@ -209,10 +225,22 @@ export function createMonacoDouble(): MonacoDouble {
       getModel(path) {
         return live.get(path) ?? null
       },
-      create(container) {
-        const editor = new FakeEditor(container)
+      create(container, options) {
+        const editor = new FakeEditor(container, options)
         editors.push(editor)
         return editor
+      },
+    },
+    languages: {
+      register(definition) {
+        languageExtensions.set(definition.id, [...definition.extensions])
+      },
+      setMonarchTokensProvider(id, rules) {
+        registeredLanguages.set(id, {
+          extensions: [...(languageExtensions.get(id) ?? [])],
+          rules: rules.map((rule) => ({ ...rule })),
+        })
+        return { dispose: () => registeredLanguages.delete(id) }
       },
     },
   }
@@ -221,6 +249,8 @@ export function createMonacoDouble(): MonacoDouble {
     api,
     created,
     live,
+    definedThemes,
+    registeredLanguages,
     editors,
     lastEditor() {
       const editor = editors[editors.length - 1]

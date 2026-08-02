@@ -13,6 +13,8 @@
 //
 // Validates: Requirements 15.1, 15.2
 
+import type { EditorLanguageRule, EditorThemeDefinition } from './extensionRegistry'
+
 export interface Disposable {
   dispose(): void
 }
@@ -96,10 +98,18 @@ export interface EditorCreateOptions {
  */
 export interface MonacoApi {
   editor: {
+    /** Registers a local theme definition before an editor selects it. */
+    defineTheme(name: string, definition: EditorThemeDefinition): void
     /** Monaco's existing model for `path`, or null. Adopted rather than duplicated. */
     getModel(path: string): TextModel | null
     /** A new model for `path`. Throws if Monaco already has one, as Monaco does. */
     createModel(value: string, language: string, path: string): TextModel
     create(container: HTMLElement, options: EditorCreateOptions): CodeEditor
+  }
+  languages: {
+    /** Registers a real Monaco language id and the extensions Monaco associates with it. */
+    register(definition: { id: string; extensions: string[] }): void
+    /** Installs a host-supplied Monarch tokenizer for that language id. */
+    setMonarchTokensProvider(id: string, rules: EditorLanguageRule[]): Disposable
   }
 }
