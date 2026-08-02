@@ -85,13 +85,24 @@ writes down what happened. Do not describe a wired interface as a working featur
 
 ## 1. Where the project actually stands
 
-**Status date: Phase 9 gated. 65 of 96 tasks complete. Phases 1, 1.5, 2, 3, 4, 5, 6, 7, 8 and 9 are
-done and gated. Phase 10 (eval-gated multi-agent) is next.** The per-task detail below still reads
+**Status date: Phase 10 gated. 71 of 96 tasks complete. Phases 1, 1.5, 2, 3, 4, 5, 6, 7, 8, 9 and 10
+are done and gated. Phase 11 (honest benchmarks) is next.** Core 1 012 tests / 49 files, desktop 478
+tests / 47 files, offline and with no API key.
+
+**`swarm` ships OFF.** Phase 10's gate measured pass@k over the internal suite under `single` and
+under `swarm` and found no lift, so Requirement 24.8 keeps the swarm off and
+`shouldDefaultToSwarm` has no override parameter. That is the honest result, and Phase 11's
+benchmarks are where it either changes on evidence or stays.
+
+The per-task detail below still reads
 from the Phase 3 vantage point in places — where it does, `tasks-executed.md` and
 `.kiro/specs/sketch-engineering-os/HANDOFF.md` are newer and win. (The `Status date` line at the
 very top of this file is older still; treat this section as the current one.)
 
 ```
+511df18  phase 10 task 10.5 — Phase 10 gate, swarm stays off with no measured pass@k lift
+9d6a9c7  phase 10 task 10.4 — AI Team and Tasks panels over real dispatcher events
+56aa748  phase 10 tasks 10.1-10.3 — dispatcher, thirteen verifiable roles, merge, pass@k
 54dbb20  phase 9 task 9.5 — Phase 9 gate, the contradiction chain end to end
 adf1505  phase 9 task 9.4 — Memory panel, and four memory RPC methods
 f864e9a  phase 9 tasks 9.1-9.3 — versioned memory, hygiene, reranked retrieval

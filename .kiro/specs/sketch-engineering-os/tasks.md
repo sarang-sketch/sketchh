@@ -347,23 +347,23 @@ Phase 4 numbering stays intact for anything that references it.
 
 ## Phase 10 — Eval-gated multi-agent
 
-- [ ] 10. Strategy dispatcher, the thirteen roles, and consensus
-- [~] 10.1 Keep single-agent as the default and add the dispatcher
+- [x] 10. Strategy dispatcher, the thirteen roles, and consensus
+- [x] 10.1 Keep single-agent as the default and add the dispatcher
   - Support `single`, `plan-then-code`, and `swarm`; emit `strategy_selected`; record which strategy succeeded
   - Escalate only after the lighter strategy fails within its eval and verify budget
   - _Requirements: 24.1, 24.2, 24.3_
-- [~] 10.2 Implement the roles as constrained sub-runs
+- [x] 10.2 Implement the roles as constrained sub-runs
   - CEO, Planner, Research, Architect, Backend, Frontend, Database, Security, Testing, Reviewer, Performance, Deployment, Documentation — each with its own verification signal and the inner goal → memory → thinking → action → verification → feedback → retry → consensus loop
   - No role without a distinct verification signal
   - _Requirements: 24.4, 24.5, 24.6_
-- [~] 10.3 Implement deterministic merge and consensus
+- [x] 10.3 Implement deterministic merge and consensus
   - Union of verified non-conflicting edits; a conflict creates a new task and is never guessed; consensus runs only inside `swarm`
   - _Requirements: 24.7, 24.9_
-- [~] 10.4 Build the AI Team and Tasks panels
+- [x] 10.4 Build the AI Team and Tasks panels
   - Render real dispatcher events; replace `AgentTeamPanel`'s four function-local fixtures and the twelve never-rendered `state.agentTeam` entries, and make the panel reachable — no ActivityBar button currently dispatches `agents`
   - Replace `TaskLog`'s `MOCK_TASKS` and its non-functional filter with real task state
   - _Requirements: 27.1, 27.3, 27.4, 14.6_
-- [~] 10.5 Phase 10 gate
+- [x] 10.5 Phase 10 gate
   - `swarm` becomes a default for a task class only after measured pass@k lift over `single` on the internal suite; otherwise it stays off
   - _Requirements: 24.8_
 

@@ -834,10 +834,142 @@ ever run against a real provider.**
 
 ---
 
+## Phase 10 — Eval-gated multi-agent (spec: `.kiro/specs/sketch-engineering-os`)
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| 10.1 | Dispatcher, single stays the default | ✅ | `single`, `plan-then-code`, `swarm`, and `DEFAULT_STRATEGY` is `single`. The `run` RPC with no `strategy` still calls `runTask` directly — byte for byte the pre-Phase-10 path, no dispatcher event, no extra cost — so a caller that never heard of strategies pays nothing for their existence. `strategy_selected` is emitted with `component: 'dispatcher'` and **never** the cost router's `policy` key, under its OWN dispatch slice rather than a sub-run's, because `budget.test.ts` finds the router's two emitters with a bare `.find(kind === 'strategy_selected')`. Which strategy succeeded is recorded on a `phase: 'outcome'` event, since `EventKind` is a closed spec-level contract and inventing a kind would be a spec change. Escalation is off unless asked for and `ESCALATABLE_REASONS` is the load-bearing list: `verify_failed`, `max_iterations`, `consensus_failed`, `merge_conflict`, `plan_missing`, `no_verifiable_role` may escalate; `budget`, `aborted`, `provider_error`, `internal_error`, `awaiting_human_input` may not |
+| 10.2 | Thirteen roles as constrained sub-runs | ✅ | `RoleDefinition.signal` is a **required** field, so Requirement 24.6 is enforced by the type system. It is a union of three kinds because thirteen unique verify stages over a nine-stage contract is arithmetically impossible: `verify-stage` for roles that write or measure code, `plan-artifact` for the CEO and Planner, `citations` for the findings roles. Three narrowings per sub-run, all structural: the prompt is `rolePrompt(role, …)`, the policy is narrowed to the one stage that grades it (Backend does not pay for Frontend's build), and the grant is `roleCapabilities` — the role's list **intersected** with the run's, never unioned. `reviewEdits` is forced on for every role including the editing ones, so "this role does not write files" is true rather than instructed |
+| 10.3 | Deterministic merge and consensus | ✅ | Union of the non-conflicting edits; **two proposals for one path is a conflict, full stop** — whether from two roles or one role twice — and it produces a follow-up task with the paths, the reason and the sub-run ids on it. File granularity is not a shortcut: the action protocol emits whole-file replacements (`unifiedDiff` deliberately makes one hunk so a reviewer cannot accept a grouping the model never proposed), so anything finer would be the guess 24.7 forbids. Staleness is free and not reimplemented — the proposal's diff is replayed through `applyHunks` against the file as it is NOW, and a `context-mismatch` is a refusal with a diagnostic. `consensus` returns **null** outside `swarm` rather than a permissive verdict, and it **gates the merge**: a blocking role's objection arrives before the bytes do |
+| 10.4 | AI Team and Tasks panels | ✅ | Three disagreeing role lists deleted: this panel's four function-local fixtures with a hardcoded `1 working`, `AppState.agentTeam`'s twelve entries (a second status vocabulary, `a5` asserted `busy`, Deployment missing, read by nothing), and `AppState.tasks` / `TaskEntry` (a fourth vocabulary, never populated, never read). The `agents` panel is **reachable at last** — it has been in the `ideActivePanel` union and handled in `SidePanel` since the first commit, but no ActivityBar button dispatched it, which is how four fixtures survived in a panel nobody could open. `TaskLog`'s filter now really filters: it was declared, bound to state, and never applied. Rows are `projectRuns(events)`, a projection of the log, so task state has one home for the same reason cost does |
+| 10.5 | Phase 10 gate | ✅ | See below |
+
+### Phase 10 gate result
+
+**The gate's job is not "does the swarm run".** A swarm that runs is easy. The failure this
+phase exists to prevent is a swarm that runs, reports success, and proved nothing — which is
+indistinguishable from a working one unless you look at the verification. So §2, §3 and §5
+each drive one of the three ways that happens.
+
+```
+[§1] default=single; explicit single → 1 sub-run, ladder recorded under gate-single
+[§2] with only unit+build configured: 8 of 13 roles verifiable, 5 skipped —
+     Architect, Database, Performance, Deployment, Documentation
+[§3] merged 1 file(s); 1 conflict(s) → 1 follow-up task(s);
+     shared.ts still reads "export const v = 1"
+[§4] swarm: 4 sub-runs, 4 roles verified, 2 files merged, 12 model calls
+[§5] single pass@2=0.500, pass@1=0.500, distribution=[2, 0], 4 attempts
+[§5] verdict: OFF — swarm stays off: pass@2 did not rise (0.500 to 0.500);
+     a tie retains the cheaper default
+[§7] 3 concurrent runs, 26 events, 3 disjoint complete slices
+[§8] single-agent remains the default. swarm is OFF.
+```
+
+**§2 proves the hazard is real before proving it is closed.** It runs a real `runTask` with
+no verification configured, asserts `ok: true` and `verify: []` — Requirement 5.8 working
+exactly as specified — and then shows the grader refusing that same run. That is why a role
+cannot be graded by `run.ok`, and why there are **two** independent refusals: `partitionRoles`
+before a token is spent, and `gradeRole` again afterwards. The swarm asked for one role whose
+stage the project does not configure and made **zero model calls**.
+
+**§3 asserts the bytes, not the report.** Two roles proposed `shared.ts` from the same base
+and a third file was uncontested. After the merge, `own.ts` holds the new value and
+`shared.ts` holds **neither 2 nor 3 — the original 1**, with a follow-up task carrying both
+sub-run ids. A merge that "resolved" this would compile and mean what neither role proposed.
+
+**§5 is the measurement, and it says no.** pass@k over the same two internal-suite cases,
+`k = 2`, once under each strategy, both reports fed to `shouldDefaultToSwarm`. The verdict is
+**OFF**. That is the honest state of this repository and it is asserted rather than a lift
+being claimed. §6 then proves the gate is not merely stuck shut: given a genuinely better
+report it opens and names what the improvement cost, and it stays shut on a tie, on a
+regression, on a bigger `k` dressed as lift, and on two reports that scored different cases.
+
+**Both pass@k numbers are always reported.** `passAtK` alone is a purchase rather than a
+result — `k = 10` makes almost anything look capable if you will pay ten times — so
+`passAt1` and the per-case `distribution` are populated on every report and there is no
+option to emit only the flattering one (Requirement 25.3).
+
+**§7 tests ground nothing had tested.** `runTask` has no module-level mutable state, but
+before Phase 10 nothing proved two runs sharing one `EventStore` could be read apart
+afterwards, and a swarm is N runs. Three concurrent runs, three disjoint complete slices, 26
+events, no fourth slice.
+
+**Cold verification**: `npm run build` 0, `npm run typecheck` 0, both suites 0. **Core 1 012
+tests / 49 files, desktop 478 tests / 47 files** — 1 490 total. Offline, no API key,
+identical with `SKETCH_FAKE_PROVIDER=1` and unset.
+
+**Mutation evidence** (each broken, watched fail, restored, watched pass):
+
+| Mutation | Result |
+|---|---|
+| `gradeRole` stops refusing a `verify-stage` role with zero verify results | 1 test fails in `strategy.test.ts`: "FAILS a verify-stage role that verified nothing, even when the run reported ok" (67 passed) |
+| The merge treats two proposals for one path as mergeable | 2 tests fail: the conflict case and the same-role-twice case (66 passed) |
+| `liftOver` uses `>=` instead of strict `>` | 1 test fails: "is strict: a tie retains the cheaper default" (67 passed) |
+| The dispatcher runs the requested roles instead of the verifiable ones | 1 test fails in `phase10-gate.test.ts` §2 — the skipped role really ran (16 passed) |
+| Consensus stops gating the merge | 1 test fails in `phase10-gate.test.ts` §4 — the Security objection arrived after the bytes (16 passed) |
+| `TaskLog`'s filter is applied with a constant instead of the state | 1 test fails: "renders a row per streamed run and filters for real" (11 passed) |
+| `AgentTeamPanel` stops discriminating `component: 'dispatcher'` | 1 test fails after being strengthened — see below (12 passed) |
+
+**A weak test caught during the mutation pass, and strengthened rather than accepted.** The
+router-discrimination test originally asserted only that the string `after-plan` was absent
+from the panel — and `after-plan` lives in the router's `policy` key, which the panel never
+renders. So it **passed with the guard deleted**. It now counts the rendered lines (three
+dispatcher events in, three lines out) and asserts none rendered as the fallback phase. This
+is the case the "green output is not evidence" rule exists for: the mutation pass is what
+found it, not the original green run.
+
+**A real defect the gate found.** `attemptSwarm`'s `no_verifiable_role` early return dropped
+the skipped-roles follow-up, so a swarm that skipped **every** role left nothing behind at
+all — the one case where the follow-up task is the entire output. Fixed and asserted.
+
+**A design flaw corrected before it shipped.** The first draft of `roles.ts` claimed every
+role had a pairwise-unique verification signal and bought that claim by grading the Planner
+with `typecheck` and the Research role with `lint` — stages that never look at a document.
+Thirteen roles over nine stages cannot be pairwise-unique, so the claim was arithmetically
+impossible as well as dishonest. `RoleSignal` is now a union of three kinds and each role is
+graded by something that actually sees its output; a test asserts the uniqueness claim is
+**gone**, and that Backend and Testing correctly share `unit`.
+
+**Fourth occurrence of the dependency-guard shape.** A `strategy-catalog` note read "…comes
+from " immediately before a quoted string, which `test/deps.test.ts` parses as a bare import.
+The wording moved. The guard did not.
+
+**Real vs seam after Phase 10.**
+
+Real: the dispatcher and its ladder; the thirteen roles with a required signal each and the
+per-role policy, prompt and capability narrowing; grading by verify stage, plan artifact or
+resolved citations; the deterministic merge with staleness detection and conflict-to-task;
+consensus with two blocking roles; pass@k with the distribution and the strict lift gate; the
+`strategy` and `escalate` parameters across all three transports; the AI Team and Tasks
+panels over real events.
+
+**Not real.** `swarm` is **off by default and there is no measured lift saying otherwise** —
+that is the whole point of 24.8 and it is the state this repository is in. A `citations`
+signal proves a finding is anchored in this repository, **not that it is correct**; nothing
+mechanical can prove the latter and a model grading a model is not a verification signal.
+The merge is file-granular because the protocol gives whole-file replacements. Role sub-runs
+get **no tools** unless the caller supplies a `toolsForRole` factory, because resolving a
+grant is the caller's knowledge, not the dispatcher's. The roles do not read or write memory
+— the Phase 9 digest still fills a seam the `run` RPC does not pass. And **nothing in this
+project has ever run against a real provider.**
+
+---
+
 ## Decision Log
 
 | Date | Decision | Rationale |
 |---|---|---|
+| 2026-08-03 | A role's verification signal is a **union of three kinds**, not a verify stage | The first draft assigned each of the thirteen roles a stage and claimed the assignment was pairwise-unique. It cannot be: thirteen roles over nine stages. What it actually bought was the Planner graded by `typecheck` and the Research role graded by `lint` — checks that never look at a document, running green for reasons unrelated to the role's output, which is the exact failure this project keeps finding. So `RoleSignal` is `verify-stage` for roles that write or measure code, `plan-artifact` for the ones whose output IS the plan, and `citations` for the findings roles. "Distinct" means each role has a signal of its own, and a test asserts the impossible uniqueness claim is gone (Requirement 24.6) |
+| 2026-08-03 | A role that cannot be checked is **skipped, twice**, and never run-then-believed | `runTask` returns `ok: true` for a task with no verification configured, which is right for the single-agent case and catastrophic for a role: hand thirteen roles an empty policy and you get thirteen confident nothings that read as unanimity, and it is invisible from outside. So there are two independent refusals — `partitionRoles` before a token is spent, and `gradeRole` refusing a `verify-stage` role with zero verify results however `run.ok` reads. Two guards for one hazard, because this is the one failure mode of a multi-agent system that cannot be seen in the output (Requirements 24.5, 24.6) |
+| 2026-08-03 | Two proposals for one path is a **conflict, full stop**, and file granularity is the honest limit | Requirement 24.7 says a conflict is never guessed, and the temptation is a three-way merge. But `loop/edits.ts` emits whole-file replacements deliberately — one hunk, so a reviewer cannot accept a grouping the model never proposed — so two of those for one path, computed from the same base, cannot be combined without inventing which lines belonged to whom. Splitting them into finer hunks by heuristic IS the guess. So the rule is one proposer per path or nobody, including the case of one role proposing twice, and the conflict leaves as a task with both sub-run ids on it. Coarse, and stated as coarse rather than discovered later |
+| 2026-08-03 | Consensus **gates the merge**, and returns `null` outside `swarm` | Merging first and then discovering the Security role objected would mean the objection arrived after the bytes. So grading happens, then consensus, then the merge — and a blocked swarm writes nothing at all, with the findings leaving as a follow-up task. `null` rather than a permissive verdict for `single` and `plan-then-code` because Requirement 24.9 says consensus runs only inside swarm, and a caller that received `{ reached: true }` from a strategy with nobody to agree with would eventually treat it as agreement. The bias is towards stopping: a false stop costs a human a minute, a false ship costs whatever the security finding was about |
+| 2026-08-03 | Escalation requires failing **within** the budget, and a budget breach is not that | Requirement 24.3's load-bearing word is "within". A run that failed verify, or exhausted its turn cap, was given its budget and did not succeed — there is a case for spending more. A run cut off by the money ceiling, an abort, or a provider error never got its budget, and escalating would turn one ceiling into thirteen bills while the user believes a ceiling is in force. `ESCALATABLE_REASONS` is that distinction as data rather than a condition inline, because getting it wrong is a money bug and a money bug should be a list somebody can read |
+| 2026-08-03 | The dispatcher emits under its **own slice**, with `component: 'dispatcher'` and no `policy` key | `strategy_selected` already had two emitters, both the Phase 8 cost router inside `runTask`, and `budget.test.ts` finds them with a bare `.find(kind === 'strategy_selected')` — so a dispatcher event landing earlier in the same slice would be picked up instead. Beyond the test, the two decisions are different in kind: the router picks a model tier, the dispatcher picks a strategy, and one payload shape meaning both would make the log unreadable. A swarm is also N runs with no single run to belong to, so the ladder gets a dispatch id and sub-run ids derive from it as `<dispatchId>-r<n>` — distinct even under a frozen clock, and readable, so a person can see the parent without a lookup |
+| 2026-08-03 | `shouldDefaultToSwarm` has **no override parameter**, and no data can never enable | Requirement 24.8 permits `swarm` as a default only on measured pass@k lift. A `force: true` escape hatch would be used, and the requirement would become a comment. So the only input is two reports, the comparison is strict `>`, an empty report scores 0, and reports with different `k` or different case ids are **refused as incomparable** rather than subtracted — a pass@10 beating a pass@1 is a bigger budget, not lift, and quietly subtracting the two is how that ships as a result. On this repository's own suite the verdict is off, and the gate asserts the off (Requirements 24.8, 25.3) |
+| 2026-08-03 | pass@k is a **sibling** of `runEvalSet`, not a flag on it | `runEvalSet` takes one `deps` for the whole set and is sequential by design, so it cannot express "k attempts, and the attempts may differ" — which is the entire point of k. Bending it would mean a `k` parameter every existing caller ignores, or a mutable deps factory smuggled through it. A sibling function calling `runEval` k times changes nothing about the existing harness and scores identically, so the two are comparable. `passAt1` and the per-case distribution are always populated, because `passAtK` on its own is the flattering number and Requirement 25.3 asks for the distribution |
+| 2026-08-03 | Role capabilities are **intersected** with the run's grant, and the dispatcher builds no dispatcher | A role table is a narrowing device. If it could add a capability the caller was not granted, thirteen roles would be thirteen ways around the one authorisation point — the Deployment role asks for `proc:spawn` and gets it only from a run that already held it. And the dispatcher does not construct a `ToolDispatcher` itself, for the same reason the loop does not: resolving a grant means knowing which skill is speaking and what the registry granted it, which is the caller's knowledge. Omitting the `toolsForRole` factory means role sub-runs get no tools and every `tool` action is refused, which is the loop's own honest default (Requirements 11.5, 24.5) |
+| 2026-08-03 | The AI Team panel reports what CAN be verified and **no per-role status** | Same correction the MCP panel made, for the same reason. A role exists only inside a dispatch: the dispatcher partitions, runs the verifiable ones, grades them, and it is over. Between dispatches there is no working role and no idle one — there are no roles. So `strategy-catalog` answers whether this project configures a stage that could grade each role, the skipped rows are shown WITH THEIR REASON because that is the load-bearing fact, and live activity is derived from `strategy_selected` events. Three fixtures died for this: four local agents with `1 working`, twelve `state.agentTeam` entries, and `TaskEntry` (Requirements 27.1, 27.5, 14.6) |
+| 2026-08-03 | Task state is a **projection of the event log**, so `AppState.tasks` is deleted | Fourth vocabulary for the same idea, and the array was never populated or read. A task IS a run, and a run's whole story is already append-only: prompt, adapter, iterations, verify rows, terminal reason. `projectRuns(events)` derives the rows, which also means the panel cannot disagree with the Timeline. The invented per-row costs went with it and were not replaced — the Cost panel owns the money number, and a second figure here would be a second source (Requirements 20.2, 14.6) |
 | 2026-08-03 | Superseding **appends a close op**; no memory line is ever rewritten | The same append-only discipline as the event log, and here it forces a design decision rather than merely describing one: closing a window cannot mean editing the row, so the store writes `{op:'close', id, validTo, reason, by}` and `readAll` folds the ops. The alternative — writing only the new row and deriving the old one's end from the next row's start — breaks the moment two entries with the same key arrive out of order, or one is expired with no replacement. `validTo` on the OLD row is what makes "what did we believe in March" a lookup instead of an inference, and that question is the entire reason versioned memory exists (Requirements 21.2, 21.7) |
 | 2026-08-03 | Retrieval **excludes retracted entries by default**; the panel shows them | Two opposite defaults, for two different readers, and both are load-bearing. A withdrawn fact presented to a model as current is worse than no memory at all, because the model trusts it and the user cannot see why the output is wrong — so retrieval and the prompt digest exclude closed rows, and the gate asserts the digest specifically. But a history a user cannot see is a history they cannot correct, so the panel shows closed rows greyed and labelled with their reason: "why does the agent think we use REST" is answered by seeing the row that said so and when it closed (Requirements 21.5, 21.6) |
 | 2026-08-03 | Recency is a **bounded prior**, capped below the rerank boost, never a sort | A newer memory is usually the right one, so recency has to count. But sorting by it makes memory a stack, and the most useful entry is frequently an old architectural decision that explains everything — exactly what a recency sort buries. So it is a multiplier capped at 0.5 against a rerank boost of 1.0: recency is weaker evidence than actually matching the question, and a strongly matching old entry still beats a barely matching new one. `recencyBoost` is exported so a test pins the curve rather than inferring it, and that test caught a real inversion where an infinitely old entry received the maximum boost (Requirement 21.5) |

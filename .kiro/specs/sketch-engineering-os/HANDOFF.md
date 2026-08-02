@@ -19,15 +19,37 @@ Phase 3 and had gone four phases stale.
 
 ## IMMEDIATE NEXT ACTION
 
-**Phase 9 is gated and committed. The working tree is clean. Start task 10.1 (the strategy
-dispatcher).**
+**Phase 10 is gated and committed. The working tree is clean. Start task 11.1 (the internal eval
+suite).**
 
-**65 of 96 tasks complete.** Phases 1, 1.5, 2, 3, 4, 5, 6, 7, 8 and 9 are done and gated.
+**71 of 96 tasks complete.** Phases 1, 1.5, 2, 3, 4, 5, 6, 7, 8, 9 and 10 are done and gated.
 
-Cold install (`node_modules`, `packages/core/dist` and both workspace `node_modules` deleted, then
-`npm install && npm run build && npm run typecheck && npm test`): install 0, build 0, typecheck 0,
-test 0 — **core 927 tests / 47 files, desktop 453 tests / 45 files**, offline, no API key, and
-identical with `SKETCH_FAKE_PROVIDER=1` and unset.
+`npm run build && npm run typecheck && npm test` per workspace: build 0, typecheck 0, test 0 —
+**core 1 012 tests / 49 files, desktop 478 tests / 47 files**, offline, no API key, and identical
+with `SKETCH_FAKE_PROVIDER=1` and unset.
+
+The Phase 10 gate proof is `packages/core/test/phase10-gate.test.ts`, and its §5 verdict is the
+headline: **`swarm` is OFF, because no pass@k lift has been measured on this repository's suite.**
+Requirement 24.8 does not permit shipping it without one, and `shouldDefaultToSwarm` has no override
+parameter. §6 proves the gate is not merely stuck shut — given a genuinely better report it opens.
+
+**Phase 10 in one paragraph.** `strategy.dispatch(task, deps)` runs `single` (the default),
+`plan-then-code`, or `swarm`, escalating only when the lighter attempt failed **within** its budget —
+a money-ceiling breach, an abort and a provider error explicitly do not escalate, because escalating
+one ceiling into thirteen bills is a money bug. The thirteen roles each carry a REQUIRED
+verification signal, one of `verify-stage` / `plan-artifact` / `citations`, and a role whose signal
+this project cannot resolve is skipped before a token is spent AND refused again by the grader — two
+guards, because `runTask` returns `ok: true` for a task with nothing configured and an unchecked role
+would report confident nothing. The merge is a union of non-conflicting edits at file granularity;
+two proposals for one path is a conflict that writes nothing and leaves a follow-up task. Consensus
+exists only inside `swarm` and it **gates the merge**, so a Security objection arrives before the
+bytes do.
+
+**Three Phase 10 gaps worth knowing.** Role sub-runs get **no tools** unless the caller supplies a
+`toolsForRole` factory — the dispatcher will not build a `ToolDispatcher`, for the same reason the
+loop will not. A `citations` signal proves a finding is **anchored in this repository, not correct**;
+nothing mechanical proves the latter. And the roles neither read nor write memory: the Phase 9 digest
+still fills a seam the `run` RPC does not pass.
 
 The Phase 9 gate proof is `packages/core/test/phase9-gate.test.ts`: record a decision, record the
 contradicting one, and prove a RELATED query returns the newer while the older is marked superseded
@@ -107,7 +129,11 @@ Seven guards were mutation-verified at this gate — see the Phase 5 gate result
 ## Git state
 
 ```
-54dbb20  sketch: phase 9 task 9.5 - Phase 9 gate, the contradiction chain end to end   <- HEAD
+(phase 10 complete)                                                                    <- HEAD
+511df18  sketch: phase 10 task 10.5 - phase 10 gate, swarm stays off with no measured pass@k lift
+9d6a9c7  sketch: phase 10 task 10.4 - AI Team and Tasks panels over real dispatcher events
+56aa748  sketch: phase 10 tasks 10.1-10.3 - strategy dispatcher, thirteen verifiable roles, merge, pass@k
+54dbb20  sketch: phase 9 task 9.5 - Phase 9 gate, the contradiction chain end to end
 adf1505  sketch: phase 9 task 9.4 - Memory panel, and four memory RPC methods
 f864e9a  sketch: phase 9 tasks 9.1-9.3 - versioned memory, hygiene, reranked retrieval
 287a767  sketch: phase 8 complete - gate green cold, tasks ticked, gate result and eight decisions logged
@@ -140,9 +166,13 @@ because there was nothing to bisect.
 | 4 — Settings, secrets, zero telemetry (4.1–4.5) | **DONE**, gate green cold. 4.3 superseded |
 | 5 — Intelligent context + architecture generator (5.1–5.6) | **DONE**, gate green cold |
 | 6 — Skills registry, capability scopes, real optimizer (6.1–6.7) | **DONE**, gate green cold |
-| 7–12 | Not started |
+| 7 — Verification contract, live feedback, curated MCP (7.1–7.5) | **DONE**, gate green cold |
+| 8 — Cost accounting, budget guard, router, cache (8.1–8.5) | **DONE**, gate green cold |
+| 9 — Versioned memory with hygiene (9.1–9.5) | **DONE**, gate green cold |
+| 10 — Eval-gated multi-agent (10.1–10.5) | **DONE**, gate green. `swarm` ships **off**: no measured pass@k lift |
+| 11–12 | Not started |
 
-Task counts: 96 total, **48 complete**.
+Task counts: 96 total, **71 complete**.
 
 ---
 
