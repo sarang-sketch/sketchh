@@ -19,7 +19,7 @@ Phase 3 and had gone four phases stale.
 
 ## IMMEDIATE NEXT ACTION
 
-**Tasks 12.1–12.4 remain externally evidence-gated. Run the native package matrix first. Then run
+**Tasks 12.1–12.5 remain evidence-gated. Run the native package matrix first. Then run
 the no-fallback Ollama preflight and retained installed-app clean-machine procedure against those
 exact installer bytes. For 12.3, push a package-version-matching semantic tag only after the matrix
 is green, retain every release asset/hash/attestation verification result, and do not call GitHub
@@ -58,6 +58,14 @@ the active digest. The desktop writes only the candidate artifact during trainin
 body, and requires “Use trained version” before activation over either transport. The gate forbids
 `fetch` and starts no Sketch HTTP/stdio server. This remains preparation, not completion: no retained
 third-party community skill, source provenance, or license evidence has been exercised.
+
+Task 12.5 now has an honest nine-category audit in `EXTENSIBILITY.md`. It documents the production
+procedures for custom compatible provider/model configuration, filesystem-discovered skills,
+`MemoryStore` composition, and reviewed source-curated MCP entries. It also records the blockers:
+the canonical provider path and tool admission are partial, while agents, workflows, themes, and
+languages are closed. Test runners, loader doubles, and editing a fixed table are not relabelled as
+plugins. Requirement 26.5 therefore remains open until production registries/loaders and behavioral
+gates exist for those categories.
 
 The Phase 11 gate proof is `packages/core/test/phase11-gate.test.ts`. The internal suite has two
 content-pinned repair cases, fresh workspaces per attempt, mandatory `verify-pass`, the canonical
@@ -156,7 +164,8 @@ Seven guards were mutation-verified at this gate — see the Phase 5 gate result
 ## Git state
 
 ```
-(Phase 12.4 preparation commit containing this file)                            <- HEAD
+(Phase 12.5 audit commit containing this file)                                  <- HEAD
+c9947b7  sketch: phase 12 task 12.4 - persist grants and prove local skill flywheel
 6df4756  sketch: phase 12 task 12.3 - assemble and attest release provenance
 18ede90  sketch: phase 12 task 12.2 - forward provider and add Ollama preflight
 4a5de13  sketch: phase 12 task 12.1 - add native packaging matrix
@@ -196,7 +205,7 @@ because there was nothing to bisect.
 | 9 — Versioned memory with hygiene (9.1–9.5) | **DONE**, gate green cold |
 | 10 — Eval-gated multi-agent (10.1–10.5) | **DONE**, gate green. `swarm` ships **off**: no measured strategy lift |
 | 11 — Honest benchmarks (11.1–11.6) | **DONE**, gate green cold. CI result is synthetic only; real-provider public matrix unperformed |
-| 12 — Packaging and open flywheel | **IN PROGRESS** — 12.1 native artifacts required; 12.2 forwarding/preflight built with installed-app clean-machine evidence required; 12.3 deterministic release/provenance path built with real tag-release evidence and native signing identities absent; 12.4 production flywheel proved with a local community-format fixture, with genuine third-party source/license evidence absent |
+| 12 — Packaging and open flywheel | **IN PROGRESS** — 12.1 native artifacts required; 12.2 forwarding/preflight built with installed-app clean-machine evidence required; 12.3 deterministic release/provenance path built with real tag-release evidence and native signing identities absent; 12.4 production flywheel proved with a local community-format fixture, with genuine third-party source/license evidence absent; 12.5 nine-category audit documented, with canonical provider/tool gaps and closed agent/workflow/theme/language extension paths |
 
 Task counts: 96 total, **78 complete**.
 

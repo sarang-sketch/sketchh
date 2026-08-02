@@ -414,6 +414,7 @@ Phase 4 numbering stays intact for anything that references it.
   - _Requirements: 26.4_
 - [~] 12.5 Complete the extensibility audit
   - Confirm and document an extension point for providers, agents, skills, tools, models, memory, workflows, themes, and languages
+  - `EXTENSIBILITY.md` now audits all nine against production code and documents supported provider/model configuration, filesystem-discovered skills, code-pluggable memory, and source-curated MCP additions. It also records that canonical providers/tools are only partial and agents, workflows, themes, and languages remain closed; test-only DI and source-table edits are not counted as plugins. Completion remains blocked on production registration/loading contracts and behavioral gates for those gaps.
   - _Requirements: 26.5_
 - [~] 12.6 Run the canonical end-to-end acceptance
   - The "build an Airbnb clone" flow runs end to end with the plan gate, verification contract, consensus, and cost guard all observable in the Timeline, completing with every check green

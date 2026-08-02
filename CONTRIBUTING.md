@@ -36,6 +36,19 @@ Each of these exists because something broke.
    reaching disk unredacted after a cancelled agent silently removed a `sanitizePayload` call — was
    invisible precisely because there was nothing to bisect.
 
+## Extending Sketch
+
+Read [`EXTENSIBILITY.md`](EXTENSIBILITY.md) before describing or adding an extension. It audits all
+nine Requirement 26.5 categories and distinguishes runtime configuration, filesystem discovery,
+code-level composition, reviewed source catalogs, and closed subsystems. Those are different trust
+and compatibility contracts.
+
+In particular, do not present the legacy provider registry, injected test runners, MCP launch
+overrides, Monaco loader doubles, or a source-table edit as an installable plugin API. Security-
+sensitive extension work must retain content pinning, explicit capability grants, shell-free argv,
+secret redaction, and the existing verification gates. If a category is marked closed, add and test
+a production registration/loading contract before changing its status.
+
 ## Before you open a pull request
 
 ```bash
