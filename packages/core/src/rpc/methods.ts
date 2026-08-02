@@ -23,6 +23,9 @@
 import { stat } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 
+import { ToolDispatcher, capabilitiesForSkill } from '../capabilities/index.js'
+import type { Capability, CapabilitySet } from '../capabilities/index.js'
+import { MCP_CATALOG, McpHost, catalogIds, findCatalogEntry, missingEnv } from '../mcp/index.js'
 import {
   assembleContext,
   buildRepoGraph,
@@ -445,20 +448,177 @@ async function run(params: Record<string, unknown>, ctx: MethodContext): Promise
   // its assertions.
   const verifyPolicy = await resolveVerifyPolicyFor(root, params, ctx)
 
-  return runTask(task, {
-    adapter,
-    events,
-    // The gate, unmodified and un-bypassable from here.
-    plan: new PlanWriter({ baseDir: root, events }),
-    files: new DiskFileWriter(),
+  // THE TOOL LAYER (Requirement 22). Opt-in, scoped to the grant the loaded skills
+  // actually hold, and torn down in `finally` whatever the run does.
+  const toolLayer = await openToolLayerFor(root, params, task, skills, events, ctx)
+
+  try {
+    return await runTask(task, {
+      adapter,
+      events,
+      // The gate, unmodified and un-bypassable from here.
+      plan: new PlanWriter({ baseDir: root, events }),
+      files: new DiskFileWriter(),
+      root,
+      skills,
+      projectContext: await loadProjectContext(root),
+      ...(retrievedContext !== undefined ? { retrievedContext } : {}),
+      ...(verifyPolicy !== undefined ? { verifyPolicy } : {}),
+      ...(toolLayer !== undefined ? { tools: toolLayer.dispatcher } : {}),
+      ...(maxIterations !== undefined ? { maxIterations } : {}),
+      ...(reviewEdits !== undefined ? { reviewEdits } : {}),
+    })
+  } finally {
+    // A server left running holds a pipe, a port, and often a lock. `close()` never
+    // throws, but it is in `finally` so a failed run cannot leak one either.
+    await toolLayer?.host.close()
+  }
+}
+
+/**
+ * The grant in force for a run: the union of what its skills declared.
+ *
+ * NOTHING ON THE WIRE CAN WIDEN THIS. There is deliberately no `params.capabilities`,
+ * because a grant is consented to when a skill is installed (`registry/`) and the
+ * install records what was agreed. A request parameter that could add `proc:spawn`
+ * would make that consent decorative, and it would be the exact escalation the Phase 6
+ * adversarial suite exists to prove impossible.
+ *
+ * With no skills loaded, `capabilitiesForSkill(undefined)` gives the documented default
+ * — read this project, nothing else.
+ */
+function grantForRun(skills: readonly Skill[]): CapabilitySet {
+  const union = new Set<Capability>()
+  if (skills.length === 0) {
+    for (const capability of capabilitiesForSkill(undefined).capabilities) union.add(capability)
+  }
+  for (const skill of skills) {
+    for (const capability of capabilitiesForSkill(skill.capabilities).capabilities) {
+      union.add(capability)
+    }
+  }
+  return Object.freeze([...union].sort())
+}
+
+/**
+ * Open the MCP servers a run asked for, and hand back a dispatcher over their tools.
+ *
+ * OPT-IN, via `params.mcpServers` — an array of curated catalog ids. Absent means no
+ * tool layer at all, which is what every caller before Phase 7 depended on: `tool`
+ * actions are refused with `TOOL_UNAVAILABLE_REASON` and the run proceeds on edits and
+ * verification alone.
+ *
+ * ── A SERVER THE GRANT CANNOT REACH IS NOT STARTED ─────────────────────────
+ *
+ * Refusing the calls would be enough for correctness. Not spawning it is stronger: a
+ * process that never launched cannot read a token from the environment, cannot open a
+ * socket, and cannot install a browser. The refusal is logged by id and capability so
+ * a user can see why a server they expected is absent.
+ *
+ * ── EVERY FAILURE HERE IS A DIAGNOSTIC, NEVER A FAILED RUN ─────────────────
+ *
+ * An unknown id, a missing token, a server that will not handshake: all logged, all
+ * survivable. Requirement 22.3 is explicit that the run continues, and a run that dies
+ * because Docker is not installed is a worse product than one that says so and works
+ * on the code.
+ */
+async function openToolLayerFor(
+  root: string,
+  params: Record<string, unknown>,
+  task: Task,
+  skills: readonly Skill[],
+  events: EventStore,
+  ctx: MethodContext,
+): Promise<{ host: McpHost; dispatcher: ToolDispatcher } | undefined> {
+  const requested = optionalStringArray(params['mcpServers'], 'params.mcpServers')
+  if (requested === undefined || requested.length === 0) return undefined
+
+  const granted = grantForRun(skills)
+  const host = new McpHost({
     root,
-    skills,
-    projectContext: await loadProjectContext(root),
-    ...(retrievedContext !== undefined ? { retrievedContext } : {}),
-    ...(verifyPolicy !== undefined ? { verifyPolicy } : {}),
-    ...(maxIterations !== undefined ? { maxIterations } : {}),
-    ...(reviewEdits !== undefined ? { reviewEdits } : {}),
+    events,
+    runId: task.id,
+    log: (line) => ctx.log(line),
+    env: ctx.env,
+    ...(optionalNumber(params, 'mcpRequestTimeoutMs', 'params.mcpRequestTimeoutMs') !== undefined
+      ? { requestTimeoutMs: optionalNumber(params, 'mcpRequestTimeoutMs', 'params.mcpRequestTimeoutMs')! }
+      : {}),
   })
+
+  for (const id of requested) {
+    const entry = findCatalogEntry(id)
+    if (entry === null) {
+      ctx.log(`mcp: no server named "${id}" in the curated catalog (have: ${catalogIds().join(', ')})`)
+      continue
+    }
+    if (!granted.includes(entry.requires)) {
+      // Not opened, not merely refused. See the header.
+      ctx.log(
+        `mcp: not starting ${entry.title} — it costs ${entry.requires} and this run holds ` +
+          `${granted.length === 0 ? 'nothing' : granted.join(', ')}`,
+      )
+      continue
+    }
+    const opened = await host.open(id)
+    ctx.log(
+      opened.ok
+        ? `mcp: ${opened.detail}`
+        : `mcp: ${id} unavailable for this run — ${opened.detail}`,
+    )
+  }
+
+  const dispatcher = new ToolDispatcher({
+    tools: host.descriptors(),
+    granted,
+    root,
+    events,
+    runId: task.id,
+    ...(skills.length === 1 ? { skill: skills[0]!.name } : {}),
+  })
+  ctx.log(
+    `mcp: ${host.openIds.length} server(s) open, ${dispatcher.availableTools.length} tool(s) ` +
+      `reachable with ${granted.length === 0 ? 'no capabilities' : granted.join(', ')}`,
+  )
+  return { host, dispatcher }
+}
+
+/**
+ * What the curated catalog offers, and what each entry is still missing.
+ *
+ * This is what a surface needs to show an MCP status badge HONESTLY. It reports
+ * `configured` — the entry's required environment is present, so it could start — and
+ * never `connected`, because nothing is connected outside a run: the host is per-run by
+ * construction (the unavailability latch means "for the remainder of the run"). A badge
+ * claiming five live connections while no run is in flight would be a fixture with
+ * extra steps.
+ */
+async function mcpCatalog(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
+  const env = ctx.env
+  const servers = MCP_CATALOG.map((entry) => {
+    const missing = missingEnv(entry, env)
+    return {
+      id: entry.id,
+      title: entry.title,
+      summary: entry.summary,
+      requires: entry.requires,
+      // The pinned argv, so a user can see exactly what would run.
+      command: [entry.launch.command, ...entry.launch.args].join(' '),
+      requiresEnv: entry.requiresEnv ?? [],
+      missingEnv: missing,
+      configured: missing.length === 0,
+      ...(entry.caveat !== undefined ? { caveat: entry.caveat } : {}),
+    }
+  })
+  void params
+  return {
+    servers,
+    total: servers.length,
+    configured: servers.filter((server) => server.configured).length,
+    // Stated on the wire so a surface does not have to infer it.
+    note:
+      'Servers are started per run, only when a run asks for them and only when the ' +
+      'run\u2019s grant covers the capability they cost. Nothing is connected between runs.',
+  }
 }
 
 /**
@@ -1158,6 +1318,10 @@ export const METHODS: Readonly<Record<string, MethodHandler>> = {
   'skills-catalog': skillsCatalog,
   'skill-install': skillInstall,
   'skill-train': skillTrain,
+  // Task 7.3's curated MCP layer. READ-ONLY: this reports what the catalog offers and
+  // what each entry is missing. Nothing here starts a server — that happens inside a
+  // run, from `params.mcpServers`, and only for a capability the run's grant covers.
+  'mcp-catalog': mcpCatalog,
 }
 
 /** The five the protocol contract names. Every build answers at least these. */

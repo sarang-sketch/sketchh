@@ -59,6 +59,11 @@ export * as workspace from './workspace/index.js'
 // The agent loop: `loop.runTask(task, deps)`.
 export * as loop from './loop/index.js'
 
+// The curated MCP tool layer: `mcp.McpHost`, `mcp.MCP_CATALOG`. Hand-rolled JSON-RPC
+// over stdio, pinned launch argv, and a server that hangs is written off for the run
+// rather than wedging it. Produces `ToolDescriptor`s; never authorises them.
+export * as mcp from './mcp/index.js'
+
 // Tools the engine drives on the machine: `tools.GitTool`, `tools.parseStatus`.
 // The Git panel reaches these through the RPC methods below, not by importing them
 // — the desktop bundle takes no runtime dependency on this package.
