@@ -68,6 +68,20 @@ import {
   providerProposeEdit,
   trainSkill,
 } from '../skills/index.js'
+import {
+  DEFAULT_STRATEGY,
+  ROLE_DEFINITIONS,
+  ROLES,
+  STRATEGIES,
+  STRATEGY_DESCRIPTIONS,
+  SWARM_ORDER,
+  describeSignal,
+  dispatch,
+  emptyReport,
+  isStrategy,
+  shouldDefaultToSwarm,
+  type Strategy,
+} from '../strategy/index.js'
 import { GitTool } from '../tools/index.js'
 import {
   VERIFY_STAGES,
@@ -185,6 +199,24 @@ function optionalBoolean(
   if (value === undefined || value === null) return undefined
   if (typeof value !== 'boolean') {
     throw new InvalidParamsError(`${field} must be a boolean when present`)
+  }
+  return value
+}
+
+/**
+ * `params.strategy`, or `undefined` for the pre-Phase-10 behaviour.
+ *
+ * A closed vocabulary, and an unrecognised value is REFUSED rather than falling back to the
+ * default. Falling back would let `strategy: "swam"` run one agent while the caller believed
+ * it had asked for thirteen, and the bill would be the only evidence either way.
+ */
+function readStrategy(params: Record<string, unknown>): Strategy | undefined {
+  const value = params['strategy']
+  if (value === undefined || value === null) return undefined
+  if (!isStrategy(value)) {
+    throw new InvalidParamsError(
+      `params.strategy must be one of ${STRATEGIES.join(', ')} when present`,
+    )
   }
   return value
 }
@@ -427,6 +459,8 @@ async function run(params: Record<string, unknown>, ctx: MethodContext): Promise
   const adapter = adapterFor(params, ctx)
   const maxIterations = optionalNumber(params, 'maxIterations', 'params.maxIterations')
   const reviewEdits = optionalBoolean(params, 'reviewEdits', 'params.reviewEdits')
+  const strategy = readStrategy(params)
+  const escalate = optionalBoolean(params, 'escalate', 'params.escalate')
   const contextBudgetTokens = optionalNumber(
     params,
     'contextBudgetTokens',
@@ -459,21 +493,43 @@ async function run(params: Record<string, unknown>, ctx: MethodContext): Promise
   // actually hold, and torn down in `finally` whatever the run does.
   const toolLayer = await openToolLayerFor(root, params, task, skills, events, ctx)
 
+  const loopDeps = {
+    adapter,
+    events,
+    // The gate, unmodified and un-bypassable from here.
+    plan: new PlanWriter({ baseDir: root, events }),
+    files: new DiskFileWriter(),
+    root,
+    skills,
+    projectContext: await loadProjectContext(root),
+    ...(retrievedContext !== undefined ? { retrievedContext } : {}),
+    ...(verifyPolicy !== undefined ? { verifyPolicy } : {}),
+    ...(toolLayer !== undefined ? { tools: toolLayer.dispatcher } : {}),
+    ...(maxIterations !== undefined ? { maxIterations } : {}),
+    ...(reviewEdits !== undefined ? { reviewEdits } : {}),
+  }
+
   try {
-    return await runTask(task, {
-      adapter,
-      events,
-      // The gate, unmodified and un-bypassable from here.
-      plan: new PlanWriter({ baseDir: root, events }),
-      files: new DiskFileWriter(),
-      root,
-      skills,
-      projectContext: await loadProjectContext(root),
-      ...(retrievedContext !== undefined ? { retrievedContext } : {}),
-      ...(verifyPolicy !== undefined ? { verifyPolicy } : {}),
-      ...(toolLayer !== undefined ? { tools: toolLayer.dispatcher } : {}),
-      ...(maxIterations !== undefined ? { maxIterations } : {}),
-      ...(reviewEdits !== undefined ? { reviewEdits } : {}),
+    // ── THE STRATEGY FORK (Requirement 24.1) ────────────────────────────────
+    //
+    // ABSENT means `runTask`, byte for byte what this method did before Phase 10: one run,
+    // one slice, no dispatcher event. A caller that never heard of strategies pays nothing
+    // for their existence, and the log a desktop or CLI run leaves is unchanged.
+    //
+    // Naming a strategy — INCLUDING `single` — opts into the dispatcher, and the difference
+    // is the record: a `strategy_selected` ladder under a dispatch id saying which strategy
+    // was tried and which succeeded. That is what `escalate` needs and what the AI Team
+    // panel renders.
+    if (strategy === undefined) return await runTask(task, loopDeps)
+
+    return await dispatch(task, {
+      ...loopDeps,
+      strategy,
+      ...(escalate !== undefined ? { escalate } : {}),
+      // The grant a role's capabilities are intersected with is the run's own grant — the
+      // union of what its skills declared. There is no `params.capabilities` here either,
+      // for the reason `grantForRun` states: nothing on the wire may widen a grant.
+      grant: grantForRun(skills),
     })
   } finally {
     // A server left running holds a pipe, a port, and often a lock. `close()` never
@@ -1014,6 +1070,91 @@ async function mcpCatalog(params: Record<string, unknown>, ctx: MethodContext): 
     note:
       'Servers are started per run, only when a run asks for them and only when the ' +
       'run\u2019s grant covers the capability they cost. Nothing is connected between runs.',
+  }
+}
+
+/**
+ * The strategies, the thirteen roles, and which of them THIS project can actually check.
+ *
+ * This is what the AI Team panel needs to render an honest team. Three things it reports and
+ * one it deliberately refuses:
+ *
+ *   * `strategies` — the three, with what each costs, and which is the default.
+ *   * `roles` — all thirteen with the signal that grades each one, and `available` resolved
+ *     against the stages this project configures. A role the project cannot check is shown
+ *     as skipped WITH ITS REASON, not hidden and not shown as idle.
+ *   * `swarmDefault` — the Requirement 24.8 verdict. With no measurement on disk it is
+ *     `enable: false` and the reason says the measurement has not been run. That is the
+ *     honest state of this repository.
+ *
+ * What it refuses: any notion of a role being "working" or "done" right now. Roles exist
+ * only inside a dispatch, the same way MCP servers exist only inside a run, so a panel that
+ * wants live status reads `strategy_selected` events from the timeline. A status field here
+ * would be a fixture with extra steps — which is exactly what the four `AgentTeamPanel`
+ * fixtures and the twelve `state.agentTeam` entries were.
+ */
+async function strategyCatalog(
+  params: Record<string, unknown>,
+  ctx: MethodContext,
+): Promise<unknown> {
+  const root = resolve(optionalString(params, 'root', 'params.root') ?? ctx.cwd())
+  const resolved = await resolveVerifyPolicy(root)
+  const stages = VERIFY_STAGES.filter((stage) => (resolved.policy[stage] ?? []).length > 0)
+
+  const roles = ROLES.map((role) => {
+    const definition = ROLE_DEFINITIONS[role]
+    const signal = definition.signal
+    const available = signal.kind !== 'verify-stage' || stages.includes(signal.stage)
+    return {
+      role,
+      title: definition.title,
+      instruction: definition.instruction,
+      signal: describeSignal(signal),
+      signalKind: signal.kind,
+      ...(signal.kind === 'verify-stage' ? { stage: signal.stage } : {}),
+      capabilities: definition.capabilities,
+      edits: definition.edits,
+      blocking: definition.blocking,
+      available,
+      reason: available
+        ? null
+        : `this project configures no "${(signal as { stage: string }).stage}" stage, so the ` +
+          `${definition.title} role is skipped rather than run unverified`,
+    }
+  })
+
+  // No measurement exists on disk yet, and pretending otherwise is the thing Requirement
+  // 24.8 was written to prevent. Two empty reports compare as "nothing to compare", which
+  // under a strict `>` can never enable a swarm.
+  const verdict = shouldDefaultToSwarm(emptyReport(1), emptyReport(1))
+
+  return {
+    root,
+    strategies: STRATEGIES.map((strategy) => ({
+      strategy,
+      description: STRATEGY_DESCRIPTIONS[strategy],
+      default: strategy === DEFAULT_STRATEGY,
+    })),
+    defaultStrategy: DEFAULT_STRATEGY,
+    swarmOrder: SWARM_ORDER,
+    roles,
+    configuredStages: stages,
+    policySource: resolved.source,
+    verifiableRoles: roles.filter((role) => role.available).length,
+    swarmDefault: {
+      enable: verdict.enable,
+      reason:
+        'no pass@k measurement has been run in this project, so swarm stays off. ' +
+        'Requirement 24.8: it may only become a default for a task class after measured ' +
+        `pass@k lift over ${DEFAULT_STRATEGY} on the internal suite`,
+    },
+    // NOTE ON THE WORDING: the zero-dependency guard in `test/deps.test.ts` scans source
+    // text for `from '<specifier>'` literally, so a sentence ending "comes from" immediately
+    // before a quote reads to it as a bare import. Fourth time this has happened in this
+    // repository. The rule is to move the DATA, never the guard.
+    note:
+      'Roles exist only inside a dispatch. Live per-role status is derived out of the ' +
+      'strategy_selected events in the timeline, not out of this method.',
   }
 }
 
@@ -1731,6 +1872,11 @@ export const METHODS: Readonly<Record<string, MethodHandler>> = {
   'memory-search': memorySearch,
   'memory-remember': memoryRemember,
   'memory-supersede': memorySupersede,
+
+  // Task 10.4's AI Team panel. READ-ONLY and it reports no live per-role status, because
+  // roles exist only inside a dispatch — the same reason `mcp-catalog` reports `configured`
+  // and never `connected`. A role's live state comes from `strategy_selected` events.
+  'strategy-catalog': strategyCatalog,
 }
 
 /** The five the protocol contract names. Every build answers at least these. */

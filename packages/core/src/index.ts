@@ -80,6 +80,14 @@ export * as tools from './tools/index.js'
 // Built before the things it judges — every lift claim is measured through it.
 export * as evals from './evals/index.js'
 
+// Eval-gated multi-agent: `strategy.dispatch(task, deps)`, the thirteen roles and the
+// verification signal each is graded by, the deterministic merge, and pass@k.
+//
+// `strategy.DEFAULT_STRATEGY` is `single` and it stays that way until
+// `strategy.shouldDefaultToSwarm` says otherwise on measured pass@k lift (Requirement 24.8).
+// That function has no override parameter on purpose.
+export * as strategy from './strategy/index.js'
+
 // RPC method handlers plus the transport seams a second transport needs.
 //
 // The Vite dev bridge (packages/desktop/vite.config.ts) is a real transport for
