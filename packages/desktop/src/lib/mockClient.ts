@@ -298,6 +298,10 @@ export class MockSketchClient implements SketchClient {
     return this.noEngine('skill-train')
   }
 
+  async skillPromote(): Promise<never> {
+    return this.noEngine('skill-promote')
+  }
+
   // ── verification contract and MCP ─────────────────────────────────────────
   //
   // The same rule a fourth and fifth time. A fabricated verify report is the worst

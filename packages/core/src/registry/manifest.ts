@@ -270,6 +270,15 @@ export function parseManifest(text: string): RegistryManifest {
     const entry = asObject(value, what)
 
     const name = readString(entry, 'name', what)
+    if (
+      name.trim() !== name ||
+      name === '.' ||
+      name === '..' ||
+      name.includes('/') ||
+      name.includes('\\')
+    ) {
+      throw new ManifestError(`${what}.name must be one safe directory segment`)
+    }
     if (seen.has(name)) {
       // Two entries with one name means the installer's behaviour depends on
       // array order, which is not a property anyone should have to know.

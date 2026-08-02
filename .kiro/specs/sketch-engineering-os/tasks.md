@@ -410,6 +410,7 @@ Phase 4 numbering stays intact for anything that references it.
   - _Requirements: 26.3_
 - [~] 12.4 Prove the flywheel turns server-less
   - A community skill installs, runs, and trains on captured evals with no Sketch server involved
+  - Production preparation is proved end to end with a locally authored community-format fixture: open-registry digest review, persisted digest-bound grant, production run, four captured/replayed evals, strict held-out improvement, explicit review/promotion, and rerun all occur in process with `fetch` forbidden. Training writes outside the active skill; the desktop shows the candidate and requires a separate promotion click. This is not third-party community-skill evidence. Completion remains blocked until a real community skill is retained with source/license provenance and put through the same gate.
   - _Requirements: 26.4_
 - [~] 12.5 Complete the extensibility audit
   - Confirm and document an extension point for providers, agents, skills, tools, models, memory, workflows, themes, and languages

@@ -42,6 +42,7 @@ import { useSketchClient } from '../lib/ClientProvider'
 import { useAppState } from '../state/AppState'
 import type {
   SkillInstallResult,
+  SkillPromoteResult,
   SkillTrainResult,
   SkillsCatalogEntry,
   SkillsCatalogResult,
@@ -76,7 +77,7 @@ const SENSITIVE = new Set(['fs:read:home', 'fs:write:home', 'proc:spawn', 'secre
 type Tab = 'installed' | 'registry'
 
 interface Busy {
-  kind: 'loading' | 'installing' | 'training'
+  kind: 'loading' | 'installing' | 'training' | 'promoting'
   name?: string
 }
 
@@ -93,6 +94,7 @@ export function SkillsMarketplace() {
   const [pending, setPending] = useState<SkillsCatalogEntry | null>(null)
   const [installed, setInstalled] = useState<SkillInstallResult | null>(null)
   const [trained, setTrained] = useState<SkillTrainResult | null>(null)
+  const [promoted, setPromoted] = useState<SkillPromoteResult | null>(null)
 
   /** Discards a response for a superseded request (a different project, a refresh). */
   const generation = useRef(0)
@@ -163,9 +165,11 @@ export function SkillsMarketplace() {
       setBusy({ kind: 'training', name })
       setError(null)
       setTrained(null)
+      setPromoted(null)
       try {
-        // `write` is not passed: the run reports what it found and the user decides.
-        setTrained(await call.call(client, { root: projectRoot, name }))
+        // Write only the measured candidate artifact. It lives outside the active
+        // skill directory and cannot affect a run until the user reviews and promotes it.
+        setTrained(await call.call(client, { root: projectRoot, name, write: true }))
       } catch (err) {
         setError(`Training failed: ${message(err)}`)
       } finally {
@@ -173,6 +177,26 @@ export function SkillsMarketplace() {
       }
     },
     [client, projectRoot],
+  )
+
+  const promote = useCallback(
+    async (name: string) => {
+      const call = client.skillPromote
+      if (call === undefined || projectRoot === null) return
+      setBusy({ kind: 'promoting', name })
+      setError(null)
+      setPromoted(null)
+      try {
+        const result = await call.call(client, { root: projectRoot, name })
+        setPromoted(result)
+        if (result.ok) await refresh(projectRoot)
+      } catch (err) {
+        setError(`Promotion failed: ${message(err)}`)
+      } finally {
+        setBusy(null)
+      }
+    },
+    [client, projectRoot, refresh],
   )
 
   const entries = useMemo(() => {
@@ -372,7 +396,15 @@ export function SkillsMarketplace() {
         )}
 
         {installed !== null && <InstallOutcome result={installed} />}
-        {trained !== null && <TrainOutcome result={trained} />}
+        {trained !== null && (
+          <TrainOutcome
+            result={trained}
+            promoted={promoted}
+            promoting={busy?.kind === 'promoting' && busy.name === trained.name}
+            canPromote={client.skillPromote !== undefined}
+            onPromote={() => void promote(trained.name)}
+          />
+        )}
       </div>
 
       {pending !== null && (
@@ -530,7 +562,19 @@ function InstallOutcome({ result }: { result: SkillInstallResult }) {
  * Both scores are always shown, including when nothing was accepted. A trainer that
  * only reports its wins is not a measurement.
  */
-function TrainOutcome({ result }: { result: SkillTrainResult }) {
+function TrainOutcome({
+  result,
+  promoted,
+  promoting,
+  canPromote,
+  onPromote,
+}: {
+  result: SkillTrainResult
+  promoted: SkillPromoteResult | null
+  promoting: boolean
+  canPromote: boolean
+  onPromote: () => void
+}) {
   if (!result.ok) {
     return (
       <div className={styles.notice} role="status">
@@ -538,6 +582,12 @@ function TrainOutcome({ result }: { result: SkillTrainResult }) {
       </div>
     )
   }
+
+  const hasCandidate =
+    result.improved === true &&
+    typeof result.artifactPath === 'string' &&
+    typeof result.body === 'string'
+
   return (
     <div className={styles.notice} role="status">
       <Zap size={13} />{' '}
@@ -549,12 +599,45 @@ function TrainOutcome({ result }: { result: SkillTrainResult }) {
       {result.budget?.refusal !== null && result.budget?.refusal !== undefined && (
         <div className={styles.warning}>{result.budget.refusal}</div>
       )}
-      {result.improved === true && (
+      {hasCandidate && (
         <div className={styles.warning}>
-          Nothing was written. The proposed body is available from the engine; review it before
-          replacing the installed skill.
+          <div>
+            The installed skill has not changed. Review the measured candidate below, stored at{' '}
+            <code>{result.artifactPath}</code>.
+          </div>
+          <pre
+            className={styles.digestFull}
+            aria-label={`Trained candidate for ${result.name}`}
+          >
+            {result.body}
+          </pre>
+          {canPromote ? (
+            <button className={styles.actionButton} disabled={promoting} onClick={onPromote}>
+              {promoting ? 'Activating…' : 'Use trained version'}
+            </button>
+          ) : (
+            <div>The active transport cannot promote a training candidate.</div>
+          )}
         </div>
       )}
+      {result.improved === true && !hasCandidate && (
+        <div className={styles.warning}>
+          The run reported an improvement but returned no reviewable candidate artifact, so it
+          cannot be activated here.
+        </div>
+      )}
+      {promoted !== null &&
+        (promoted.ok ? (
+          <div className={styles.notice} role="status">
+            <Check size={13} /> Activated {promoted.name} at {promoted.path}; retained grant{' '}
+            {promoted.granted?.join(', ') || 'nothing'} and active digest{' '}
+            {promoted.digest?.slice(0, 18)}….
+          </div>
+        ) : (
+          <div className={styles.error} role="alert">
+            <AlertCircle size={13} /> {promoted.reason}
+          </div>
+        ))}
     </div>
   )
 }

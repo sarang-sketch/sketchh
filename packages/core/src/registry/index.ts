@@ -43,6 +43,23 @@ export {
 } from './install.js'
 export type { InstallOptions, InstallResult, VerifyResult } from './install.js'
 
+export {
+  INSTALLED_GRANT_VERSION,
+  INSTALLED_GRANTS_DIRECTORY,
+  installedSkillGrantPath,
+  isManagedInstalledSkill,
+  isSafeSkillName,
+  promoteInstalledSkill,
+  readInstalledSkillGrant,
+  trainingArtifactPath,
+  writeInstalledSkillGrant,
+} from './grants.js'
+export type {
+  InstalledGrantResult,
+  InstalledSkillGrant,
+  PromoteSkillResult,
+} from './grants.js'
+
 export { pinRegistry, writePinnedRegistry } from './pin.js'
 export type { PinOptions, SeedMetadata } from './pin.js'
 

@@ -24,6 +24,7 @@ import {
   diffDigests,
   hashSkillDirectory,
   installSkill,
+  installedSkillGrantPath,
   installedSkillsDir,
   loadManifest,
   MANIFEST_FILENAME,
@@ -321,6 +322,11 @@ describe('the pinned manifest', () => {
     expect(() =>
       parseManifest(JSON.stringify({ ...base, entries: [{ ...entry, digest: 'md5:abc' }] })),
     ).toThrow(/must start with "sha256:"/)
+    for (const unsafeName of ['../escape', 'nested/skill', 'nested\\skill', '.', '..', ' padded']) {
+      expect(() =>
+        parseManifest(JSON.stringify({ ...base, entries: [{ ...entry, name: unsafeName }] })),
+      ).toThrow(/one safe directory segment/)
+    }
     // Two entries with one name would make install order-dependent.
     expect(() =>
       parseManifest(JSON.stringify({ ...base, entries: [entry, { ...entry, version: '2' }] })),
@@ -486,6 +492,9 @@ describe('install (Requirement 11.2)', () => {
     expect(result.granted).toEqual(['fs:read:project'])
     expect(result.warnings.join(' ')).toContain('git:read')
     expect(result.warnings.join(' ')).toContain('will be denied')
+    const authority = await readFile(installedSkillGrantPath(project, 'commit-context'), 'utf8')
+    expect(authority).toContain('fs:read:project')
+    expect(authority).not.toContain('git:read')
   })
 
   it('reports a missing entry by name instead of installing something else', async () => {

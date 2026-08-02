@@ -1,7 +1,7 @@
 # NEED TO DO — Sketch, from here to done
 
 **Audience:** the developer who is going to write this code.
-**Status date:** task 12.3 release assembly and GitHub provenance path implemented; native, release, and clean-machine evidence pending.
+**Status date:** task 12.4 production flywheel proved with a local community-format fixture; real third-party, native, release, and clean-machine evidence pending.
 **Authority:** `.kiro/specs/sketch-engineering-os/{requirements,design,tasks}.md` are the contract.
 This file is the working plan on top of them. Where this file and the spec disagree, the spec wins
 and you should fix this file.
@@ -85,8 +85,8 @@ writes down what happened. Do not describe a wired interface as a working featur
 
 ## 1. Where the project actually stands
 
-**Status date: Phase 11 gated; tasks 12.1, 12.2, and 12.3 in progress. 78 of 96 tasks complete.** Core
-1,028 tests / 51 files, desktop 495 tests / 52 files, build and typecheck green. The native sidecar build
+**Status date: Phase 11 gated; tasks 12.1 through 12.4 in progress. 78 of 96 tasks complete.** Core
+1,029 tests / 52 files, desktop 498 tests / 52 files, build and typecheck green. The native sidecar build
 and protocol smoke check pass. Cross-platform package jobs and the strict `<100,000,000-byte` size
 gate are implemented, but 12.1 remains open until native Windows, macOS, and Linux workflow jobs
 produce uploaded installers and passing size manifests.
@@ -1057,9 +1057,14 @@ because it demos well. The plan forbids that.
   successful real version-tag release and independent verifier output. GitHub provenance is not
   Authenticode or Apple Developer ID signing/notarization; no project-owned native signing identity
   is configured.
-- **12.4 Prove the flywheel turns server-less** _(26.4)_ — a community skill installs, runs, and trains
-  on captured evals **with no Sketch server involved**. This is the strategic claim of the whole
-  project: the improvement loop needs no vendor.
+- **12.4 Prove the flywheel turns server-less** _(26.4)_ — the production path is now proved with
+  a locally authored community-format `skill.json` fixture: digest-bound open-registry review,
+  persisted narrower authority, production run, four captured/replayed evals, strict held-out
+  improvement, candidate review, explicit promotion, and rerun all work in process with `fetch`
+  forbidden and no HTTP/stdio Sketch server. Training writes outside the active skill directory and
+  cannot replace it silently. **Still open:** retain a genuine third-party community skill with
+  source/license provenance and run those bytes through the same gate; the local fixture is format
+  and integration evidence, not community provenance.
 - **12.5 Extensibility audit** _(26.5)_ — confirm and document an extension point for providers,
   agents, skills, tools, models, memory, workflows, themes, languages.
 - **12.6 Canonical end-to-end acceptance** _(24.7, 6.4, 4.7, 20.4)_ — the "build an Airbnb clone" flow

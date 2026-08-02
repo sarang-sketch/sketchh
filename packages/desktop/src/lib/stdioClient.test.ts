@@ -158,6 +158,25 @@ describe('StdioSketchClient — framing', () => {
     await expect(pending).resolves.toMatchObject({ runId: 'r-provider' })
   })
 
+  it('forwards explicit skill promotion with the exact root and name', async () => {
+    const fake = new FakeSidecar()
+    const client = new StdioSketchClient({ spawn: fake.spawn, onDiagnostic: () => {} })
+
+    const pending = client.skillPromote({ root: 'C:/repo', name: 'reviewer' })
+    const request = await nextRequest(fake)
+    expect(request).toMatchObject({
+      method: 'skill-promote',
+      params: { root: 'C:/repo', name: 'reviewer' },
+    })
+
+    fake.stdout(`${JSON.stringify({
+      id: request.id,
+      ok: true,
+      result: { ok: true, name: 'reviewer', path: 'C:/repo/.sketch/skills/reviewer/SKILL.md', reason: null },
+    })}\n`)
+    await expect(pending).resolves.toMatchObject({ ok: true, name: 'reviewer' })
+  })
+
   it('accepts a whole frame delivered without a trailing newline', async () => {
     // Tauri's shell plugin emits one `data` event per line, terminator stripped.
     const fake = new FakeSidecar()

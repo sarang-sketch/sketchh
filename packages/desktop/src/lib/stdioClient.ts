@@ -36,6 +36,7 @@ import type {
   SkillsCatalogResult,
   SkillInstallResult,
   SkillTrainResult,
+  SkillPromoteResult,
   VerifyContractResult,
   McpCatalogResult,
   StrategyCatalogResult,
@@ -573,6 +574,10 @@ export class StdioSketchClient implements SketchClient {
       ...(params.maxCalls !== undefined ? { maxCalls: params.maxCalls } : {}),
       ...(params.maxTokens !== undefined ? { maxTokens: params.maxTokens } : {}),
     })
+  }
+
+  async skillPromote(params: { root: string; name: string }): Promise<SkillPromoteResult> {
+    return this.call<SkillPromoteResult>('skill-promote', params)
   }
 
   // ── verification contract and MCP ─────────────────────────────────────────

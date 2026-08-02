@@ -43,6 +43,7 @@ import {
   type PingResult,
   type SketchClient,
   type SkillInstallResult,
+  type SkillPromoteResult,
   type SkillsCatalogResult,
   type SkillTrainResult,
 } from '../lib/client'
@@ -146,8 +147,13 @@ class EngineClient implements SketchClient {
   private readonly bus = createEventBus()
   private readonly ctx = methodContext()
   readonly installs: string[] = []
+  readonly trainWrites: boolean[] = []
+  readonly promotions: string[] = []
 
-  constructor(private readonly registryDir: string | null) {}
+  constructor(
+    private readonly registryDir: string | null,
+    private readonly trainingResult?: SkillTrainResult,
+  ) {}
 
   ping(): Promise<PingResult> {
     return Promise.resolve({ ok: true, version: 'test', transport: 'stdio' })
@@ -208,11 +214,22 @@ class EngineClient implements SketchClient {
     ) as Promise<SkillInstallResult>
   }
 
-  skillTrain(params: { root: string; name: string }): Promise<SkillTrainResult> {
+  skillTrain(params: {
+    root: string
+    name: string
+    write?: boolean
+  }): Promise<SkillTrainResult> {
+    this.trainWrites.push(params.write === true)
+    if (this.trainingResult !== undefined) return Promise.resolve(this.trainingResult)
     return METHODS['skill-train']!(
-      { root: params.root, name: params.name, provider: null },
+      { root: params.root, name: params.name, provider: null, ...(params.write === true ? { write: true } : {}) },
       { ...this.ctx, env: { SKETCH_FAKE_PROVIDER: '1' } },
     ) as Promise<SkillTrainResult>
+  }
+
+  skillPromote(params: { root: string; name: string }): Promise<SkillPromoteResult> {
+    this.promotions.push(params.name)
+    return METHODS['skill-promote']!(params, this.ctx) as Promise<SkillPromoteResult>
   }
 }
 
@@ -222,6 +239,7 @@ function withoutSkills(client: EngineClient): SketchClient {
   stripped.skillsCatalog = undefined
   stripped.skillInstall = undefined
   stripped.skillTrain = undefined
+  stripped.skillPromote = undefined
   return stripped
 }
 
@@ -456,6 +474,7 @@ describe('training from the panel (Requirement 9.6)', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: /Installed/ }))
     const train = await screen.findByText('Train on my project')
+    expect(client.trainWrites).toEqual([])
     fireEvent.click(train)
 
     // No runs have been captured in this temp project, so the honest answer is that
@@ -463,5 +482,57 @@ describe('training from the panel (Requirement 9.6)', () => {
     await waitFor(() => expect(document.body.textContent).toContain('at least 2 captured eval'), {
       timeout: 5000,
     })
+    expect(client.trainWrites).toEqual([true])
+    expect(screen.queryByText('Use trained version')).toBeNull()
+  })
+
+  it('shows the measured candidate and requires an explicit click before promotion', async () => {
+    const project = makeProject()
+    const registryDir = await makeRegistry()
+    const artifactPath = reg.trainingArtifactPath(project, 'commit-context')
+    const candidateBody = '# Commit context\n\nAlways include REVIEWED-CANDIDATE.'
+    const candidate = `---\nname: commit-context\ndescription: Explain history with the trained guidance.\ncapabilities: git:read, fs:read:project\n---\n\n${candidateBody}\n`
+    const client = new EngineClient(registryDir, {
+      ok: true,
+      name: 'commit-context',
+      improved: true,
+      accepted: 1,
+      baselineValScore: 0.5,
+      valScore: 1,
+      cases: 4,
+      split: { train: 2, val: 2 },
+      epochs: [],
+      budget: { calls: 1, tokens: 20, refusal: null },
+      artifactPath,
+      body: candidateBody,
+    })
+    await opened(project, client)
+
+    fireEvent.click(screen.getAllByText('Install…')[0]!)
+    fireEvent.click(await screen.findByText('Verify and install'))
+    await waitFor(() => expect(screen.getByText(/Installed commit-context/)).toBeDefined(), {
+      timeout: 5000,
+    })
+    write(project, join('.sketch', 'training', 'commit-context', 'best_skill.md'), candidate)
+
+    const activePath = join(project, '.sketch', 'skills', 'commit-context', 'SKILL.md')
+    expect(readFileSync(activePath, 'utf8')).not.toContain('REVIEWED-CANDIDATE')
+
+    fireEvent.click(screen.getByRole('tab', { name: /Installed/ }))
+    fireEvent.click(await screen.findByText('Train on my project'))
+
+    const review = await screen.findByLabelText('Trained candidate for commit-context')
+    expect(review.textContent).toContain('REVIEWED-CANDIDATE')
+    expect(client.trainWrites).toEqual([true])
+    expect(client.promotions).toEqual([])
+    // Merely training and rendering the review did not replace the installed bytes.
+    expect(readFileSync(activePath, 'utf8')).not.toContain('REVIEWED-CANDIDATE')
+
+    fireEvent.click(screen.getByText('Use trained version'))
+    await waitFor(() => expect(document.body.textContent).toContain('Activated commit-context'), {
+      timeout: 5000,
+    })
+    expect(client.promotions).toEqual(['commit-context'])
+    expect(readFileSync(activePath, 'utf8')).toContain('REVIEWED-CANDIDATE')
   })
 })

@@ -46,7 +46,15 @@ import {
   loadEvalCases as readEvalCases,
 } from '../evals/index.js'
 import type { EvalDeps } from '../evals/index.js'
-import { installSkill, installedSkillsDir, loadManifest } from '../registry/index.js'
+import {
+  installSkill,
+  installedSkillsDir,
+  isManagedInstalledSkill,
+  loadManifest,
+  promoteInstalledSkill,
+  readInstalledSkillGrant,
+  trainingArtifactPath,
+} from '../registry/index.js'
 import type { RegistryManifest } from '../registry/index.js'
 import { runTask } from '../loop/index.js'
 import { DiskFileWriter } from '../orchestrator/file-writer.js'
@@ -61,7 +69,6 @@ import {
 } from '../settings/index.js'
 import type { ProviderTestTarget } from '../settings/index.js'
 import {
-  BEST_SKILL_FILENAME,
   loadProjectContext,
   loadSkillFile,
   loadSkillFolder,
@@ -474,6 +481,7 @@ async function run(params: Record<string, unknown>, ctx: MethodContext): Promise
   )
 
   const skills = await loadRequestedSkills(root, params, task, ctx)
+  const granted = await grantForRun(root, skills, ctx)
   const retrievedContext = await retrieveContextFor(
     root,
     task,
@@ -492,7 +500,7 @@ async function run(params: Record<string, unknown>, ctx: MethodContext): Promise
 
   // THE TOOL LAYER (Requirement 22). Opt-in, scoped to the grant the loaded skills
   // actually hold, and torn down in `finally` whatever the run does.
-  const toolLayer = await openToolLayerFor(root, params, task, skills, events, ctx)
+  const toolLayer = await openToolLayerFor(root, params, task, skills, granted, events, ctx)
 
   const loopDeps = {
     adapter,
@@ -502,6 +510,7 @@ async function run(params: Record<string, unknown>, ctx: MethodContext): Promise
     files: new DiskFileWriter(),
     root,
     skills,
+    capabilityGrant: granted,
     projectContext: await loadProjectContext(root),
     ...(retrievedContext !== undefined ? { retrievedContext } : {}),
     ...(verifyPolicy !== undefined ? { verifyPolicy } : {}),
@@ -527,10 +536,9 @@ async function run(params: Record<string, unknown>, ctx: MethodContext): Promise
       ...loopDeps,
       strategy,
       ...(escalate !== undefined ? { escalate } : {}),
-      // The grant a role's capabilities are intersected with is the run's own grant — the
-      // union of what its skills declared. There is no `params.capabilities` here either,
-      // for the reason `grantForRun` states: nothing on the wire may widen a grant.
-      grant: grantForRun(skills),
+      // Roles can only narrow the same persisted grant the tool layer received.
+      // There is no wire parameter that can widen it.
+      grant: granted,
     })
   } finally {
     // A server left running holds a pipe, a port, and often a lock. `close()` never
@@ -540,26 +548,38 @@ async function run(params: Record<string, unknown>, ctx: MethodContext): Promise
 }
 
 /**
- * The grant in force for a run: the union of what its skills declared.
+ * The grant in force for a run.
  *
- * NOTHING ON THE WIRE CAN WIDEN THIS. There is deliberately no `params.capabilities`,
- * because a grant is consented to when a skill is installed (`registry/`) and the
- * install records what was agreed. A request parameter that could add `proc:spawn`
- * would make that consent decorative, and it would be the exact escalation the Phase 6
- * adversarial suite exists to prove impossible.
- *
- * With no skills loaded, `capabilitiesForSkill(undefined)` gives the documented default
- * — read this project, nothing else.
+ * Skills installed through the registry use the persisted, digest-bound grant the
+ * user approved. A missing, malformed, or stale record denies every capability.
+ * Explicit custom skill directories retain declaration-derived grants because no
+ * registry installation claimed authority over those local files.
  */
-function grantForRun(skills: readonly Skill[]): CapabilitySet {
+async function grantForRun(
+  root: string,
+  skills: readonly Skill[],
+  ctx: MethodContext,
+): Promise<CapabilitySet> {
   const union = new Set<Capability>()
   if (skills.length === 0) {
     for (const capability of capabilitiesForSkill(undefined).capabilities) union.add(capability)
   }
   for (const skill of skills) {
-    for (const capability of capabilitiesForSkill(skill.capabilities).capabilities) {
-      union.add(capability)
+    if (isManagedInstalledSkill(root, skill)) {
+      const persisted = await readInstalledSkillGrant(root, skill)
+      if (!persisted.ok || persisted.grant === null) {
+        ctx.log(`skill grant denied: ${persisted.reason}`)
+        continue
+      }
+      for (const capability of persisted.grant.capabilities) union.add(capability)
+      continue
     }
+    const declared = capabilitiesForSkill(skill.capabilities)
+    if (!declared.ok) {
+      ctx.log(`skill grant denied for ${skill.name}: ${declared.errors.join('; ')}`)
+      continue
+    }
+    for (const capability of declared.capabilities) union.add(capability)
   }
   return Object.freeze([...union].sort())
 }
@@ -591,13 +611,13 @@ async function openToolLayerFor(
   params: Record<string, unknown>,
   task: Task,
   skills: readonly Skill[],
+  granted: CapabilitySet,
   events: EventStore,
   ctx: MethodContext,
 ): Promise<{ host: McpHost; dispatcher: ToolDispatcher } | undefined> {
   const requested = optionalStringArray(params['mcpServers'], 'params.mcpServers')
   if (requested === undefined || requested.length === 0) return undefined
 
-  const granted = grantForRun(skills)
   const host = new McpHost({
     root,
     events,
@@ -1744,7 +1764,7 @@ async function skillTrain(params: Record<string, unknown>, ctx: MethodContext): 
     // Writing the artifact is opt-in: a training run the user has not looked at
     // should not silently replace the skill they installed.
     ...(write === true
-      ? { artifactPath: join(installedSkillsDir(root), name, BEST_SKILL_FILENAME) }
+      ? { artifactPath: trainingArtifactPath(root, name) }
       : {}),
   })
 
@@ -1763,6 +1783,31 @@ async function skillTrain(params: Record<string, unknown>, ctx: MethodContext): 
     // The winning body, so a surface can show a diff before the user writes it.
     body: result.skill.body,
   }
+}
+
+/** Activate the measured candidate only after an explicit post-training decision. */
+async function skillPromote(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
+  const root = resolve(optionalString(params, 'root', 'params.root') ?? ctx.cwd())
+  const name = readString(params, 'name', 'params.name')
+  const result = await promoteInstalledSkill(root, name)
+  if (result.ok) {
+    const events = new StreamingEventStore(
+      new JsonlEventStore({ baseDir: root, secrets: () => ctx.secrets() }),
+      (event) => ctx.emitEvent(event),
+    )
+    await events.emit({
+      runId: `promote-${name}`,
+      kind: 'tool_called',
+      payload: {
+        component: 'registry',
+        name: 'skill-promote',
+        skill: name,
+        digest: result.digest,
+        capabilities: result.granted,
+      },
+    })
+  }
+  return result
 }
 
 const SKILL_FILE = 'SKILL.md'
@@ -1874,6 +1919,7 @@ export const METHODS: Readonly<Record<string, MethodHandler>> = {
   'skills-catalog': skillsCatalog,
   'skill-install': skillInstall,
   'skill-train': skillTrain,
+  'skill-promote': skillPromote,
   // Task 7.3's curated MCP layer. READ-ONLY: this reports what the catalog offers and
   // what each entry is missing. Nothing here starts a server — that happens inside a
   // run, from `params.mcpServers`, and only for a capability the run's grant covers.

@@ -9,6 +9,7 @@ import type {
   SkillsCatalogResult,
   SkillInstallResult,
   SkillTrainResult,
+  SkillPromoteResult,
   VerifyContractResult,
   McpCatalogResult,
   StrategyCatalogResult,
@@ -245,6 +246,10 @@ export class HttpSketchClient implements SketchClient {
       ...(params.maxCalls !== undefined ? { maxCalls: params.maxCalls } : {}),
       ...(params.maxTokens !== undefined ? { maxTokens: params.maxTokens } : {}),
     })
+  }
+
+  async skillPromote(params: { root: string; name: string }): Promise<SkillPromoteResult> {
+    return this.callMethod<SkillPromoteResult>('skill-promote', params)
   }
 
   // ── verification contract and MCP ─────────────────────────────────────────

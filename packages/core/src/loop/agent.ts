@@ -152,6 +152,8 @@ export interface RunTaskDeps {
   signal?: AbortSignal
   /** Skills to put in front of the model. Loading is the caller's job. */
   skills?: readonly Skill[]
+  /** Resolved capability authority, recorded for audit; authorization stays in the dispatcher. */
+  capabilityGrant?: readonly string[]
   /** `AGENTS.md` / `CLAUDE.md` content. */
   projectContext?: ProjectContext
   /**
@@ -569,6 +571,7 @@ export async function runTask(task: Task, deps: RunTaskDeps): Promise<RunResult>
     component: 'agent-loop',
     messages: messages.length,
     skills: (deps.skills ?? []).map((s) => s.name),
+    capabilityGrant: deps.capabilityGrant ?? [],
     hasProjectContext: deps.projectContext !== undefined,
     // Presence and SIZE only. The retrieved text is repository content, and the
     // assembly step already logged the paths it chose (Requirement 18.6);

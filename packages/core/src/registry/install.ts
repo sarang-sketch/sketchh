@@ -43,11 +43,13 @@ import {
   type FileDigest,
 } from './hash.js'
 import type { ManifestEntry, RegistryManifest } from './manifest.js'
+import {
+  installedSkillsDir,
+  isSafeSkillName,
+  writeInstalledSkillGrant,
+} from './grants.js'
 
-/** Where skills are installed inside a project. */
-export function installedSkillsDir(projectRoot: string): string {
-  return join(projectRoot, '.sketch', 'skills')
-}
+export { installedSkillsDir } from './grants.js'
 
 /** Verification outcome for one skill directory against its pinned entry. */
 export interface VerifyResult {
@@ -230,6 +232,10 @@ export async function installSkill(options: InstallOptions): Promise<InstallResu
       written: [],
     }
   }
+  if (!isSafeSkillName(entry.name)) {
+    const reason = `refusing to install an unsafe skill name: ${JSON.stringify(entry.name)}`
+    return { ok: false, name: entry.name, warnings, reason, written: [] }
+  }
 
   // THE MARKETPLACE GATE (Requirement 11.6). An `open` registry accepts submissions
   // from anyone, so an entry from one is installable only with an `approved` review
@@ -336,6 +342,28 @@ export async function installSkill(options: InstallOptions): Promise<InstallResu
       )
     }
   }
+
+  // Bind the persisted authority to the exact installed tree. A stale file from
+  // an older install therefore fails closed instead of inheriting a fresh grant.
+  const active = await hashSkillDirectory(targetDir)
+  if (active.digest !== verified.computed) {
+    const reason =
+      `installed bytes for "${entry.name}" do not reproduce the reviewed digest; ` +
+      `no capability grant was written`
+    await emit('tool_denied', { name: 'skill-install', skill: entry.name, reason })
+    return { ok: false, name: entry.name, dir: targetDir, warnings, reason, written }
+  }
+  await writeInstalledSkillGrant(
+    options.projectRoot,
+    {
+      version: 1,
+      name: entry.name,
+      sourceDigest: verified.computed,
+      activeDigest: active.digest,
+      capabilities: grant.capabilities,
+    },
+    options.writeFileBytes,
+  )
 
   await emit('tool_called', {
     name: 'skill-install',

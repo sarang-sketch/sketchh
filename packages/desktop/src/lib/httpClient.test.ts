@@ -56,4 +56,25 @@ describe('HttpSketchClient.run', () => {
     const frame = JSON.parse(String(init.body)) as { params: Record<string, unknown> }
     expect(frame.params).not.toHaveProperty('provider')
   })
+
+  it('forwards explicit skill promotion with the exact root and name', async () => {
+    const fetch = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      response({ ok: true, name: 'reviewer', path: 'C:/repo/.sketch/skills/reviewer/SKILL.md', reason: null }),
+    )
+    vi.stubGlobal('fetch', fetch)
+    vi.stubGlobal('EventSource', undefined)
+    const client = new HttpSketchClient({ baseUrl: 'http://127.0.0.1:1420' })
+
+    await expect(client.skillPromote({ root: 'C:/repo', name: 'reviewer' })).resolves.toMatchObject({
+      ok: true,
+      name: 'reviewer',
+    })
+
+    const init = fetch.mock.calls[0]![1] as RequestInit
+    const frame = JSON.parse(String(init.body)) as { method: string; params: Record<string, unknown> }
+    expect(frame).toMatchObject({
+      method: 'skill-promote',
+      params: { root: 'C:/repo', name: 'reviewer' },
+    })
+  })
 })

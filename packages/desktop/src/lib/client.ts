@@ -173,6 +173,17 @@ export interface SkillTrainResult {
   body?: string
 }
 
+/** Result of explicitly activating a reviewed training candidate. */
+export interface SkillPromoteResult {
+  ok: boolean
+  name: string
+  path?: string
+  digest?: string
+  /** The persisted registry grant retained after promotion. */
+  granted?: string[]
+  reason: string | null
+}
+
 // ── the verification contract, as a surface sees it ─────────────────────────
 
 /** The nine stages, fixed in contract order by Requirement 4.3. */
@@ -684,6 +695,9 @@ export interface SketchClient {
     },
     options?: { signal?: AbortSignal },
   ): Promise<SkillTrainResult>
+
+  /** Activate a reviewed, measured training artifact. Never called by training itself. */
+  skillPromote?(params: { root: string; name: string }): Promise<SkillPromoteResult>
 
   // ── verification contract ─────────────────────────────────────────────────
   //
