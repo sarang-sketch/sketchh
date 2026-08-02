@@ -277,26 +277,26 @@ Phase 4 numbering stays intact for anything that references it.
 
 ## Phase 7 — Verification contract and MCP
 
-- [ ] 7. Full verification contract, live environment feedback, and curated MCP
-- [~] 7.1 Build the verify policy
+- [x] 7. Full verification contract, live environment feedback, and curated MCP
+- [x] 7.1 Build the verify policy
   - Nine ordered stages: format, lint, typecheck, build, unit, integration, security, performance, dependency-audit
   - `verify.yaml` at the project root takes precedence; auto-detect per stack when absent, extending the existing node/python/rust/go detector
   - Unconfigured stages report as skipped without failing
   - A task is `ok` only when every non-skipped stage passed, or none were configured
   - _Requirements: 4.3, 4.4, 4.5, 4.7, 4.8_
-- [~] 7.2 Add live environment feedback
+- [x] 7.2 Add live environment feedback
   - Browser tool plus an application runner capturing console output and runtime errors
   - A runtime error means not done; a failure to start is a verification failure with captured output; the stage is skippable where it does not apply
   - _Requirements: 23.1, 23.2, 23.3, 23.4_
-- [~] 7.3 Build the curated isolated MCP registry
+- [x] 7.3 Build the curated isolated MCP registry
   - Hand-rolled JSON-RPC over stdio, no SDK dependency; curated and pinned coverage of GitHub, Docker, Figma, Notion, Slack, terminal, browser, filesystem, SSH, Cloudflare, Supabase, databases, Android emulator, and Playwright
   - Route all side-effecting model actions through the tool layer, emitting `tool_called` or `tool_denied`
   - Per-run and per-capability scoped grants; a hanging server times out, is marked unavailable for the run, and the run continues
   - Surface tool failures, reasons, and retries rather than hiding them — replace the hardcoded MCP badge and tooltip with real status
   - _Requirements: 22.1, 22.2, 22.3, 22.4, 22.5, 27.5_
-- [~] 7.4 Build the Test Results panel
+- [x] 7.4 Build the Test Results panel
   - _Requirements: 27.1_
-- [~] 7.5 Phase 7 gate
+- [x] 7.5 Phase 7 gate
   - Prove broken tests or a broken running app both mean not done, and that a hanging tool cannot hang a run
   - _Requirements: 4.7, 23.2, 22.3_
 

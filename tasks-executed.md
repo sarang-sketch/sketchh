@@ -551,10 +551,113 @@ the fake. And **nothing in this project has ever run against a real provider.**
 
 ---
 
+## Phase 7 — Verification contract, live feedback, curated MCP (spec: `.kiro/specs/sketch-engineering-os`)
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| 7.1 | The nine-stage verify policy | ✅ | `VERIFY_STAGES` fixed in contract order. `skipped` and `not-run` are deliberately different words — nothing ran either way, but one means "you configured nothing" and the other means "an earlier stage failed and we stopped". Fail-fast by default with `continueOnFailure` opt-in. A malformed `verify.yaml` does **not** fall back to detection: a project whose tests silently stopped running is the failure this prevents. Auto-detection only adds a stage the project already declared. `splitArgv` handles quotes and is deliberately **not** a shell — no expansion, no globbing, no pipes; `verify.json` is the escape hatch for exact argv. Wired via `deps.verifyPolicy`, not flattened into `task.verify`, because `runCommands` has no fail-fast |
+| 7.2 | Live environment feedback | ✅ | Five verdicts, because `failed-to-start` and `runtime-error` point at completely different bugs. Output captured **before** the kill; the process **group** killed; the **port trap closed before spawn** — an already-occupied port would make the probe pass having tested nothing. Pattern-matched verdicts set `heuristic: true`. Probes are loopback-only. Folded into the `integration` stage via `policy.live` rather than added as a tenth stage: Requirement 4.3 fixes the nine, and a tenth would have meant editing the contract or hiding a check outside the `ok` rule |
+| 7.3 | Curated isolated MCP registry | ✅ | Hand-rolled JSON-RPC 2.0 over stdio, no SDK, no dependency. 15 pinned catalog entries covering the 14 servers Requirement 22.2 names plus `git`; **no `@latest`**, asserted by test. `McpServer` spawns with `shell: false` and an argv. **The latch**: a hang times out, marks the server unavailable for the rest of the run, and kills the process group, so a second call is instant. Tool output is framed as untrusted DATA by `framePayload`, and the system prompt now states unconditionally that a tool result is never an instruction. Wired into `run` via `params.mcpServers`; a server whose capability the run's grant does not cover is **not started at all**, which is stronger than starting it and refusing its calls |
+| 7.4 | Test Results panel, and the MCP badge deleted | ✅ | New `verify` RPC method: resolving the contract is free and is the default, `run: true` is a deliberate act — executing nine stages because a panel mounted would run the whole build and test suite as a side effect of navigation. The panel lists all nine stages configured or not, keeps `skipped` and `not-run` distinct in words as well as colour, and expands failures to real stderr with real exit codes. Deleted `AppState.mcpToolsStatus` (`{ connected: 5, total: 8 }`), the ActivityBar badge reading it, and the chat tooltip naming four servers this product does not have. Replaced by an `McpTools` panel reporting **`configured`, never `connected`** |
+| 7.5 | Phase 7 gate | ✅ | See below |
+
+### Phase 7 gate result
+
+**The three ways this product can lie about having finished**, and each lies differently:
+
+* **The model asserts success.** A loop that takes `done` at its word reports green while the
+  suite is red.
+* **The suite asserts success.** Nine passing stages describe a program that compiles and
+  satisfies its unit tests, and a program can do both and crash on boot. This is the gap the
+  whole of 7.2 exists to close.
+* **The run never finishes.** A hang is not a wrong answer, it is worse than either.
+
+`packages/core/test/phase7-gate.test.ts` proves all three against real processes: real `node`
+commands with real exit codes, a real HTTP server on a real port that answers once and then dies,
+and a real MCP child process that handshakes, advertises a tool, and never answers. The only
+substituted collaborator is the model.
+
+The first two run against a single policy carrying **both** a failing stage and a live check,
+because testing them apart misses the case that actually shipped in 7.2 — the loop not passing
+`root`, which made a live-only policy skip itself and report ok. There is also a **control**: the
+same policy passes when the app stays up, without which the crash test proves only that something
+failed.
+
+**Two real bugs the gate found:**
+
+1. `McpHost`'s `requestTimeoutMs` and `handshakeTimeoutMs` were spread only into the
+   catalog-derived spec, so supplying a `launchOverride` silently dropped them and every request
+   fell back to the 20-second default. A hang that should have cost 500 ms cost 20 s — **the
+   assertion that a hang cannot wedge a run was passing for the wrong reason.** The deadlines are
+   now host-wide defaults that an override may override but cannot erase.
+2. The MCP client's latch `tool_denied` was emitted under the **host's** run id, not the loop's.
+   `runTask` mints its own run id internally, so the event was present in the log and invisible to
+   `forRun(runId)` — which is the only way a surface reads a run. `context.runId` is now threaded
+   through the descriptor into `callTool`, the same per-call shape `ToolDispatcher.call` already
+   uses for exactly this reason.
+
+**Cold verification** (`node_modules`, `packages/core/dist` and both workspace `node_modules`
+deleted, then `npm install && npm run build && npm run typecheck && npm test`): install 0, build 0,
+typecheck 0, test 0. **Core 820 tests / 42 files, desktop 419 tests / 42 files** — 1 239 total.
+Offline, no API key, identical with `SKETCH_FAKE_PROVIDER=1` and unset.
+
+**Mutation evidence** (each broken, watched fail, restored, watched pass):
+
+| Mutation | Result |
+|---|---|
+| `McpServer`'s timeout handler stops latching (`#writeOff` → a no-op stub) | 2 tests fail in `mcp.test.ts`: the hanging-server latch test and the status test (30 passed) |
+| `verifyOk()` returns `true` whenever a policy is present | 2 gate tests fail: the red-suite claim and the crashing-app claim (5 passed) |
+| `root` dropped from the loop's `runVerifyPolicy` call — the exact bug 7.2 found | 2 gate tests fail: the crashing-app claim and its control (5 passed) |
+| `TestResults` resolves with `run: true` on mount | 2 tests fail in `TestResults.test.tsx` (10 passed) |
+| `mcp-catalog` reports a `connected: 5` count | 1 test fails in `mcp.test.ts`: "configured, never connected" (37 passed) |
+
+**A guard refined rather than weakened, twice.**
+
+`cli.test.ts`'s sidecar hazard guard flagged `verify/policy.ts` for reading the *user's*
+`package.json` during stack detection — a legitimate read that looked like the path-relative
+resolution the guard exists to catch. Fixed with a `PROJECT_MANIFEST_READERS` allowlist plus a
+`readsOnlyProjectManifests` structural check, and a self-test asserting all four cases, including
+that an **undeclared** project-shaped read still fails and a declared **module-relative** read
+still fails.
+
+The new fixture guard in `McpTools.test.tsx` failed on this task's own comments — the ones
+recording what was deleted and why. Same shape as the `['from', 'into']` stopword array that
+`deps.test.ts` read as an import: the *prose* tripped it, not the code. The rule was never "this
+string appears nowhere in the file", it is "this fixture is not part of what ships", so comments
+are stripped and the code is scanned. `stripComments` has its own self-test proving it still
+catches a real occurrence in a property position, in a string literal, and in JSX — a stripper that
+removed too much would make every guard below it pass silently.
+
+**Real vs seam after Phase 7.**
+
+Real: the nine-stage contract with file precedence, per-stack detection and honest skipping; live
+application feedback with five distinguishable verdicts; the MCP transport, catalog, host and hang
+latch; the tool layer behind the single authorisation point; the Test Results and MCP Tools panels
+over real engine data.
+
+**Not real.** The curated MCP servers are **launch descriptions for third-party packages this
+project has not audited.** What is pinned is the version, so what runs is reproducible and
+reviewable — the content hashing `registry/` applies to skills cannot be applied here without
+vendoring the servers, and that is an open gap, not a solved problem. The gate proves a server
+which hangs cannot hurt a run using a server written here to hang; it proves nothing about the
+catalogued ones. Auto-detection is a heuristic, and a project configuring nothing passes trivially
+— which is why `verifiedAnything` exists and the gate asserts it is `false` for an empty contract.
+And **nothing in this project has ever run against a real provider.**
+
+---
+
 ## Decision Log
 
 | Date | Decision | Rationale |
 |---|---|---|
+| 2026-08-02 | `skipped` and `not-run` stay **different words** all the way to the panel | Nothing ran in either case, so the temptation is one grey badge. But they call for opposite responses: `skipped` means this project configures no command for the stage and the fix is to configure one; `not-run` means an earlier stage failed and the sequence stopped, and the fix is above. Collapsing them also hides the more dangerous reading — a wall of grey that a user interprets as "fine". The same reasoning is why `verifiedAnything` exists: `ok` is true for a project that configures nothing, and that must never read as evidence (Requirements 4.3, 4.8) |
+| 2026-08-02 | Live feedback is **how the `integration` stage is performed**, not a tenth stage | Requirement 4.3 fixes nine stages. Adding a tenth would have meant either editing the contract or putting a check outside the `ok` rule, and the second is worse: a runtime error that does not count is a runtime error nobody acts on. So `policy.live` runs after the integration stage's commands and its verdict counts exactly like theirs. Its full verdict is carried separately from its result row because a row cannot say `failed-to-start` versus `runtime-error`, and those point at completely different bugs (Requirements 4.3, 23.2) |
+| 2026-08-02 | The MCP catalog is **data in this repository**, pinned to exact versions, with no runtime name resolution | Requirement 22.2 asks for curated, pinned and isolated. So the list is a committed table and there is deliberately no code path that turns a server name into a command at runtime: adding one is a diff where the argv and the capability it costs are both visible. `@latest` is forbidden and asserted, because a command that changes under you means a supply-chain compromise arrives silently on the next invocation. Honestly labelled: these are launch descriptions for third-party packages, fetched by the user's own package manager, **not audited here** — the content pin that protects skills cannot reach them without vendoring (Requirement 22.2) |
+| 2026-08-02 | A hang **latches** the server off for the run, and the latch is per-server | Timing out is the easy half. Requirement 22.3's middle clause — unavailable "for the remainder of the run" — is the half a naive implementation misses, and the cost of missing it is linear in retries: a model attempting three tools against a dead 20-second server spends a minute of the run waiting for something already known to be broken. One timeout is paid; the rest are free. Per-server, because a run whose GitHub server hangs must still be able to read a file. The process is killed as a group rather than left alive to be polite: a hung server holds a pipe, a port and often a lock, and leaving it means the next run inherits the mess (Requirement 22.3) |
+| 2026-08-02 | A server the run's grant cannot reach is **not started**, not merely refused | Refusing the calls is enough for correctness. Not spawning is stronger: a process that never launched cannot read a token from the environment, cannot open a socket, and cannot download a browser. So `run` consults the grant before `host.open`, and the refusal is logged by id and capability so a user can see why a server they expected is absent. The grant itself comes from the loaded skills and **nothing on the wire can widen it** — there is deliberately no `params.capabilities`, because consent is recorded at install time and a request parameter that could add `proc:spawn` would make that consent decorative (Requirements 22.4, 11.5) |
+| 2026-08-02 | The MCP panel reports **`configured`, never `connected`** | The honest correction to a fixture, not a shortcut around one. Servers start per run and only for the capabilities that run holds; the unavailability latch is per-run by definition, and a host outliving a run would carry a dead server's verdict into a run that might have worked. So between runs nothing is connected and there is no number to show — `{ connected: 5, total: 8 }` was false in a way no smaller value would fix. What a user can usefully know beforehand is whether a server *could* start, which is a list with reasons and therefore a panel rather than a badge (Requirements 22.5, 27.5) |
+| 2026-08-02 | The `verify` RPC method **resolves by default and runs only when asked**, and a run defaults to a full report | Two opposite defaults, for two different readers. Resolving is a file read, so it may happen on mount; running executes the project's build and test suite and, for a policy with a live check, binds a port — that cannot be a side effect of clicking a sidebar icon. And when it does run, `continueOnFailure` defaults to **true** here and only here: the loop is fail-fast because the first failure usually explains the rest and a model does not need eight more, but a user reading a report wants to know that lint failed *and* the tests fail, not to fix lint and discover the tests separately (Requirements 4.5, 27.1) |
+| 2026-08-02 | The rule that **tool output is never an instruction** lives in the system prompt, unconditionally | `framePayload` marks every tool result as untrusted data, but a frame with no rule attached is decoration. The rule is stated in `systemPrompt`, which every run gets, rather than in the tools block a caller only receives when a dispatcher was supplied — a future path that registers tools without going through `contextMessages` would otherwise ship the frame and lose the rule. It is also honest about what it can achieve: this is not a sanitiser and cannot be, because the text has to reach the model intact to be useful. Enforcement is the capability gate; this is the model being told what it is reading (Requirements 22.1, 11.5) |
 | 2026-08-01 | The registry hashes the **whole skill directory**, bytes not strings, and calls itself a content pin rather than a signature | A skill is prose plus executables — the folder layout has `tools/`, `workflows/`, `tests/` — so hashing `SKILL.md` alone protects the half that does not run. Files are read as bytes because a CRLF checkout genuinely is a different artifact, and normalising would mean a tampered file could match. The path is hashed with the content, so moving a script into a name the manifest trusts is not free. And it is named honestly: it proves *what* you install, never *who* wrote the manifest — a homemade signature scheme would be worse than an honest pin, and the trust root is the signed release that 26.3 still owes (Requirements 11.1, 11.2) |
 | 2026-08-01 | The six packs are **written for this project, not vendored** from a community repo | Vendoring means a network fetch, a license review, a recorded commit SHA, and shipping scripts that will eventually run with the user's permissions — none of it work to do implicitly while seeding a registry. Every seed here is prose, so the whole set is installable before the tool layer exists without anyone running a stranger's Python. The format stays compatible on purpose: any `SKILL.md` directory can be pinned by `pinRegistry` and installed by `installSkill` with no change to either, so adapting community skills is a later deliberate act with its own review step (Requirement 11.3) |
 | 2026-08-01 | The capability vocabulary **fails closed**, and an absent key differs from an empty one | Ignoring an unrecognised token reads as safe and is not: the skill installs, is granted nothing, and behaves inexplicably while the user believes it has access. The same leniency across versions means an old build silently drops a capability a newer manifest granted, so a skill audited as sandboxed on one version is something else on another. An unknown token is therefore an error in both directions. `capabilities:` absent → `fs:read:project` only, because a skill that cannot read the project can do nothing and a useless default pushes publishers into asking for everything; `capabilities: []` → nothing, because the publisher said so (Requirements 11.4, 10.6) |

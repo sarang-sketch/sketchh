@@ -85,28 +85,32 @@ writes down what happened. Do not describe a wired interface as a working featur
 
 ## 1. Where the project actually stands
 
-**Status date: Phase 6 gated. 48 of 96 tasks complete. Phases 1, 1.5, 2, 3, 4, 5 and 6 are done and
-gated. Phase 7 is next.** The per-task detail below still reads from the Phase 3 vantage point in
-places — where it does, `tasks-executed.md` and `.kiro/specs/sketch-engineering-os/HANDOFF.md` are
-newer and win. (The `Status date` line at the very top of this file is older still; treat this
-section as the current one.)
+**Status date: Phase 7 gated. 55 of 96 tasks complete. Phases 1, 1.5, 2, 3, 4, 5, 6 and 7 are done
+and gated. Phase 8 (cost and budget) is next.** The per-task detail below still reads from the
+Phase 3 vantage point in places — where it does, `tasks-executed.md` and
+`.kiro/specs/sketch-engineering-os/HANDOFF.md` are newer and win. (The `Status date` line at the
+very top of this file is older still; treat this section as the current one.)
 
 ```
-90e6c57  phase 5 task 5.6 — phase 5 gate, context and diagram claims measured on a fifty-file fixture
-89d88a1  phase 5 task 5.6 part 2 — smart-case lexical matching per term
-90fd866  phase 5 task 5.6 part 1 — multi-term lexical retrieval, retrieved-context seam, opt-in assembly on the wire
-ad76767  phase 5 task 5.5 part 2 — architecture rpc method, client seam, Live Architecture panel
-f6e925a  phase 5 task 5.5 part 1 — deterministic architecture generator, evidence or unavailable
-066fa76  phase 5 task 5.4 — context assembly under a token budget
-c0c20ad  phase 5 task 5.3 — offline-first embeddings
-74bd5d5  phase 5 task 5.2 — hybrid retrieval, RRF fusion, capped rerank
-5d0bd61  phase 5 task 5.1 — persisted repo graph, incremental by content hash
+17c99ad  phase 7 task 7.5 — Phase 7 gate, plus two real bugs it found
+a36fc39  phase 7 task 7.4 — Test Results panel, MCP Tools panel, hardcoded badge deleted
+1105826  phase 7 task 7.3 — curated MCP tool layer, hang latch, the run seam
+01d2d75  phase 7 task 7.2 — live environment feedback, capture before kill, kill the group
+d394831  phase 7 task 7.1 — nine-stage verification contract, verify.yaml over detection
+3140073  phase 6 complete — gate green cold, gate result and eight decisions logged
+24f465d  phase 6 task 6.5 — marketplace gate, open registries need an approved review of the bytes
+d0d3cc0  phase 6 task 6.4 — real Skills surface, three fixtures deleted, grant shown before consent
+90e6c57  phase 5 task 5.6 — phase 5 gate, claims measured on a fifty-file fixture
 d759311  phase 4 complete — self-hosted fonts, README zero-dollar recipe, gate green cold
 ```
 
-Current suite, from a **cold install** (`node_modules` and `packages/core/dist` deleted):
-**core 711 tests / 38 files green, desktop 393 tests / 40 files green**, build 0, typecheck 0,
-offline, no key, identical with `SKETCH_FAKE_PROVIDER=1` and unset.
+Current suite, from a **cold install** (`node_modules`, `packages/core/dist` and both workspace
+`node_modules` deleted): **core 820 tests / 42 files green, desktop 419 tests / 42 files green**,
+build 0, typecheck 0, offline, no key, identical with `SKETCH_FAKE_PROVIDER=1` and unset.
+
+**Run the suites per workspace** — `npm test -w @sketch/core`, `npm test -w @sketch/desktop`. Not
+`npx vitest run --root packages/<x>` from the repo root: several guard tests read source relative to
+the process cwd, so that form reports ~58 phantom failures which vanish when run in-workspace.
 
 **Cold order matters: `install → build → typecheck → test`.** The desktop typecheck resolves
 `@sketch/core` through its emitted `.d.ts`, so running it before `build` on a cold tree produces ~43
@@ -153,8 +157,8 @@ phantom errors. §0.2's ordering was written before this bit, and this is the co
 
 | Thing | Current reality | Fixed by |
 |---|---|---|
-| `proposeEdit` in the trainer | offline scripted stub | **6.6** |
-| Tool layer | **does not exist**; `tool` actions emit `tool_denied` | **7.3** |
+| `proposeEdit` in the trainer | **wired** — provider-backed, body-only rewrites behind the strict `>` gate | done (6.6) |
+| Tool layer | **wired** — curated MCP catalog, per-run host, hang latch, all behind the one capability gate. Opt-in on the wire (`params.mcpServers`), and the catalogued servers are unaudited third-party packages pinned by version | done (7.3) |
 | `ask` action | terminates the run; there is no interactive channel | *unowned — see §4.1* |
 | Run cancellation | `runTask` accepts an `AbortSignal` the CLI wire cannot reach | *unowned — see §4.1* |
 | `FileExplorer` | **real** — lazy `read_dir`, opens files (3.4) | done |
@@ -163,12 +167,14 @@ phantom errors. §0.2's ordering was written before this bit, and this is the co
 | `DiffReview` | **real** — core hunk parser/applier, per-hunk verdicts, run-scoped plan mirror (3.2, 3.6) | done |
 | Ghost completions | wired to the client seam, **off by default**, no provider behind it | 4.1, 8.2 |
 | Monaco widget itself | doubled in tests (cannot run in jsdom); `ModelRegistry` is what is covered | *unowned — jsdom limit, not a stub* |
-| `SkillsMarketplace` | **real** � pinned registry, install verified by content hash, grant shown before consent (6.4). `MOCK_SKILLS` and both `AppState` copies deleted | done |
+| `SkillsMarketplace` | **real** — pinned registry, install verified by content hash, grant shown before consent (6.4). `MOCK_SKILLS` and both `AppState` copies deleted | done |
+| Test Results panel | **real** — nine stages from the project's own contract, failures expanding to captured stderr (7.4) | done |
+| MCP badge and tooltip | **deleted** — `AppState.mcpToolsStatus` (`{ connected: 5, total: 8 }`), the ActivityBar badge, and the tooltip naming four non-existent servers. Replaced by an `McpTools` panel reporting `configured`, never `connected` (7.4) | done |
 | Tool layer | **still does not exist**; `capabilities.ToolDispatcher` is the enforcement point with no tools registered | **7.3** |
 | `TaskLog` | `MOCK_TASKS`, non-functional filter | **10.4** |
 | `AgentTeamPanel` | fixture data **and unreachable** — no ActivityBar item dispatches `agents` | **10.4** |
 | `ModelSelector` | hardcoded providers; `state.providers` never rendered | **4.1** |
-| Cost dashboard | absent; `StatusBar` hardcodes `$1.4025` | **8.4** |
+| Cost dashboard | absent; `StatusBar` hardcodes `\.4025` | **8.4** |
 | `SecretStore` | interface with no persisting implementation | **4.2** |
 | `src/context/` | **wired** — graph, hybrid retrieval, embeddings, assembly, generator, and a `retrievedContext` seam into `runTask`. But retrieval is **opt-in on the wire** (`contextBudgetTokens`) and the desktop does not pass it, so a default desktop run sends no repository context | done (5); default-on waits on **8** |
 | `src/memory/`, legacy `verifier/`, legacy `orchestrator/` state machine | pre-existing code **not wired into the new loop** | **9, 10** |
@@ -745,9 +751,36 @@ the regression test fail.
 
 ---
 
-### Phase 7 — Verification contract and MCP (5 tasks)
+### Phase 7 — Verification contract and MCP (5 tasks) — **DONE, gated**
 
 The verification contract is what separates "the model said it was done" from "it is done".
+
+Kept below as the record of what was asked for. What shipped, and where it differs from this brief:
+
+- **`skipped` and `not-run` are different words**, all the way to the panel. Nothing ran in either
+  case, but one means "configure something" and the other means "an earlier stage failed and we
+  stopped". `verifiedAnything` exists for the same reason: `ok` is true for a project that
+  configures nothing, and that must never read as evidence.
+- **Live feedback is folded into the `integration` stage**, not added as a tenth. Requirement 4.3
+  fixes the nine; a tenth would have meant editing the contract or putting a check outside the `ok`
+  rule, and a runtime error that does not count is one nobody acts on.
+- **The MCP catalog has 15 entries** — the 14 that Requirement 22.2 names, plus `git`. Pinned by
+  exact version, `@latest` forbidden and asserted. They are **launch descriptions for third-party
+  packages this project has not audited**; the content pin that protects skills cannot reach them
+  without vendoring, and that is recorded as an open gap.
+- **A server the run's grant cannot reach is not started at all**, which is stronger than starting
+  it and refusing its calls. The grant comes from the loaded skills and there is deliberately no
+  `params.capabilities` — consent is recorded at install time and a wire parameter that could add
+  `proc:spawn` would make it decorative.
+- **The MCP badge was deleted, not replaced with a real count.** Servers start per run, so between
+  runs nothing is connected and there is no number. `mcp-catalog` reports `configured` — could
+  start, credentials present — and the panel says so in words.
+- **The `verify` RPC method resolves by default and runs only when asked**, but when it runs it
+  defaults to a *full* report rather than fail-fast: a user reading a report wants both failures at
+  once, whereas the loop wants the first one only.
+- **The gate found two bugs that were "green for the wrong reason"** — host timeouts dropped when a
+  launch override was supplied, and the hang latch's event logged under the wrong run id. Details in
+  the Phase 7 gate result in `tasks-executed.md`.
 
 ---
 

@@ -19,23 +19,46 @@ Phase 3 and had gone four phases stale.
 
 ## IMMEDIATE NEXT ACTION
 
-**Phase 6 is gated and committed. The working tree is clean. Start task 7.1 (the verify policy).**
+**Phase 7 is gated and committed. The working tree is clean. Start task 8.1 (cost and budget).**
 
-Cold install (`node_modules` and `packages/core/dist` deleted, then
+**55 of 96 tasks complete.** Phases 1, 1.5, 2, 3, 4, 5, 6 and 7 are done and gated.
+
+Cold install (`node_modules`, `packages/core/dist` and both workspace `node_modules` deleted, then
 `npm install && npm run build && npm run typecheck && npm test`): install 0, build 0, typecheck 0,
-test 0 — **core 711 tests / 38 files, desktop 393 tests / 40 files**, offline, no API key, and
+test 0 — **core 820 tests / 42 files, desktop 419 tests / 42 files**, offline, no API key, and
 identical with `SKETCH_FAKE_PROVIDER=1` and unset.
 
 **Run `build` BEFORE `typecheck` on a cold tree.** The desktop typecheck resolves `@sketch/core`
 through its emitted `.d.ts`, so with `packages/core/dist` deleted it fails with ~43 phantom errors
 that have nothing to do with the code. Correct cold order: `install → build → typecheck → test`.
 
+**Run the test suites per workspace** (`npm test -w @sketch/core`, `npm test -w @sketch/desktop`),
+not `npx vitest run --root packages/<x>` from the repo root. Several guard tests read source files
+relative to the process cwd, so the `--root` form reports ~58 phantom failures that vanish when run
+in-workspace. This cost time in this session; it is not a regression.
+
+The Phase 7 gate proof is `packages/core/test/phase7-gate.test.ts`. It proves the three ways this
+product can lie about having finished — the model asserting success, the *suite* asserting success
+while the app crashes on boot, and the run never finishing at all — against real `node` processes, a
+real HTTP server that answers once and then dies, and a real MCP child that handshakes and then goes
+silent. The first two share one policy on purpose, because testing them apart misses the bug that
+actually shipped in 7.2. Five guards were mutation-verified; see the Phase 7 gate result in
+`tasks-executed.md` for failing-test counts.
+
+**Two bugs that gate found**, both worth knowing about because both were "green for the wrong
+reason": `McpHost`'s timeouts were dropped when a `launchOverride` was supplied (a hang cost 20 s
+instead of 500 ms while the hang assertion passed), and the MCP latch's `tool_denied` was logged
+under the host's run id rather than the loop's, making it invisible to `forRun(runId)`.
+
+**The tool layer now exists** (7.3), so the Phase 6 caveat is retired: the capability gate has real
+descriptors behind it. What is still *not* proved is anything about the catalogued servers — they are
+launch descriptions for third-party packages this project has **not audited**, pinned by version
+only. The hang proof uses a server written here to hang.
+
 The Phase 6 gate proof is `packages/core/test/phase6-gate.test.ts`, which runs install → enforce →
 train as ONE chain over the shipped registry (the joins are where the failures live). Four guards
 were mutation-verified: the digest check, the capability authorisation, the trainer's strict `>`,
-and the optimizer's frontmatter strip. **There are still no tools** — 6.3 built the enforcement
-point and 7.3 populates it, so the adversarial suite proves the gate denies an ungranted call, not
-that a hostile skill cannot reach the network.
+and the optimizer's frontmatter strip.
 
 The Phase 5 gate proof is two files:
 `packages/core/test/phase5-gate.test.ts` (the fifty-file fixture, the smaller/more-relevant
@@ -50,15 +73,15 @@ Seven guards were mutation-verified at this gate — see the Phase 5 gate result
 ## Git state
 
 ```
-90e6c57  sketch: phase 5 task 5.6 - phase 5 gate, context and diagram claims measured on a fifty-file fixture   <- HEAD
-89d88a1  sketch: phase 5 task 5.6 part 2 - smart-case lexical matching per term
-90fd866  sketch: phase 5 task 5.6 part 1 - multi-term lexical retrieval, retrieved-context seam in the loop, opt-in assembly on the run wire
-ad76767  sketch: phase 5 task 5.5 part 2 - architecture rpc method, client seam, Live Architecture panel with local SVG flowchart renderer
-f6e925a  sketch: phase 5 task 5.5 part 1 - deterministic architecture generator, evidence or unavailable
-066fa76  sketch: phase 5 task 5.4 - context assembly under a token budget, signatures over bodies, consume the one-hop expansion
-c0c20ad  sketch: phase 5 task 5.3 - offline-first embeddings, cached provider fallback, latching degrade
-74bd5d5  sketch: phase 5 task 5.2 - hybrid lexical plus vector retrieval, RRF fusion, capped rerank
-5d0bd61  sketch: phase 5 task 5.1 - persisted repo graph, incremental by content hash, walker hardened and tested
+17c99ad  sketch: phase 7 task 7.5 - Phase 7 gate, plus two real bugs it found   <- HEAD
+a36fc39  sketch: phase 7 task 7.4 - Test Results panel, MCP Tools panel, and the hardcoded badge deleted
+1105826  sketch: phase 7 task 7.3 - curated MCP tool layer, hang latch, and the run seam
+01d2d75  sketch: phase 7 task 7.2 - live environment feedback, capture before kill, kill the group, refuse an occupied port
+d394831  sketch: phase 7 task 7.1 - nine-stage verification contract, verify.yaml over detection, wired into the loop
+3140073  sketch: phase 6 complete - gate green cold, tasks ticked, gate result and eight decisions logged
+24f465d  sketch: phase 6 task 6.5 - the marketplace gate, open registries require an approved review of the pinned bytes
+d0d3cc0  sketch: phase 6 task 6.4 - real Skills surface over the pinned registry, three fixtures deleted, grant and digest shown before consent
+90e6c57  sketch: phase 5 task 5.6 - phase 5 gate, context and diagram claims measured on a fifty-file fixture
 d759311  sketch: phase 4 complete - self-hosted fonts remove Google egress, README zero-dollar recipe, gate green cold
 ```
 
