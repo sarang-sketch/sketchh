@@ -85,28 +85,32 @@ writes down what happened. Do not describe a wired interface as a working featur
 
 ## 1. Where the project actually stands
 
-**Status date: Phase 8 gated. 60 of 96 tasks complete. Phases 1, 1.5, 2, 3, 4, 5, 6, 7 and 8 are
-done and gated. Phase 9 (memory and hygiene) is next.** The per-task detail below still reads from
-the Phase 3 vantage point in places — where it does, `tasks-executed.md` and
+**Status date: Phase 9 gated. 65 of 96 tasks complete. Phases 1, 1.5, 2, 3, 4, 5, 6, 7, 8 and 9 are
+done and gated. Phase 10 (eval-gated multi-agent) is next.** The per-task detail below still reads
+from the Phase 3 vantage point in places — where it does, `tasks-executed.md` and
 `.kiro/specs/sketch-engineering-os/HANDOFF.md` are newer and win. (The `Status date` line at the
 very top of this file is older still; treat this section as the current one.)
 
 ```
+54dbb20  phase 9 task 9.5 — Phase 9 gate, the contradiction chain end to end
+adf1505  phase 9 task 9.4 — Memory panel, and four memory RPC methods
+f864e9a  phase 9 tasks 9.1-9.3 — versioned memory, hygiene, reranked retrieval
+287a767  phase 8 complete — gate green cold, gate result and eight decisions logged
 c58dcf9  phase 8 task 8.5 — Phase 8 gate, plus a real overshoot the gate found
 3decd9c  phase 8 task 8.4 — Cost Dashboard, three fake cost numbers deleted
 3ab3a59  phase 8 tasks 8.2/8.3 — cost guard before the call, router, response cache
 f89bc67  phase 8 task 8.1 — usage accounting, one price table, nine duplicates deleted
 94aa773  phase 7 complete — gate green cold, gate result and eight decisions logged
-17c99ad  phase 7 task 7.5 — Phase 7 gate, plus two real bugs it found
-a36fc39  phase 7 task 7.4 — Test Results panel, MCP Tools panel, hardcoded badge deleted
-1105826  phase 7 task 7.3 — curated MCP tool layer, hang latch, the run seam
-3140073  phase 6 complete — gate green cold, gate result and eight decisions logged
 d759311  phase 4 complete — self-hosted fonts, README zero-dollar recipe, gate green cold
 ```
 
 Current suite, from a **cold install** (`node_modules`, `packages/core/dist` and both workspace
-`node_modules` deleted): **core 875 tests / 45 files green, desktop 438 tests / 44 files green**,
+`node_modules` deleted): **core 927 tests / 47 files green, desktop 453 tests / 45 files green**,
 build 0, typecheck 0, offline, no key, identical with `SKETCH_FAKE_PROVIDER=1` and unset.
+
+**One known flake**: `verify-live.test.ts`'s "starts, answers its probe, survives the settle window"
+binds a real port and failed once on a cold run, passing on every re-run. If it recurs, lengthen the
+readiness window — do not weaken the assertion.
 
 **Run the suites per workspace** — `npm test -w @sketch/core`, `npm test -w @sketch/desktop`. Not
 `npx vitest run --root packages/<x>` from the repo root: several guard tests read source relative to
@@ -179,7 +183,8 @@ phantom errors. §0.2's ordering was written before this bit, and this is the co
 | Response cache | **real** — content-addressed under `.sketch/cache/responses`, stores the response and only the hash of the prompt (8.3). Applied as an adapter decorator, so no caller is required to use it | done |
 | `SecretStore` | interface with no persisting implementation | **4.2** |
 | `src/context/` | **wired** — graph, hybrid retrieval, embeddings, assembly, generator, and a `retrievedContext` seam into `runTask`. But retrieval is **opt-in on the wire** (`contextBudgetTokens`) and the desktop does not pass it, so a default desktop run sends no repository context | done (5); default-on was blocked on **8**, which is now gated — the spend guard exists, so this is unblocked and simply not switched on yet |
-| `src/memory/`, legacy `verifier/`, legacy `orchestrator/` state machine | pre-existing code **not wired into the new loop** | **9, 10** |
+| `src/memory/` | **real** — versioned rows with validity windows, append-only superseding with a recorded reason, per-kind expiry, a reporting lint pass, reranked retrieval, and the Memory panel (9.1–9.4). But **memory does not reach a live run**: `memoryDigest` fills the `assembleContext({ memory })` seam and the `run` RPC does not pass it, and nothing writes memory during a run | done (9); run wiring open |
+| Legacy `verifier/` and the legacy `orchestrator/` state machine | pre-existing code **not wired into the new loop**. The orchestrator now gets versioned memory through `legacyProjectMemory` without being modified | **10** |
 
 ### 1.3 Two deliberate duplications
 
@@ -915,10 +920,30 @@ UI rather than implying live pricing.
 
 ---
 
-### Phase 9 — Memory and hygiene (5 tasks)
+### Phase 9 — Memory and hygiene (5 tasks) — **DONE, gated**
 
 The differentiator that compounds. An IDE that remembers *why* a decision was made is a different
 product from one that re-derives it every session.
+
+Kept below as the record of what was asked for. What shipped, and where it differs from this brief:
+
+- **Superseding appends a close op.** The brief said "never edits in place"; the consequence is that
+  closing a window cannot rewrite the row, so the store appends `{op:'close', …}` and the reader
+  folds. Asserted on the bytes, not just through the API.
+- **Nine kinds with a `text` payload**, not nine record shapes. Nine shapes would need nine
+  retrievers and nine renderers; anything genuinely structured goes in `data`, which nothing indexes.
+- **The lint pass reports and supersedes nothing**, and that limit is asserted in the gate rather
+  than left implicit. Automatic superseding happens on kind AND key only.
+- **Expiry has no default ages** and never touches `source: 'user'`.
+- **Retrieval reuses the Phase 5 primitives** via a new `fuseRankedIds`, rather than either copying
+  the scoring rule or writing memory out as files to fit `hybridSearch`'s `RepoGraph` signature.
+- **The panel shows retracted rows.** Retrieval hides them from a prompt; the panel is the opposite
+  case, because a history you cannot see is a history you cannot correct. The control says
+  **Retract**, not Delete, and requires a reason.
+- **The legacy `ProjectMemory` is bridged, not rewritten**, so the legacy orchestrator gains
+  versioning without being modified.
+- **Still open**: memory does not reach a live run (the `assembleContext({ memory })` seam is
+  unwired, like retrieval's), and nothing writes memory during a run.
 
 - **9.1 Versioned memory store** _(21.1, 21.2, 21.7)_ — persist decisions, architecture, summarised
   conversations, standards, preferences, style, bugs, performance history, test history. **Every row

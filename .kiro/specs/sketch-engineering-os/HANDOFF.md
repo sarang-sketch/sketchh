@@ -19,14 +19,31 @@ Phase 3 and had gone four phases stale.
 
 ## IMMEDIATE NEXT ACTION
 
-**Phase 8 is gated and committed. The working tree is clean. Start task 9.1 (versioned memory).**
+**Phase 9 is gated and committed. The working tree is clean. Start task 10.1 (the strategy
+dispatcher).**
 
-**60 of 96 tasks complete.** Phases 1, 1.5, 2, 3, 4, 5, 6, 7 and 8 are done and gated.
+**65 of 96 tasks complete.** Phases 1, 1.5, 2, 3, 4, 5, 6, 7, 8 and 9 are done and gated.
 
 Cold install (`node_modules`, `packages/core/dist` and both workspace `node_modules` deleted, then
 `npm install && npm run build && npm run typecheck && npm test`): install 0, build 0, typecheck 0,
-test 0 — **core 875 tests / 45 files, desktop 438 tests / 44 files**, offline, no API key, and
+test 0 — **core 927 tests / 47 files, desktop 453 tests / 45 files**, offline, no API key, and
 identical with `SKETCH_FAKE_PROVIDER=1` and unset.
+
+The Phase 9 gate proof is `packages/core/test/phase9-gate.test.ts`: record a decision, record the
+contradicting one, and prove a RELATED query returns the newer while the older is marked superseded
+— plus the join that matters most, that the prompt digest carries the newer and not the older. Four
+guards were mutation-verified.
+
+**Two Phase 9 gaps worth knowing.** Memory does **not reach a live run**: `memoryDigest` fills the
+`assembleContext({ memory })` seam that has existed since Phase 5 and the `run` RPC does not pass it,
+the same shape as retrieval being opt-in behind `contextBudgetTokens`. And **nothing writes memory
+during a run** — the loop records no decisions, so the store fills only from the panel or the legacy
+orchestrator through `legacyProjectMemory`.
+
+**One flake, named rather than hidden.** `verify-live.test.ts`'s "starts, answers its probe,
+survives the settle window" failed once on a cold run and passed on every re-run including the
+second cold pass. It binds a real port, so it is timing-sensitive under parallel load. Not related
+to Phase 9. If it recurs the fix is a longer readiness window, not a weaker assertion.
 
 The Phase 8 gate proof is `packages/core/test/phase8-gate.test.ts`: an overrun stops
 deterministically, a cache hit avoids the second call, and the dashboard equals the log — the
@@ -90,15 +107,15 @@ Seven guards were mutation-verified at this gate — see the Phase 5 gate result
 ## Git state
 
 ```
-c58dcf9  sketch: phase 8 task 8.5 - Phase 8 gate, plus a real overshoot the gate found   <- HEAD
+54dbb20  sketch: phase 9 task 9.5 - Phase 9 gate, the contradiction chain end to end   <- HEAD
+adf1505  sketch: phase 9 task 9.4 - Memory panel, and four memory RPC methods
+f864e9a  sketch: phase 9 tasks 9.1-9.3 - versioned memory, hygiene, reranked retrieval
+287a767  sketch: phase 8 complete - gate green cold, tasks ticked, gate result and eight decisions logged
+c58dcf9  sketch: phase 8 task 8.5 - Phase 8 gate, plus a real overshoot the gate found
 3decd9c  sketch: phase 8 task 8.4 - Cost Dashboard, and three fake cost numbers deleted
 3ab3a59  sketch: phase 8 tasks 8.2 and 8.3 - cost guard checked before the call, router, response cache
 f89bc67  sketch: phase 8 task 8.1 - usage accounting, one price table, nine duplicates deleted
-94aa773  sketch: phase 7 complete - gate green cold, tasks ticked, gate result and eight decisions logged
-17c99ad  sketch: phase 7 task 7.5 - Phase 7 gate, plus two real bugs it found
-a36fc39  sketch: phase 7 task 7.4 - Test Results panel, MCP Tools panel, and the hardcoded badge deleted
-1105826  sketch: phase 7 task 7.3 - curated MCP tool layer, hang latch, and the run seam
-3140073  sketch: phase 6 complete - gate green cold, gate result and eight decisions logged
+94aa773  sketch: phase 7 complete - gate green cold, gate result and eight decisions logged
 d759311  sketch: phase 4 complete - self-hosted fonts remove Google egress, README zero-dollar recipe, gate green cold
 ```
 

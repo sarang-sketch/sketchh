@@ -326,20 +326,20 @@ Phase 4 numbering stays intact for anything that references it.
 
 ## Phase 9 — Memory and hygiene
 
-- [ ] 9. Versioned project memory with hygiene
-- [~] 9.1 Build the versioned memory store
+- [x] 9. Versioned project memory with hygiene
+- [x] 9.1 Build the versioned memory store
   - Persist decisions, architecture, summarized conversations, standards, preferences, style, bugs, performance history, and test history; every row carries `valid_from` and `valid_to`
   - Keep the existing in-memory implementation as the test double behind the same interface
   - _Requirements: 21.1, 21.2, 21.7_
-- [~] 9.2 Implement hygiene
+- [x] 9.2 Implement hygiene
   - Newer entries supersede older with a recorded reason and a `memory_superseded` event; support expiration and a memory-lint pass for contradictions
   - _Requirements: 21.3, 21.4_
-- [~] 9.3 Implement reranked retrieval
+- [x] 9.3 Implement reranked retrieval
   - Reuse the Phase 5 hybrid path with reranking and a recency prior; emit `memory_retrieved`
   - _Requirements: 21.5_
-- [~] 9.4 Build the Memory panel
+- [x] 9.4 Build the Memory panel
   - _Requirements: 27.1_
-- [~] 9.5 Phase 9 gate
+- [x] 9.5 Phase 9 gate
   - Insert a decision, insert a contradicting decision, and prove a related query returns the newer while the older is marked superseded
   - _Requirements: 21.6_
 

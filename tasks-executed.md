@@ -735,10 +735,117 @@ provider.**
 
 ---
 
+## Phase 9 — Versioned memory with hygiene (spec: `.kiro/specs/sketch-engineering-os`)
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| 9.1 | Versioned memory store | ✅ | Nine kinds, closed union, fails closed on a typo. Every row carries `validFrom`/`validTo`. **Superseding APPENDS a close op** rather than editing the add, so the log is append-only by construction — asserted at the source level (no `writeFile`, no `truncate`, no `rename`) and on the bytes (the original add still reads `"validTo":null` after a supersede). One `applyOps` fold is shared by the JSONL and in-memory stores, so the test double Requirement 21.7 asks for exercises the real supersede semantics rather than a simplified copy. `legacyProjectMemory` bridges the original `ProjectMemory` surface onto it, so the legacy orchestrator's four members keep working and gain versioning underneath without learning about it |
+| 9.2 | Hygiene | ✅ | `remember` supersedes a same-key predecessor with a **recorded reason** and emits `memory_superseded`; a default reason is supplied because 21.3 wants one and empty is not a reason. Expiry takes per-kind ages with **no defaults** — a default would silently delete a project's architecture notes after a number this code chose. `source: 'user'` is never auto-expired or auto-superseded. `lintMemory` **reports and changes nothing**, asserted by comparing the store byte-for-byte before and after; findings carry `certain` / `likely` / `possible` rather than a verdict |
+| 9.3 | Reranked retrieval | ✅ | Reuses the Phase 5 primitives instead of adding a second retriever: `queryTerms`, `countMatches`, `smartCase`, and the RRF arithmetic. Extracted `fuseRankedIds` so the fusion has **one** implementation over ids, rather than forcing memory rows through `RankedItem`'s `path` / `chunkIndex` / line fields and inventing file coordinates for something that was never in a file. Retracted entries are **excluded by default** (21.6) and labelled `RETRACTED` when history is asked for. Recency is a bounded prior capped *below* the rerank boost, not a sort. `memory_retrieved` carries ids and scores, never the remembered text |
+| 9.4 | Memory panel | ✅ | Four RPC methods; reading is free, writing and retracting are user actions, and `memory-supersede` **requires a reason on the wire** — an optional one would let the panel close an entry silently. The panel shows retracted rows greyed and labelled rather than hiding them: retrieval keeps withdrawn facts out of a prompt, but "why does the agent think we use REST" is answered by seeing the closed row and its reason. The control says **Retract, not Delete**, and the dialog says the row is kept with its window closed so the correction is auditable. Lint findings render with their confidence and nothing is applied |
+| 9.5 | Phase 9 gate | ✅ | See below |
+
+### Phase 9 gate result
+
+**The requirement is unusually specific** — "insert a decision, insert a contradicting
+decision, and prove a related query returns the newer while the older is marked
+superseded" — so the gate runs exactly that, as one chain over a real append-only log:
+
+```
+march: "Sessions are stored in Redis, because we…" valid from 2026-03-01
+june:  "Sessions are stored in Postgres, because…" superseded the march decision
+log: 2 add(s) + 1 close(s), first add still open on disk
+query "where do we keep sessions for auth" → 1 hit (Postgres), 1 retracted excluded
+events: 1 memory_superseded (run-june), 1 memory_retrieved, no text on either
+digest: contains Postgres, excludes the Redis decision
+history: 2 hits, the older rendered as RETRACTED with its reason
+rpc: memory-list shows 2 (1 current); memory-search returns the newer only
+```
+
+**The query is deliberately RELATED, not the entry's own words.** "Where do we keep
+sessions for auth" shares vocabulary with both decisions without quoting either, so what
+is proved is retrieval rather than string matching.
+
+**The join that matters most is the digest.** A store can supersede perfectly and still
+leak the retracted fact into the prompt, at which point the model is told both things and
+the user cannot see why the output is confused. The gate asserts the digest contains the
+newer decision and not the older, and the mutation table below shows that assertion is
+load-bearing.
+
+**The opposite requirement also holds, and both are needed.** Hidden from the prompt,
+VISIBLE to the user: `includeSuperseded` returns both and renders the older as `RETRACTED`
+with its reason, and `memory-list` offers both rows to the panel. Memory a user cannot
+audit is memory they cannot trust.
+
+**Section 3 asserts the LIMIT as well as the capability.** Superseding is automatic on
+kind AND key, because that is an explicit statement of identity by whoever wrote the rows.
+It is deliberately **not** automatic from prose: two contradicting decisions with no shared
+key both stay live, and the lint pass raises a question with a confidence. That is a design
+choice, not an unfinished feature — deciding by keyword overlap which of two decisions is
+wrong would eventually discard the correct one, and a memory store that silently deletes
+true things cannot be debugged from outside.
+
+**Cold verification** (`node_modules`, `packages/core/dist` and both workspace
+`node_modules` deleted, then `npm install && npm run build && npm run typecheck && npm
+test`): install 0, build 0, typecheck 0, test 0. **Core 927 tests / 47 files, desktop 453
+tests / 45 files** — 1 380 total. Offline, no API key, identical with
+`SKETCH_FAKE_PROVIDER=1` and unset.
+
+**One flake observed and named rather than papered over.** `verify-live.test.ts`'s "starts,
+answers its probe, survives the settle window" failed once on the cold run and passed on
+every re-run, including the second cold pass. It stands up a real HTTP server on a real
+port, so it is timing-sensitive under parallel load; it is not related to Phase 9 and it is
+not a pass being claimed for a failure. If it recurs, the fix is a longer readiness window,
+not a weaker assertion.
+
+**Mutation evidence** (each broken, watched fail, restored, watched pass):
+
+| Mutation | Result |
+|---|---|
+| `supersede` rewrites the add op instead of appending a close | 3 tests fail in `memory.test.ts`, including both append-only assertions and the on-disk round-trip (44 passed) |
+| Retrieval stops excluding retracted entries | 1 test fails: "EXCLUDES a retracted entry by default" (46 passed) |
+| `remember` never supersedes a same-key predecessor | 7 tests fail across `phase9-gate.test.ts` (3) and `memory.test.ts` (4), including the legacy bridge's `setStandard` (45 passed) |
+| `memoryDigest` reads all entries rather than current ones | 2 tests fail: the gate's digest assertion and the digest unit test — the retracted decision reaches the prompt (50 passed) |
+
+**Two real bugs found while writing the tests.** `recencyBoost` handed an infinitely OLD
+entry the MAXIMUM recency boost, because one guard caught both non-finite signs — written
+for future-dated entries, it also matched `+Infinity`. And the literal `'import'` as a
+`MemorySource` value read to the zero-dependency guard as the `import` keyword followed by
+a quote; the value is now spelled `imported`. That is the **third** occurrence of that
+shape, after `deps.test.ts`'s stopword array and task 7.4's fixture guard, and each time
+the data moved rather than the guard being widened.
+
+**Real vs seam after Phase 9.**
+
+Real: the versioned store on disk with append-only superseding; the nine kinds; hygiene
+with recorded reasons, per-kind expiry and the reporting lint pass; retrieval over the
+shared Phase 5 primitives with a bounded recency prior; the four RPC methods; the Memory
+panel including retraction with a required reason.
+
+**Not real.** Memory does **not reach a live agent run by default**. `memoryDigest` fills
+the `assembleContext({ memory })` seam that has existed since Phase 5, and the `run` RPC
+does not pass it — the same shape as retrieval being opt-in behind `contextBudgetTokens`.
+Turning it on is a one-line change and a deliberate decision about tokens, not an
+oversight. Nothing writes memory during a run either: the loop records no decisions, so the
+store fills only from the panel or the legacy orchestrator. Contradiction detection from
+prose is reporting only, by design. There are **no embeddings for memory rows**, so
+retrieval is text and metadata, and `channels` says so. And **nothing in this project has
+ever run against a real provider.**
+
+---
+
 ## Decision Log
 
 | Date | Decision | Rationale |
 |---|---|---|
+| 2026-08-03 | Superseding **appends a close op**; no memory line is ever rewritten | The same append-only discipline as the event log, and here it forces a design decision rather than merely describing one: closing a window cannot mean editing the row, so the store writes `{op:'close', id, validTo, reason, by}` and `readAll` folds the ops. The alternative — writing only the new row and deriving the old one's end from the next row's start — breaks the moment two entries with the same key arrive out of order, or one is expired with no replacement. `validTo` on the OLD row is what makes "what did we believe in March" a lookup instead of an inference, and that question is the entire reason versioned memory exists (Requirements 21.2, 21.7) |
+| 2026-08-03 | Retrieval **excludes retracted entries by default**; the panel shows them | Two opposite defaults, for two different readers, and both are load-bearing. A withdrawn fact presented to a model as current is worse than no memory at all, because the model trusts it and the user cannot see why the output is wrong — so retrieval and the prompt digest exclude closed rows, and the gate asserts the digest specifically. But a history a user cannot see is a history they cannot correct, so the panel shows closed rows greyed and labelled with their reason: "why does the agent think we use REST" is answered by seeing the row that said so and when it closed (Requirements 21.5, 21.6) |
+| 2026-08-03 | Recency is a **bounded prior**, capped below the rerank boost, never a sort | A newer memory is usually the right one, so recency has to count. But sorting by it makes memory a stack, and the most useful entry is frequently an old architectural decision that explains everything — exactly what a recency sort buries. So it is a multiplier capped at 0.5 against a rerank boost of 1.0: recency is weaker evidence than actually matching the question, and a strongly matching old entry still beats a barely matching new one. `recencyBoost` is exported so a test pins the curve rather than inferring it, and that test caught a real inversion where an infinitely old entry received the maximum boost (Requirement 21.5) |
+| 2026-08-03 | The lint pass **reports; it never supersedes** | Requirement 21.4 asks for a lint pass for contradictions, and a lint pass reports. The tempting alternative is deciding from prose which of two decisions is stale — and that would eventually discard the correct one, at which point a user has a memory store that silently deletes true things and no way to debug it from outside. So findings carry `certain` / `likely` / `possible`, name the entries, and suggest; the user decides. What IS automatic is superseding on kind AND key, because a second `standard` keyed `test-location` is an explicit statement of identity by whoever wrote it, and treating that as a contradiction would be pedantry (Requirements 21.3, 21.4) |
+| 2026-08-03 | Expiry has **no default ages**, and `source: 'user'` is exempt | A default expiry would silently delete a project's architectural decisions after some number this file chose, and the right answer differs completely per kind and per project — a `test` outcome is stale in a week, an `architecture` note can hold for years. So a caller that wants expiry says what it wants expired. And a person who wrote something down deliberately does not get overruled by a heuristic: user entries are never auto-expired or auto-superseded, though they can still be superseded by another user action (Requirement 21.4) |
+| 2026-08-03 | `fuseRankedIds` extracted so the RRF arithmetic has **one** implementation | Requirement 21.5 says reuse the Phase 5 path, and `hybridSearch` itself cannot be reused — it is bound to a `RepoGraph` and reads files from disk, while memory entries are rows. The two bad options were writing memory out as files to fit the signature, or copying the scoring rule. Both were refused: `RankedItem` carries `path`, `chunkIndex` and line numbers, so forcing rows through it would mean inventing file coordinates that a surface would eventually display, and a second copy of a scoring rule drifts invisibly in the output. So the arithmetic moved into a generic over ids and `reciprocalRankFusion` became a thin wrapper that re-attaches the code-specific fields |
+| 2026-08-03 | The legacy `ProjectMemory` is **bridged, not rewritten** | `orchestrator.ts` is a live caller using four members, and it is documented as not yet wired into the new loop. Changing its dependency to fit Phase 9 would be a breaking edit to working code that gains that code nothing. `legacyProjectMemory` satisfies the old interface over the new store, so an orchestrator run through it gets validity windows and supersede-with-a-reason underneath without learning any of it exists. Where the models do not line up, the mapping is stated rather than silent: `setStandard` becomes a supersede (strictly more informative — the old value survives with its window), caller-supplied ids are kept in `data.legacyId` rather than discarded, and `test` history is written unkeyed so a run's outcome follows the previous one instead of replacing it |
+| 2026-08-03 | A `MemorySource` value is spelled `imported`, because `'import'` trips the dependency guard | Third occurrence of this exact shape. `test/deps.test.ts` scans for `import <quote>` literally, so the bare literal `'import'` reads to it as the `import` KEYWORD followed by a quote — as `['from', 'into']` did in the retrieval stopword list, and as this task's own explanatory comments did to the desktop fixture guard. The guard is right to be that literal: it is the thing standing between this package and a silent dependency. Each time, the DATA moved. Recorded a third time because the next person to write a string union in this package will hit it again (Rule 1) |
 | 2026-08-02 | An unpriced model costs **`null`, never `0`**, and the ledger counts those calls separately | This is the single most expensive lie a cost surface can tell. `$0.00` for a model that is not in the price table means the user sees free, leaves it running, and finds out from an invoice — and it fails in the direction that costs them money, which is the direction to be paranoid about. So `null` propagates: a run with one unpriced call reports a priced subtotal *and* `unpriced: 1`, and `describeLedger` calls the total a lower bound. The consequence is accepted rather than worked around: a currency budget cannot constrain an unpriced model, which is exactly why `maxTokens` exists beside `maxUsd` and why `describeBudget` warns about a currency-only policy (Requirements 20.1, 20.3) |
 | 2026-08-02 | The money number is a **pure function of the event log**, with no second source anywhere | Fifth time this codebase has made the one-source bet — one file cache (3.1), one authorisation point (6.3), one skill-state home (6.4), one way to read a run (7.5) — and cost is the highest-stakes instance, because the number is money and a user will act on it. A running counter and a log agree right up until they do not, and when a *money* figure disagrees with itself nobody can tell which half to believe. So `ledgerFor(events)` and nothing else: no counter in the loop, no subtotal on the seam, no `totalCost` in `AppState`, no accumulation in the panel. It also makes 8.5's reconciliation an **equality** rather than a tolerance, which is the only version of that test worth writing (Requirement 20.2) |
 | 2026-08-02 | Nine price tables collapsed to one, and `PRICED_AT` travels with every figure | Three private `COSTS` tables meant three answers to "what did that cost", and six `estimateCost` overrides returning `0` meant a real run on Groq or OpenRouter reported **free** — the same drift the provider catalog and the secret-pattern table were centralised to avoid, but with money attached. One table, one `estimateCost` in `BaseAdapter`, and a test asserting no module outside `cost/` declares a per-model price. The date is part of the data because a table without one implies live pricing, which this product cannot do without a startup network call it refuses to make; `costFor` flags itself stale after 180 days and the panel says so (Requirements 20.1, 20.8) |
