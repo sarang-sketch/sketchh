@@ -27,24 +27,21 @@ provenance Authenticode or Apple Developer ID signing/notarization. For 12.4, re
 third-party community skill's source and license provenance and run it through the existing gate.
 Source tests, workflow configuration, and local fixtures alone complete none of those claims.**
 
-While those external evidence tasks are blocked, the next actionable local leaf is **13.4**:
-reconcile `prd.md` with the shipped Cowork/Code surfaces and the lift, reliability, and compounding
-optimization metrics.
+While those external evidence tasks are blocked, the next local documentation leaf is **13.5**:
+audit `tasks-executed.md` against every completed phase gate and architectural decision, keeping the
+living log current without treating documentation as external evidence.
 
-**83 of 96 tasks complete.** Phases 1 through 11, tasks 12.5–12.6, and tasks 13.1–13.3 are done; 12.1 through 12.4 are in progress.
+**84 of 96 tasks complete.** Phases 1 through 11, tasks 12.5–12.6, and tasks 13.1–13.4 are done; 12.1 through 12.4 are in progress.
 
 Current source verification: build and typecheck pass; **core 1,036 tests / 54 files, desktop 503
-tests / 54 files** with `SKETCH_FAKE_PROVIDER` both unset and set to `1`. Task 13.3 replaces the old
-flat-layout, SQLite/sqlite-vec/keytar/MCP-SDK, and four-check documentation mandates with the shipped
-npm workspace, zero-runtime-dependency core, seam-plus-implementation stores, native-host OS
-credentials, hand-rolled MCP stdio transport, append-only JSONL run and memory logs, on-demand
-`.sketch/` paths, and fixed nine-stage verification policy. The documents preserve current limits:
-vectors default to memory, graph metadata persists separately, memory is date-sharded and does not
-yet ingest every live run automatically, and configured MCP/provider paths are not external execution
-evidence. No production behavior changed. Task 12.6 remains scripted harness evidence, not evidence
-that a real provider can build a booking product. During the preceding task's verification, the known
-`verify-live` Windows port-release flake was stabilized in `012e109` without weakening the exact
-port-closed assertion. No native installer was produced on this host.
+tests / 54 files** with `SKETCH_FAKE_PROVIDER` both unset and set to `1`. Task 13.4 replaces the
+one-surface, four-check, SQLite-memory, absolute no-consensus/no-marketplace, and adoption-vanity PRD
+with the shipped Cowork/Code presentation over one client/event/project substrate and the three
+optimization metrics: same-model lift, fixed-budget pass@k reliability distributions, and strict
+held-out compounding. It records retrieval/memory/provider and external-evidence limits rather than
+claiming them complete. No production behavior changed. Tasks 12.1–12.4 remain blocked on native
+artifacts, installed-app no-egress/Ollama evidence, a verified real tag release, and genuine
+third-party skill provenance respectively.
 
 Task 12.1 now has native Windows/NSIS, macOS/DMG, and Ubuntu 22.04/AppImage jobs. Each rebuilds and
 smoke-tests its own host-native sidecar, packages with Tauri, enforces a strict `<100,000,000-byte`
@@ -190,7 +187,8 @@ Seven guards were mutation-verified at this gate — see the Phase 5 gate result
 ## Git state
 
 ```
-(Current task 13.3 completion commit containing this file)                       <- HEAD
+(Current task 13.4 completion commit containing this file)                       <- HEAD
+8d45899  sketch: phase 13 task 13.3 - reconcile architecture contracts
 27f1e2f  sketch: phase 13 task 13.2 - reconcile marketplace scope
 012e109  test: stabilize live app port release check
 aa8b274  sketch: phase 13 task 13.1 - reconcile contributor rules
@@ -239,9 +237,9 @@ because there was nothing to bisect.
 | 10 — Eval-gated multi-agent (10.1–10.5) | **DONE**, gate green. `swarm` ships **off**: no measured strategy lift |
 | 11 — Honest benchmarks (11.1–11.6) | **DONE**, gate green cold. CI result is synthetic only; real-provider public matrix unperformed |
 | 12 — Packaging and open flywheel | **IN PROGRESS** — 12.1 native artifacts required; 12.2 forwarding/preflight built with installed-app clean-machine evidence required; 12.3 deterministic release/provenance path built with real tag-release evidence and native signing identities absent; 12.4 production flywheel proved with a local community-format fixture, with genuine third-party source/license evidence absent; **12.5 DONE** with production-consumed contracts for all nine categories and behavioral/mutation evidence; **12.6 DONE** with scripted offline canonical acceptance and Timeline evidence, not real-provider capability evidence |
-| 13 — Documentation reconciliation | **IN PROGRESS** — **13.1 DONE**: Rules 4 and 6 match the strategy/credential contracts; **13.2 DONE**: curated pinned registry allowed while open publishing remains v2-only behind integrity, scope, review, and digest gates; **13.3 DONE**: architecture docs match the workspace, dependency, JSONL state, `.sketch/`, and nine-stage verification contracts; 13.4 is next |
+| 13 — Documentation reconciliation | **IN PROGRESS** — **13.1–13.4 DONE**: contributor rules, marketplace scope, architecture contracts, and two-surface/optimization PRD are reconciled; 13.5 living-log audit is next |
 
-Task counts: 96 total, **83 complete**.
+Task counts: 96 total, **84 complete**.
 
 ---
 

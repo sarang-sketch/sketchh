@@ -1106,6 +1106,7 @@ Task 12.6 is complete and the task count at that checkpoint was **80/96**. Tasks
 | 13.1 | Reconcile `rules.md` | ✅ complete | Rule 4 now permits roles and consensus only through eval-gated `swarm`, keeps `single` as the default, and keeps `swarm` off without measured pass@k lift. Rule 6 replaces the keytar mandate with the OS credential store through a host outside core, limits key transit to purpose-bound credential/invocation channels, and preserves no-log/no-event/no-return guarantees. |
 | 13.2 | Reconcile `what-not-we-are-building.md` | ✅ complete | The curated pinned/content-hash registry and discovery/install surface are allowed as the v1-family foundation delivered in the v1.5 implementation phase. Open community publishing remains v2-only behind tested integrity and capability scopes, a review queue, exact-digest approvals, and separately persisted digest-bound grants. The document does not claim public-key author signatures. |
 | 13.3 | Reconcile `trd.md` and `architecture.md` | ✅ complete | The documents now match the npm workspace, zero-runtime-dependency core, seam-plus-implementation persistence/vector/credential/MCP boundaries, event-sourced JSONL run log, on-demand `.sketch/` layout, versioned date-sharded memory, and fixed nine-stage verification contract. |
+| 13.4 | Reconcile `prd.md` | ✅ complete | Cowork and Code are now documented as two presentations over one client/event/project substrate. Product optimization is defined by same-model lift, fixed-budget reliability distributions, and strict held-out compounding; adoption counts are not capability evidence. |
 
 ### Task 13.1 completion result
 
@@ -1133,7 +1134,17 @@ The reconciliation preserves implementation limits rather than copying an aspira
 
 Validation passes in canonical order: `npm run build`, `npm run typecheck`, core **1,036 tests / 54 files**, and desktop **503 tests / 54 files** with `SKETCH_FAKE_PROVIDER` unset; both full suites pass at the same counts with it set to `1`. Focused source-contract validation passes **163 tests / 6 files** (`deps`, event store/redaction, verification policy, memory, MCP, and secret store). Both amended documents have no diagnostics and `git diff --check` passes. No guard or production path changed, so no guard mutation was required; the mandatory `sanitizePayload` phase-gate mutation rule remains unchanged.
 
-Task 13.3 copies Requirements 1, 3, 4, 17, 21, 22, and 28.3–28.4 plus design conflicts 1, 2, 6, and 7 into the prior-generation architecture documents. It introduces no new architecture and completes no external Phase 12 evidence gate. Task 13.3 is complete and the task count is **83/96**.
+Task 13.3 copies Requirements 1, 3, 4, 17, 21, 22, and 28.3–28.4 plus design conflicts 1, 2, 6, and 7 into the prior-generation architecture documents. It introduces no new architecture and completes no external Phase 12 evidence gate. Task 13.3 is complete and the task count at that checkpoint was **83/96**.
+
+### Task 13.4 completion result
+
+No production code changed. `prd.md` now defines the shipped `Cowork | Code` toggle as two presentations over one `SketchClient`, event stream, project/file state, provider selection, skills, memory contracts, budgets, and verification results. Cowork is the task/review surface; Code is the IDE/file/diff/Git/terminal/test surface. The document removes the stale four-check verifier, SQLite-memory claim, absolute no-consensus/no-marketplace exclusions, and adoption targets as product-quality evidence.
+
+The PRD now makes the three authoritative optimization metrics explicit: same-model/same-budget `M + Sketch` versus `M + naive` lift; pass@1/pass@k plus the full distribution under fixed call/token/cost/time budgets for reliability; and strict held-out eval improvement with separate review/promotion for compounding. It retains the narrow evidence labels: committed benchmark lift is synthetic offline regression evidence, `swarm` remains off without measured strategy lift, default desktop retrieval and automatic live-run memory ingestion remain absent, and configured native/release/Ollama/community/MCP/provider paths do not substitute for retained external evidence.
+
+Validation passes in canonical order: `npm run build`, `npm run typecheck`, core **1,036 tests / 54 files**, and desktop **503 tests / 54 files** with `SKETCH_FAKE_PROVIDER` unset; both full suites pass at the same counts with it set to `1`. Focused validation passes core **43 tests / 3 files** (`phase10-gate`, `phase11-gate`, trainer) and desktop **3 tests / 2 files** (shared `SketchClientProvider` and the real Cowork-run-to-Code-file flow). `prd.md` has no diagnostics and `git diff --check` passes. No guard or source path changed, so no guard mutation was required.
+
+Task 13.4 copies Requirements 14, 24.8, 25, and 28.5 into the prior-generation product document without adding a new product surface or making a new capability claim. It completes no external Phase 12 evidence gate. Task 13.4 is complete and the task count is **84/96**.
 
 ---
 

@@ -1,7 +1,7 @@
 # NEED TO DO — Sketch, from here to done
 
 **Audience:** the developer who is going to write this code.
-**Status date:** task 13.3 complete; the architecture documents now match the dependency-free workspace, seam-plus-implementation persistence boundaries, append-only JSONL state, on-demand `.sketch/` layout, and nine-stage verification policy. Third-party, native, release, clean-machine, and real-provider evidence remain open.
+**Status date:** task 13.4 complete; the PRD now defines Cowork and Code over one substrate and makes lift, fixed-budget reliability, and strict held-out compounding the product metrics. Third-party, native, release, clean-machine, and real-provider evidence remain open.
 **Authority:** `.kiro/specs/sketch-engineering-os/{requirements,design,tasks}.md` are the contract.
 This file is the working plan on top of them. Where this file and the spec disagree, the spec wins
 and you should fix this file.
@@ -85,16 +85,15 @@ writes down what happened. Do not describe a wired interface as a working featur
 
 ## 1. Where the project actually stands
 
-**Status date: Phase 11 gated; tasks 12.1 through 12.4 in progress, tasks 12.5–12.6 complete, and documentation tasks 13.1–13.3 complete. 83 of 96 tasks complete.** Core
+**Status date: Phase 11 gated; tasks 12.1 through 12.4 in progress, tasks 12.5–12.6 complete, and documentation tasks 13.1–13.4 complete. 84 of 96 tasks complete.** Core
 1,036 tests / 54 files, desktop 503 tests / 54 files, build and typecheck green with
-`SKETCH_FAKE_PROVIDER` both unset and set to `1`. Task 13.3 is documentation-only and reconciles the
-workspace, zero-runtime-dependency core, append-only persistence, `.sketch/` state, credential/MCP
-boundaries, and nine-stage verification policy with shipped contracts. It preserves the current
-in-memory vector default, date-sharded memory layout, absent automatic live-run memory ingestion,
-and lack of real hosted-provider/MCP evidence. The recurring Windows `verify-live` port-release
-flake was stabilized separately in `012e109` without weakening the exact closed-port assertion.
-Task 12.6 remains scripted offline harness evidence, not real-provider capability evidence. The
-native sidecar build and protocol smoke check pass. Cross-platform package jobs and the strict
+`SKETCH_FAKE_PROVIDER` both unset and set to `1`. Task 13.4 is documentation-only and defines Cowork
+and Code over one shared client/event/project substrate, with same-model lift, fixed-budget
+reliability distributions, and strict held-out compounding as the product metrics. It keeps
+retrieval, memory ingestion, `swarm`, benchmark, provider, native, and third-party evidence limits
+explicit. The recurring Windows `verify-live` port-release flake was stabilized separately in
+`012e109` without weakening the exact closed-port assertion. Task 12.6 remains scripted offline
+harness evidence, not real-provider capability evidence. Cross-platform package jobs and the strict
 `<100,000,000-byte` size gate are implemented, but 12.1 remains open until native Windows, macOS,
 and Linux workflow jobs produce uploaded installers and passing size manifests.
 
@@ -1114,8 +1113,10 @@ true**, not in a batch at the end — a doc amended before the code is just a di
   boundaries, append-only event and memory JSONL, on-demand `.sketch/` layout, and fixed nine-stage
   verification policy. They preserve the in-memory vector default, date-sharded memory files,
   absent automatic live-run memory ingestion, and lack of third-party/real-provider evidence.
-- **13.4 `prd.md`** — reflect the two-surface product and the three optimisation metrics: lift,
-  reliability, compounding.
+- **13.4 `prd.md`** — **complete.** Cowork and Code are documented as two presentations over one
+  client/event/project substrate. Same-model lift, fixed-budget pass@k reliability distributions,
+  and strict held-out compounding replace adoption counts as product optimization metrics, with
+  external evidence limits stated explicitly.
 - **13.5 `tasks-executed.md`** — update at **each** phase gate, with a decision-log row for every
   architectural decision. It has been wrong before. It is Rule 9's single source of truth for what is
   built, so a wrong entry there is worse than a missing one.

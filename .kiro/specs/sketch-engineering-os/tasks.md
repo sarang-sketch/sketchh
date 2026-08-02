@@ -440,8 +440,9 @@ Phase 4 numbering stays intact for anything that references it.
   - Record the workspace layout, the event-sourced JSONL log, the `.sketch/` directory layout, and the nine-stage verification contract
   - Completed: both documents now describe the npm workspace, zero-runtime-dependency core, host-owned OS credential persistence, hand-rolled MCP transport, append-only run and memory stores, on-demand `.sketch/` paths, and the fixed nine-stage policy. The documents distinguish the current in-memory vector default from persisted graph metadata and do not claim automatic live-run memory ingestion.
   - _Requirements: 28.3, 28.4_
-- [~] 13.4 Amend `prd.md`
+- [x] 13.4 Amend `prd.md`
   - Reflect the two-surface product and the three optimization metrics of lift, reliability, and compounding
+  - Completed: the PRD now defines Cowork and Code as two presentations over one client/event/project substrate; replaces adoption vanity metrics with same-model lift, fixed-budget reliability distributions, and strict held-out compounding; and labels native, clean-machine, third-party, release, MCP, and real-provider evidence limits explicitly.
   - _Requirements: 28.5_
 - [~] 13.5 Keep `tasks-executed.md` current
   - Update at each phase gate, with a decision-log row for every architectural decision recorded in this spec
