@@ -1,7 +1,7 @@
 # NEED TO DO — Sketch, from here to done
 
 **Audience:** the developer who is going to write this code.
-**Status date:** task 12.2 provider forwarding and real-Ollama preflight implemented; native and clean-machine evidence pending.
+**Status date:** task 12.3 release assembly and GitHub provenance path implemented; native, release, and clean-machine evidence pending.
 **Authority:** `.kiro/specs/sketch-engineering-os/{requirements,design,tasks}.md` are the contract.
 This file is the working plan on top of them. Where this file and the spec disagree, the spec wins
 and you should fix this file.
@@ -85,8 +85,8 @@ writes down what happened. Do not describe a wired interface as a working featur
 
 ## 1. Where the project actually stands
 
-**Status date: Phase 11 gated; tasks 12.1 and 12.2 in progress. 78 of 96 tasks complete.** Core
-1,028 tests / 51 files, desktop 489 tests / 51 files, build and typecheck green. The native sidecar build
+**Status date: Phase 11 gated; tasks 12.1, 12.2, and 12.3 in progress. 78 of 96 tasks complete.** Core
+1,028 tests / 51 files, desktop 495 tests / 52 files, build and typecheck green. The native sidecar build
 and protocol smoke check pass. Cross-platform package jobs and the strict `<100,000,000-byte` size
 gate are implemented, but 12.1 remains open until native Windows, macOS, and Linux workflow jobs
 produce uploaded installers and passing size manifests.
@@ -672,8 +672,10 @@ Kept below as the record of what was asked for. What shipped, and where it diffe
   gate denies an ungranted call. It does **not** prove a hostile skill cannot reach the network,
   because nothing in this build can reach the network on a skill's behalf. That is 7.3. The
   `last30days` install test in step 5 is therefore still outstanding and belongs after 7.3.
-- **The registry is a content pin, not a signature.** It proves what you install matches the
-  manifest, never who wrote the manifest. Signed releases are 26.3 and remain unimplemented.
+- **The registry is a content pin, not an author signature.** It proves what you install matches the
+  manifest, never who wrote the manifest. The 12.3 release path adds repository/workflow provenance
+  for assembled release bytes, but no real tag release has run and that provenance does not replace
+  marketplace hashing, capability scope, or digest-bound review.
 - **Requirement 9.7's cost guard is satisfied for training only.** `TrainingBudget` bounds the
   optimizer's own calls and tokens, checked pre-flight. The loop-wide guard is 8.2.
 - **A shipped-app defect was caught by the sidecar hazard guard**: locating the registry relative to
@@ -1048,8 +1050,13 @@ because it demos well. The plan forbids that.
   defines the evidence procedure. **Still open:** run the matching native installer on a clean
   offline snapshot, index through the installed UI, review/apply a real Ollama edit, and retain raw
   process-attributed packet/DNS/socket evidence proving no non-loopback attempt.
-- **12.3 Open-source scaffolding** _(26.3)_ — `CONTRIBUTING.md`, signed releases; the marketplace keeps
-  hash, scope, and review.
+- **12.3 Open-source scaffolding** _(26.3)_ — `CONTRIBUTING.md` exists. Deterministic three-platform
+  release assembly and a tag-only GitHub OIDC provenance path now re-hash installers, bind tag,
+  package version, commit, and repository, verify attestations before publication, and preserve the
+  marketplace's independent hash, scope, and digest-bound review controls. **Still open:** retain a
+  successful real version-tag release and independent verifier output. GitHub provenance is not
+  Authenticode or Apple Developer ID signing/notarization; no project-owned native signing identity
+  is configured.
 - **12.4 Prove the flywheel turns server-less** _(26.4)_ — a community skill installs, runs, and trains
   on captured evals **with no Sketch server involved**. This is the strategic claim of the whole
   project: the improvement loop needs no vendor.
@@ -1459,7 +1466,9 @@ and verifiable. "We beat GPT-X" is neither.
 
 12.1 macOS/Windows/Linux builds with a documented size budget — **note the sidecar is already 91 MB
 against a stated <100 MB installer target (§4.5)** · 12.2 prove local-first on a clean offline
-machine with Ollama · 12.3 `CONTRIBUTING.md` and signed releases · 12.4 prove a community skill
+machine with Ollama · 12.3 `CONTRIBUTING.md` plus a real version-tag release whose GitHub build
+provenance is retained and independently verified (native OS code signing remains a separate,
+unconfigured identity) · 12.4 prove a community skill
 installs, runs, and trains **with no Sketch server involved** · 12.5 extensibility audit across
 providers, agents, skills, tools, models, memory, workflows, themes, languages · 12.6 the canonical
 "build an Airbnb clone" end-to-end acceptance with plan gate, verification contract, consensus, and

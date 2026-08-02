@@ -14,6 +14,7 @@
     "package:macos": "tauri build --bundles dmg",
     "package:linux": "tauri build --bundles appimage",
     "package:size": "node scripts/check-package-size.mjs",
+    "release:assemble": "node scripts/assemble-release.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

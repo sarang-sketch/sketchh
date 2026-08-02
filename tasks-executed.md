@@ -354,7 +354,8 @@ engine reading the OS store through the sidecar process rather than the window. 
 by Requirement 17.4 and neither should be improvised in a gate.
 
 Also still open: `README.md` and `CONTRIBUTING.md` now exist (Requirement 26.3), but 26.3 also asks
-for **signed releases**, and nothing in this repository signs anything. The CSP remains permissive
+for **signed releases**. The 12.3 path now assembles and GitHub-OIDC-attests release bytes, but no
+real tag release has run and no native OS signing identity exists. The CSP remains permissive
 (`script-src 'unsafe-inline'`, `connect-src http: https:`); the new egress guard fails the build if
 a source file starts to use that latitude, but the policy itself would not stop it. And **nothing in
 this project has ever run against a real hosted provider** — every run in this phase, including the
@@ -543,8 +544,10 @@ enforcement POINT; 7.3 populates it. So the adversarial suite proves the gate de
 call — it does not prove a hostile skill cannot reach the network, because nothing in this build can
 reach the network on a skill's behalf at all. Saying otherwise would overstate it by a whole phase.
 
-Also still open: the registry is a **content pin, not a signature** — it proves what you install
-matches the manifest, not who wrote the manifest, and signed releases (26.3) remain unimplemented.
+Also still open: the registry is a **content pin, not an author signature** — it proves what you install
+matches the manifest, not who wrote the manifest. The 12.3 release path now provides repository/workflow
+build provenance for assembled release bytes, but no real tag release has run and native OS signing is
+still absent. Release provenance does not replace the registry's hash, capability, or digest-review gates.
 The desktop does not yet point at the shipped registry (12.1). `skill-train` can reach a provider
 and is the one documented exception to "nothing calls a provider", though every test of it runs on
 the fake. And **nothing in this project has ever run against a real provider.**
@@ -994,6 +997,7 @@ The deterministic gate result is `offline-scripted-v1 + Sketch` versus the same 
 |---|---|---|---|
 | 12.1 | Cross-platform Tauri builds with a documented size budget | 🔄 evidence-gated | Added native Windows/NSIS, macOS/DMG, and Ubuntu 22.04/AppImage jobs; host-native sidecar build and protocol smoke check; strict `<100,000,000-byte` artifact validator with SHA-256 size manifests; artifact upload; release-size Cargo profile; and `PACKAGING.md`. Corrected two real Tauri packaging defects: the invalid v2 window `name` property and a macOS-conflicting identifier ending in `.app`. Local sidecar is 87 MiB and passes protocol checks. The Windows Tauri build reached Rust compilation, then this host's Application Control blocked Cargo build scripts (OS error 4551) and `dlltool.exe` was missing. macOS/Linux were not run here. The task remains open until all three native workflow jobs produce uploaded installers whose manifests pass the budget. |
 | 12.2 | Clean-machine local-first proof | 🔄 preflight built; evidence pending | Fixed the shipped run path so AgentChat resolves `selectedProvider` against the one key-free AppState provider list and both HTTP/stdin transports forward that exact entry. Added a direct production-sidecar preflight that refuses non-loopback, missing-model, and unavailable endpoints, requires Ollama's identity/model responses, and never starts or substitutes a stub/fake provider; it indexes a fresh fixture, requires plan/edit/verify/completion events, verifies exact bytes, and writes a limitation-labelled artifact. Added `OFFLINE-PROOF.md` for installer, UI review/apply, graph, event, final-byte, process-tree, DNS, socket, and packet evidence. Ollama is absent on this host, so no real-model run occurred and task 12.2 remains open. |
+| 12.3 | Open-source scaffolding and signed-release provenance | 🔄 path built; release evidence pending | Added deterministic three-platform release assembly with strict input shape, re-hashing against size manifests, copy re-verification, version/tag/commit/repository binding, atomic `release-manifest.json`, and `SHA256SUMS`. The tag-only release job depends on the complete native matrix, uses GitHub OIDC build-provenance attestations, verifies every asset before `gh release create --verify-tag`, and scopes write/OIDC permissions to that job. `RELEASES.md`, `CONTRIBUTING.md`, and `PACKAGING.md` distinguish provenance from native code signing and preserve marketplace hash/scope/digest-review controls. No tag workflow has run, no release exists, and no Authenticode or Apple Developer ID identity is configured, so 12.3 remains open. |
 
 ### Task 12.1 validation so far
 
@@ -1013,12 +1017,28 @@ Mutation evidence, each restored and re-run green:
 
 No provider key was added to AppState or the wire type: `RunOptions.provider` is the canonical key-free `ProviderSettingsEntry`. No real model was called, no native installer was exercised, and no network capture was taken.
 
+### Task 12.3 preparation validation
+
+Canonical order passes: `npm run build`, `npm run typecheck`, core **1,028 tests / 51 files**, and desktop **495 tests / 52 files**. The focused release/packaging set passes **9 tests / 2 files**; the preserved Phase 6 marketplace hash, capability, and digest-bound review set passes **54 tests / 3 files**. `node --check packages/desktop/scripts/assemble-release.mjs` and `git diff --check` pass.
+
+Mutation evidence, each restored and re-run green:
+
+| Mutation | Observed failure |
+|---|---|
+| Remove the assembler's SHA-256 comparison while preserving installer byte length | the same-size tamper test failed: the modified installer was incorrectly accepted |
+| Remove `needs: package` from the release job | the workflow policy test failed on the missing complete-matrix dependency |
+| Remove `gh attestation verify` before publication | the workflow policy test failed on the missing verification step |
+
+No production tag or GitHub Release was created; no workflow attestation was issued or independently verified. The repository has no configured Authenticode certificate or Apple Developer ID/notarization identity. GitHub build provenance, native OS code signing, and marketplace trust controls are three separate claims: the workflow implements the first path, does not implement the second, and does not replace the third.
+
 ---
 
 ## Decision Log
 
 | Date | Decision | Rationale |
 |---|---|---|
+| 2026-08-02 | GitHub OIDC build provenance and native OS code signing are **separate release claims** | The workflow can attest that exact bytes came from this repository's tag workflow and bind them to a commit, but it cannot create an Authenticode publisher identity or Apple Developer ID/notarization trust. `RELEASES.md`, `PACKAGING.md`, and the task gate state both boundaries. Task 12.3 remains open until a real tag release is retained and independently verified; native signing remains absent until project-owned identities and platform verifier output exist. |
+| 2026-08-02 | Release publication happens only **after complete native inputs, byte re-validation, attestation, and verification** | `needs: package` prevents a partial matrix from publishing. The assembler accepts exactly one installer and passing size manifest per platform, rejects changed or extra bytes, and emits deterministic metadata atomically. The release job verifies each GitHub attestation before `gh release create --verify-tag`; mutation tests prove the digest, matrix dependency, and verifier steps are live. Marketplace content hashes, fail-closed scopes, and digest-bound review remain independent and were re-tested. |
 | 2026-08-02 | A desktop run forwards the **selected persisted entry**, not a model string or a fallback | Provider configuration already has one authority: the key-free `ProviderSettingsEntry` loaded into AppState. AgentChat resolves `selectedProvider` against that list at send time and both transports carry the exact object. An absent/stale selection stays absent so core gives its existing `params.provider is required` refusal; selecting the first row would silently run a model the user did not choose. The type cannot carry `apiKey`, preserving the persisted-state boundary. |
 | 2026-08-02 | Real-Ollama preflight and Requirement 26.2 proof are **different artifacts** | The preflight is deliberately useful but narrower: production sidecar, fresh index, operator-supplied loopback Ollama with identity/model endpoint checks, edit, verification, exact bytes. It starts no stub or fake fallback, yet it does not attest process provenance, install the Tauri app, exercise UI review/apply, or observe process-level egress. Its JSON labels those limits. Only the retained clean-snapshot procedure in `OFFLINE-PROOF.md` can close 12.2. |
 | 2026-08-02 | No-egress means **raw process-attributed attempts**, not a source scan or firewall success | A denied connect is still attempted egress; a packet trace without PID attribution cannot distinguish Sketch from Ollama or the OS; a process list without packets can miss DNS. The proof therefore retains packet/DNS/socket data plus process start/exit identity and treats gaps, dropped records, unresolved PIDs, and any non-loopback attempt as inconclusive/failed. |

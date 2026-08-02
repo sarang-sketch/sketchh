@@ -19,16 +19,17 @@ Phase 3 and had gone four phases stale.
 
 ## IMMEDIATE NEXT ACTION
 
-**Task 12.1 remains externally evidence-gated. Task 12.2 preparation now fixes the production
-provider-forwarding blocker and adds a no-fallback real-Ollama sidecar preflight plus
-`OFFLINE-PROOF.md`. Run that preflight on a host with genuine Ollama, then perform the retained
-installed-app procedure only after a matching native installer exists. Do not mark either task
-complete from source tests or preflight output.**
+**Tasks 12.1–12.3 remain externally evidence-gated. Run the native package matrix first. Then run
+the no-fallback Ollama preflight and retained installed-app clean-machine procedure against those
+exact installer bytes. For 12.3, push a package-version-matching semantic tag only after the matrix
+is green, retain every release asset/hash/attestation verification result, and do not call GitHub
+provenance Authenticode or Apple Developer ID signing/notarization. Source tests and workflow
+configuration alone complete none of these three tasks.**
 
-**78 of 96 tasks complete.** Phases 1 through 11 are done and gated; 12.1 and 12.2 are in progress.
+**78 of 96 tasks complete.** Phases 1 through 11 are done and gated; 12.1, 12.2, and 12.3 are in progress.
 
-Current source verification: build and typecheck pass; **core 1,028 tests / 51 files, desktop 489
-tests / 51 files**. The native Windows sidecar is 87 MiB and its protocol smoke test passes. The
+Current source verification: build and typecheck pass; **core 1,028 tests / 51 files, desktop 495
+tests / 52 files**. The native Windows sidecar is 87 MiB and its protocol smoke test passes. The
 first Tauri package attempt fixed an invalid v2 window `name` field, then reached Rust compilation
 but was blocked by this host's Application Control policy (OS error 4551) and missing `dlltool.exe`.
 No Windows installer was produced; macOS and Linux were not run on this host.
@@ -38,6 +39,14 @@ smoke-tests its own host-native sidecar, packages with Tauri, enforces a strict 
 installer budget, writes a SHA-256 size manifest, and uploads both. `PACKAGING.md` defines the
 measurement and states the unsigned pre-release status. A configured workflow is not build evidence:
 12.1 stays open until all three jobs have successful uploaded artifacts.
+
+Task 12.3 now has a deterministic assembler that accepts exactly one passing installer/size manifest
+per platform, re-hashes before and after copying, binds package version, tag, commit, and repository,
+and atomically emits `release-manifest.json` plus `SHA256SUMS`. The tag-only release job depends on
+the complete native matrix, obtains GitHub OIDC build-provenance attestations, verifies every asset,
+and only then calls `gh release create --verify-tag`. `RELEASES.md` documents maintainer and consumer
+checks. No tag workflow has run, no release exists, and no Authenticode/Developer ID identity exists;
+12.3 therefore stays open.
 
 The Phase 11 gate proof is `packages/core/test/phase11-gate.test.ts`. The internal suite has two
 content-pinned repair cases, fresh workspaces per attempt, mandatory `verify-pass`, the canonical
@@ -172,7 +181,7 @@ because there was nothing to bisect.
 | 9 — Versioned memory with hygiene (9.1–9.5) | **DONE**, gate green cold |
 | 10 — Eval-gated multi-agent (10.1–10.5) | **DONE**, gate green. `swarm` ships **off**: no measured strategy lift |
 | 11 — Honest benchmarks (11.1–11.6) | **DONE**, gate green cold. CI result is synthetic only; real-provider public matrix unperformed |
-| 12 — Packaging and open flywheel | **IN PROGRESS** — 12.1 native artifacts required; 12.2 forwarding/preflight built, installed-app clean-machine evidence required |
+| 12 — Packaging and open flywheel | **IN PROGRESS** — 12.1 native artifacts required; 12.2 forwarding/preflight built with installed-app clean-machine evidence required; 12.3 deterministic release/provenance path built with real tag-release evidence and native signing identities absent |
 
 Task counts: 96 total, **78 complete**.
 
@@ -289,7 +298,7 @@ report the gap.
    if someone tests without building.
 7. **`os_credentials.rs` unit tests are unverified on this machine** — the module cannot be compiled
    standalone. Only source-level guards cover it.
-8. **26.3 asks for signed releases** and nothing in this repository signs anything.
+8. **26.3 asks for signed releases.** The deterministic GitHub OIDC provenance path is implemented, but no version-tag workflow has run and no release/attestation verifier output exists. Authenticode and Apple Developer ID/notarization identities are not configured.
 9. Two competing verify directories and two provider surfaces (see above).
 
 ---

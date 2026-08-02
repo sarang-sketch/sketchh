@@ -16,8 +16,10 @@ The Linux job installs the [official Tauri 2 prerequisites](https://v2.tauri.app
 plus `patchelf` for packaging. Ubuntu 22.04 is intentional: building on a newer distribution can
 raise the minimum glibc version required by the artifact.
 
-The executable packages are currently unsigned pre-release artifacts. Release signing belongs to
-Requirement 26.3/task 12.3 and is not implied by this workflow.
+The executable packages are not currently Windows Authenticode-signed or Apple Developer ID-signed
+and notarized. A successful version-tag workflow now assembles and GitHub-OIDC-attests the exact
+validated release bytes, but no such release has run yet. Provenance attestation and native OS code
+signing are different claims; [`RELEASES.md`](RELEASES.md) defines both and the consumer checks.
 
 ## Size budget
 

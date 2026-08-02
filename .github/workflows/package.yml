@@ -57,3 +57,51 @@ jobs:
             ${{ matrix.artifact }}
             packages/desktop/src-tauri/target/release/bundle/package-sizes-${{ matrix.platform }}.json
           if-no-files-found: error
+
+
+  release:
+    name: Attest and publish release
+    needs: package
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: sketch-*-${{ github.sha }}
+          path: release-input
+      - name: Re-hash and assemble release assets
+        run: >-
+          node packages/desktop/scripts/assemble-release.mjs
+          --input release-input
+          --output release-out
+          --tag "${GITHUB_REF_NAME}"
+          --commit "${GITHUB_SHA}"
+          --repository "${GITHUB_REPOSITORY}"
+      - name: Attest validated release assets
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: release-out/*
+      - name: Verify provenance before publishing
+        run: |
+          for asset in release-out/*; do
+            gh attestation verify "$asset" --repo "$GITHUB_REPOSITORY"
+          done
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: Publish GitHub Release
+        run: >-
+          gh release create "$GITHUB_REF_NAME" release-out/*
+          --repo "$GITHUB_REPOSITORY"
+          --verify-tag
+          --generate-notes
+          --title "Sketch $GITHUB_REF_NAME"
+        env:
+          GH_TOKEN: ${{ github.token }}

@@ -39,8 +39,8 @@ Each of these exists because something broke.
 ## Before you open a pull request
 
 ```bash
+npm run build        # first: desktop typecheck consumes core's emitted declarations
 npm run typecheck    # must exit 0
-npm run build        # must exit 0
 npm test             # must exit 0, offline, with NO API key in the environment
 ```
 
@@ -78,6 +78,22 @@ commit message, a pull request, or a document.
   and returns. A skip is not a pass.
 - `packages/core/test/cli.test.ts` uses `describe.skip` when `dist/cli.js` is absent, so 20 tests
   vanish silently. Always `npm run build` before `npm test`.
+
+## Releases
+
+Only a pushed semantic version tag matching the package version may publish a release. Publication
+waits for all three native package jobs, re-hashes every installer against its size manifest,
+generates a deterministic canonical manifest, obtains GitHub OIDC build-provenance attestations,
+and verifies those attestations before creating the release. Write/OIDC permissions exist only on
+that tag-only release job.
+
+This is release **provenance**, not Windows Authenticode or Apple Developer ID
+signing/notarization. Do not describe installers as OS code-signed until those identities exist and
+native verification output has been retained. The full maintainer and consumer procedure is in
+[`RELEASES.md`](RELEASES.md).
+
+Release provenance also does not replace marketplace controls: skill content remains hash-pinned,
+capabilities remain fail-closed, and review remains bound to the reviewed digest.
 
 ## Licence
 

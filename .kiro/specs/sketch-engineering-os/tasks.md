@@ -406,6 +406,7 @@ Phase 4 numbering stays intact for anything that references it.
   - _Requirements: 26.2_
 - [~] 12.3 Ship the open-source scaffolding
   - `CONTRIBUTING.md` and signed releases; the marketplace retains hash, scope, and review
+  - Deterministic three-platform release assembly, tag/package/commit/repository binding, GitHub OIDC build-provenance attestation, verification-before-publication, and maintainer/consumer documentation are implemented. Completion remains blocked until a real version-tag workflow publishes assets from all three native jobs and retained verifier output confirms them. GitHub provenance is not Windows Authenticode or Apple Developer ID signing/notarization; those project-owned identities and native verification evidence remain absent.
   - _Requirements: 26.3_
 - [~] 12.4 Prove the flywheel turns server-less
   - A community skill installs, runs, and trains on captured evals with no Sketch server involved
