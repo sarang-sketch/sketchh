@@ -1,12 +1,47 @@
+// The status bar.
+//
+// ── THE COST FIGURE IS GONE AND IS NOT REPLACED WITH A NUMBER ──────────────
+//
+// `$1.4025` used to sit here, and the same string sat in `TaskLog`, and `AppState` held
+// `totalCost: 12.45` as a third copy. All three are deleted.
+//
+// It is deliberately NOT replaced with a live total. Requirement 20.2 says the session
+// total is the sum over the event log with no independent source, and a status bar that
+// fetched and cached its own copy would BE that second source — a number in the corner of
+// the window that disagrees with the panel is worse than no number at all, because the
+// user has to work out which one lied. So this is a button that opens the Cost panel,
+// which owns the total.
+//
+// ── THE OTHER FIXTURES HERE, AND WHAT HAPPENED TO THEM ─────────────────────
+//
+// `Claude 3.5 Sonnet` now reads the selected provider and model from `providers.json`
+// (task 4.1's real state), and renders nothing when nothing is configured.
+//
+// `14.2k tokens` is deleted. A real token count is a sum over the log, which is the Cost
+// panel's job; a plausible-looking one in the corner is the same failure as the dollar
+// figure.
+//
+// `0 errors / 2 warnings` is deleted. There is no diagnostics pipeline in this build, so
+// the counts were decoration — and a status bar claiming two warnings while the editor
+// shows none teaches the user to ignore the status bar.
+//
+// `Anthropic` is deleted for the same reason: it claimed a provider whether or not one
+// was configured.
+//
+// The line/column and file-size figures are left as they are: they belong to the editor
+// surface, are marked in task 3.x, and are not this task's to fix.
+//
+// Validates: Requirements 20.8, 27.1, 27.3, 14.6
 
-import { useAppState } from '../state/AppState';
+import { useAppDispatch, useAppState } from '../state/AppState';
 import { useOptionalGit } from '../git/GitProvider';
 import { branchLabel } from '../git/gitStatus';
-import { GitBranch, AlertCircle, AlertTriangle, Zap } from './Icons';
+import { GitBranch, Zap } from './Icons';
 import styles from './StatusBar.module.css';
 
 export function StatusBar() {
   const state = useAppState();
+  const dispatch = useAppDispatch();
   const git = useOptionalGit();
   const isAgent = state.mode === 'agent';
 
@@ -17,31 +52,30 @@ export function StatusBar() {
   // (Requirements 14.6, 27.3).
   const branch = branchLabel(git?.status ?? null);
 
+  // The configured selection, or nothing. Never a plausible default.
+  const provider = state.providers.find((entry) => entry.id === state.selectedProvider) ?? null;
+  const model = state.selectedModel ?? provider?.model ?? null;
+
   return (
     <div className={styles.statusBar}>
       <div className={styles.left}>
-        <div className={styles.item}>
-          <div className={styles.statusDot} />
-          <span>Anthropic</span>
-        </div>
+        {provider !== null && (
+          <div className={styles.item} title={`Configured in providers.json`}>
+            <div className={styles.statusDot} />
+            <span>{provider.label || provider.id}</span>
+          </div>
+        )}
         {branch !== null && (
           <div className={styles.item} title={git?.root ?? undefined}>
             <GitBranch size={12} />
             <span>{branch}</span>
           </div>
         )}
-        <div className={styles.item}>
-          <span className={styles.error}><AlertCircle size={12} /> 0</span>
-          <span className={styles.warning}><AlertTriangle size={12} /> 2</span>
-        </div>
       </div>
 
       <div className={styles.right}>
         {isAgent ? (
-          <>
-            <div className={styles.item}>Claude 3.5 Sonnet</div>
-            <div className={styles.item}>14.2k tokens</div>
-          </>
+          model !== null && <div className={styles.item}>{model}</div>
         ) : (
           <>
             <div className={styles.badge}>TSX</div>
@@ -51,13 +85,16 @@ export function StatusBar() {
           </>
         )}
 
-        {/* The cost figure is still hardcoded. It belongs to the cost dashboard
-            (task 8.4), which owns the real total; changing it here would put a
-            second cost source in the product. */}
-        <div className={styles.item}>
+        {/* Opens the panel that has the real total. See the header. */}
+        <button
+          type="button"
+          className={styles.costButton}
+          onClick={() => dispatch({ type: 'SET_ACTIVE_PANEL', payload: 'cost' })}
+          title="Open the Cost panel, which sums this project's event log"
+        >
           <Zap size={12} className={styles.zap} />
-          <span>$1.4025</span>
-        </div>
+          <span>Cost</span>
+        </button>
 
         <div className={`${styles.badge} ${isAgent ? styles.badgeAgent : styles.badgeIde}`}>
           {isAgent ? 'AGENT' : 'IDE'}

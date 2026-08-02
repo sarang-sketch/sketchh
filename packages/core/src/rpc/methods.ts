@@ -24,6 +24,7 @@ import { stat } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 
 import { ToolDispatcher, capabilitiesForSkill } from '../capabilities/index.js'
+import { describeLedger, ledgerFor, ledgerForRun } from '../cost/index.js'
 import type { Capability, CapabilitySet } from '../capabilities/index.js'
 import { MCP_CATALOG, McpHost, catalogIds, findCatalogEntry, missingEnv } from '../mcp/index.js'
 import {
@@ -585,6 +586,81 @@ async function openToolLayerFor(
       `reachable with ${granted.length === 0 ? 'no capabilities' : granted.join(', ')}`,
   )
   return { host, dispatcher }
+}
+
+/**
+ * What this project's runs have cost, derived from the durable event log.
+ *
+ * ── THERE IS NO SECOND SOURCE, AND THAT IS THE WHOLE DESIGN ────────────────
+ *
+ * Requirement 20.2 says the session total equals the sum over events with no independent
+ * source, and this method is what makes that literal: it reads the JSONL log and calls
+ * `ledgerFor`. It keeps no running total, caches nothing, and has no state between calls.
+ * So the Cost Dashboard's number and the log are the same computation over the same
+ * bytes, which is why 8.5's reconciliation is an equality rather than a tolerance.
+ *
+ * A corrupt log line is SKIPPED and COUNTED (`readAllDetailed`), not fatal and not
+ * silent: a cost report that quietly dropped lines would understate spend, which is the
+ * direction that costs the user money.
+ */
+async function cost(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
+  const root = resolve(optionalString(params, 'root', 'params.root') ?? ctx.cwd())
+  const runId = optionalString(params, 'runId', 'params.runId')
+
+  const store = new JsonlEventStore({ baseDir: root, secrets: () => ctx.secrets() })
+  const { events, skipped } = await store.readAllDetailed()
+  if (skipped > 0) {
+    ctx.log(`cost: ${skipped} unreadable log line(s) were skipped and are not counted`)
+  }
+
+  const scoped = runId === undefined ? events : events.filter((event) => event.runId === runId)
+  const ledger = ledgerFor(scoped)
+
+  // Per-run subtotals, so a dashboard can show where the money went rather than one
+  // number. Ordered by first activity, which is the order a user experienced them in.
+  const runIds: string[] = []
+  for (const event of scoped) {
+    if (!runIds.includes(event.runId)) runIds.push(event.runId)
+  }
+  const runs = runIds.map((id) => {
+    const perRun = ledgerForRun(scoped, id)
+    return {
+      runId: id,
+      usd: perRun.usd,
+      tokensIn: perRun.tokensIn,
+      tokensOut: perRun.tokensOut,
+      calls: perRun.calls,
+      unpriced: perRun.unpriced,
+      cacheHits: perRun.cacheHits,
+      allLocal: perRun.allLocal,
+      startedAt: perRun.entries[0]?.ts ?? null,
+    }
+  })
+
+  return {
+    root,
+    ...(runId !== undefined ? { runId } : {}),
+    /** Log lines that could not be parsed. Reported, never absorbed. */
+    skipped,
+    total: {
+      usd: ledger.usd,
+      tokensIn: ledger.tokensIn,
+      tokensOut: ledger.tokensOut,
+      calls: ledger.calls,
+      unpriced: ledger.unpriced,
+      cacheHits: ledger.cacheHits,
+      savedUsd: ledger.savedUsd,
+      allLocal: ledger.allLocal,
+    },
+    /** The pricing table's date. A surface must never show money without it. */
+    pricedAt: ledger.pricedAt,
+    stale: ledger.stale,
+    /** The one-line summary, so the engine owns the wording of the unknowns. */
+    summary: describeLedger(ledger),
+    runs,
+    /** Every priced call, newest last, so a total can be audited row by row. */
+    entries: ledger.entries,
+  }
 }
 
 /**
@@ -1410,6 +1486,9 @@ export const METHODS: Readonly<Record<string, MethodHandler>> = {
   // Task 7.4's Test Results panel. Resolving the contract is free and is the default;
   // `run: true` executes the gauntlet and is a deliberate act, never a mount.
   verify,
+  // Task 8.4's Cost Dashboard. Reads the log and sums it. No running total anywhere,
+  // because two sources of a money number agree right up until they do not.
+  cost,
 }
 
 /** The five the protocol contract names. Every build answers at least these. */

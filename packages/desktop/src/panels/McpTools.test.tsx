@@ -15,11 +15,11 @@
 
 import { afterEach, describe, expect, it } from 'vitest'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
-import { readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { join } from 'node:path'
 
 import { METHODS, mcp, type MethodContext } from '@sketch/core'
+
+import { readCode } from '../testing/source'
 
 import { McpTools } from './McpTools'
 import { SketchClientProvider } from '../lib/ClientProvider'
@@ -32,86 +32,18 @@ import {
 } from '../lib/client'
 import { AppStateProvider } from '../state/AppState'
 
-const here = dirname(fileURLToPath(import.meta.url))
-const src = join(here, '..')
-
-function read(relative: string): string {
-  return readFileSync(join(src, relative), 'utf8')
-}
+const read = readCode
 
 /**
- * Source with comments removed.
+ * Source with comments removed. See `testing/source.ts` for why.
  *
- * ── WHY THIS EXISTS, AND WHY IT IS NOT A WEAKENING ─────────────────────────
- *
- * The fixture guards below search for `mcpToolsStatus`, `connected: 5`, and the invented
- * tooltip text. A first version searched the raw file and failed — on the comments this
- * task wrote to record what was deleted and why. That is the same false positive
- * `deps.test.ts` hit when a `['from', 'into']` stopword array read as an import: the
- * DATA moved, not the guard.
- *
- * The honest rule was never "this string appears nowhere in the file", it is "this
- * fixture is not part of what ships". A comment does not ship behaviour, and forbidding
- * the words would mean the codebase could not explain its own history — which is worse,
- * because the next person to see `connected: 5` in a git log needs to find out it was
- * removed on purpose.
- *
- * So: comments are stripped and the CODE is searched. `stripsCommentsOnly` below proves
- * the stripper still catches a real occurrence, in a string literal, in JSX, and in a
- * property position — because a guard that removed too much would silently pass.
+ * The short version: the guards below search for `mcpToolsStatus` and `connected: 5`, and
+ * searching the raw file failed on the comments this task wrote to record what was
+ * deleted and why. The rule is "this fixture is not part of what ships", not "these words
+ * appear nowhere". The stripper lives in ONE place with its own self-test, because a
+ * second copy would drift and the drift would be silent.
  */
-function code(relative: string): string {
-  return stripComments(read(relative))
-}
-
-function stripComments(source: string): string {
-  let out = ''
-  let index = 0
-  // Tracks whether the scanner is inside a quoted run, so a `//` in a URL survives.
-  let quote: string | null = null
-
-  while (index < source.length) {
-    const char = source[index]!
-    const next = source[index + 1]
-
-    if (quote !== null) {
-      out += char
-      if (char === '\\') {
-        out += source[index + 1] ?? ''
-        index += 2
-        continue
-      }
-      if (char === quote) quote = null
-      index += 1
-      continue
-    }
-
-    if (char === '"' || char === "'" || char === '`') {
-      quote = char
-      out += char
-      index += 1
-      continue
-    }
-
-    if (char === '/' && next === '/') {
-      while (index < source.length && source[index] !== '\n') index += 1
-      continue
-    }
-
-    if (char === '/' && next === '*') {
-      index += 2
-      while (index < source.length && !(source[index] === '*' && source[index + 1] === '/')) {
-        index += 1
-      }
-      index += 2
-      continue
-    }
-
-    out += char
-    index += 1
-  }
-  return out
-}
+const code = readCode
 
 function methodContext(env: NodeJS.ProcessEnv = {}): MethodContext {
   return {
@@ -196,28 +128,6 @@ afterEach(cleanup)
 // ── 1. the fixtures are gone ────────────────────────────────────────────────
 
 describe('the fixtures this panel replaced', () => {
-  it('strips comments only — the guard below still catches a real occurrence', () => {
-    // The refinement, proved on all four shapes a fixture could actually take.
-    const sample = [
-      '// mcpToolsStatus: { connected: 5 } — a comment about the deleted field',
-      '/* mcpToolsStatus: { connected: 5 } */',
-      'const keep = { mcpToolsStatus: { connected: 5 } }',
-      'const url = "https://example.com/mcpToolsStatus"',
-      '<div title="MCP Tools Active (cloudrun)" />',
-    ].join('\n')
-    const stripped = stripComments(sample)
-
-    // Prose is gone.
-    expect(stripped).not.toContain('a comment about the deleted field')
-    // Code, a string literal, and JSX are all still there — twice for the property and
-    // once for the URL, so a guard scanning this would still fail on the real thing.
-    expect(stripped.match(/mcpToolsStatus/g)).toHaveLength(2)
-    expect(stripped).toContain('connected: 5')
-    expect(stripped).toContain('MCP Tools Active (cloudrun)')
-    // A `//` inside a string is not a comment.
-    expect(stripped).toContain('https://example.com')
-  })
-
   it('has no mcpToolsStatus in AppState', () => {
     const state = code(join('state', 'AppState.tsx'))
     // The field, its initial value, and every read of it.

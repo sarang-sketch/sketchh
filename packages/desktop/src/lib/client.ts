@@ -288,6 +288,65 @@ export interface McpCatalogResult {
   note: string
 }
 
+// ── cost, as a surface sees it ──────────────────────────────────────────────
+
+/** One priced model call. Carries `eventId` so a total can be audited row by row. */
+export interface CostEntry {
+  runId: string
+  eventId: string
+  ts: number
+  iteration: number | null
+  model: string | null
+  provider: string | null
+  usage: { in: number; out: number }
+  /** USD, or NULL when this model is not in the price table. Never 0 for unknown. */
+  usd: number | null
+  matched: string | null
+  local: boolean
+}
+
+export interface CostTotals {
+  /** USD over the calls that could be priced. Excludes unpriced calls entirely. */
+  usd: number
+  tokensIn: number
+  tokensOut: number
+  calls: number
+  /** Calls whose model is not in the price table. `usd` is a lower bound while > 0. */
+  unpriced: number
+  cacheHits: number
+  /** What the cache avoided. Reported separately: a saving is not a negative expense. */
+  savedUsd: number
+  /** True when every priced call was a local model, so the zero is real. */
+  allLocal: boolean
+}
+
+export interface CostRunSummary {
+  runId: string
+  usd: number
+  tokensIn: number
+  tokensOut: number
+  calls: number
+  unpriced: number
+  cacheHits: number
+  allLocal: boolean
+  startedAt: number | null
+}
+
+export interface CostReport {
+  root: string
+  runId?: string
+  /** Log lines that could not be parsed. Shown, never absorbed. */
+  skipped: number
+  total: CostTotals
+  /** The pricing table's date. A surface must never show money without it. */
+  pricedAt: string
+  stale: boolean
+  /** The engine's own wording, so the UI does not invent a second way to say unknown. */
+  summary: string
+  runs: CostRunSummary[]
+  entries: CostEntry[]
+}
+
 export interface RunOptions {
   /** Project root for this run. Required by the desktop to match the open folder. */
   root?: string
@@ -470,6 +529,18 @@ export interface SketchClient {
 
   /** The curated catalog, with each entry's missing environment named. */
   mcpCatalog?(): Promise<McpCatalogResult>
+
+  // ── cost ──────────────────────────────────────────────────────────────────
+  //
+  // The total is a SUM OVER THE EVENT LOG and there is no second source — no running
+  // counter in `AppState`, no cached subtotal on this seam, nothing the UI increments as
+  // events arrive. Requirement 20.2 requires that, and it is also what makes the
+  // dashboard auditable: every row links back to the log line it came from.
+  //
+  // `state.totalCost` was deleted for this reason. It held `12.45`.
+
+  /** What this project's runs have cost, derived from the durable log. */
+  cost?(params: { root: string; runId?: string }): Promise<CostReport>
 
   /**
    * Attach a handler to the engine's event stream. Called for every event from

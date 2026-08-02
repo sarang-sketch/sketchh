@@ -31,9 +31,26 @@
   background-color: #10b981;
 }
 
-.error { color: #f43f5e; display: flex; align-items: center; gap: 2px; }
-.warning { color: #f59e0b; display: flex; align-items: center; gap: 2px; }
 .zap { color: #f97316; }
+
+/* A button, not a figure. The number lives in the Cost panel, which is the one
+   source; see the note at the top of StatusBar.tsx. */
+.costButton {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 4px;
+  border: none;
+  border-radius: 3px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.costButton:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
 
 .badge {
   padding: 1px 6px;

@@ -350,8 +350,15 @@ describeRepo(`StatusBar branch${SKIP_NOTE}`, () => {
     )
 
     // The rest of the bar is there; the branch chip is not.
-    expect(await screen.findByText('Anthropic')).toBeDefined()
+    //
+    // This used to probe for the text `Anthropic`, which was itself a fixture — the bar
+    // claimed a provider whether or not one was configured, and task 8.4 deleted it. The
+    // probe now uses the Cost button, which is unconditionally rendered. The GUARANTEE
+    // being tested is unchanged: no branch name is invented when no repository is open.
+    expect(await screen.findByRole('button', { name: /Cost/ })).toBeDefined()
     expect(screen.queryByText('main')).toBeNull()
+    // And no provider is claimed either, now that nothing is configured.
+    expect(screen.queryByText('Anthropic')).toBeNull()
   })
 })
 

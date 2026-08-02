@@ -221,6 +221,8 @@ export interface AppState {
     | 'tests'
     /** MCP Tools: the curated catalog and what each server costs (Req 22.2, 27.5). */
     | 'mcp'
+    /** Cost: the total, summed from the event log. The ONE source (Req 20.2, 20.8). */
+    | 'cost'
     | null;
   terminalOpen: boolean;
   /**
@@ -270,7 +272,11 @@ export interface AppState {
   bottomPanelOpen: boolean;
   bottomPanelHeight: number;
   tasks: TaskEntry[];
-  totalCost: number;
+  // `totalCost` is deliberately GONE. It held `12.45`, was never read by anything, and
+  // was the third copy of a cost figure alongside two hardcoded `$1.4025` strings.
+  // Requirement 20.2 says the session total is the sum over the event log with NO
+  // independent source, so a field here would be that second source by definition. The
+  // Cost panel fetches it through `cost` and holds no counter either.
 }
 
 // Actions
@@ -426,8 +432,8 @@ const initialState: AppState = {
   rightPanelCollapsed: false,
   bottomPanelOpen: true,
   bottomPanelHeight: 250,
-  tasks: [],
-  totalCost: 12.45
+  tasks: []
+  // No `totalCost`. See the note on the interface field above.
 };
 
 /** The starting state. Exported so a test drives the real reducer, not a copy. */

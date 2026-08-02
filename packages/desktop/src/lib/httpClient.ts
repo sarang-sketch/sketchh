@@ -11,6 +11,7 @@ import type {
   SkillTrainResult,
   VerifyContractResult,
   McpCatalogResult,
+  CostReport,
   ProviderCatalogResult,
   ProviderTestRequest,
 } from './client'
@@ -256,6 +257,13 @@ export class HttpSketchClient implements SketchClient {
 
   async mcpCatalog(): Promise<McpCatalogResult> {
     return this.callMethod<McpCatalogResult>('mcp-catalog', {})
+  }
+
+  async cost(params: { root: string; runId?: string }): Promise<CostReport> {
+    return this.callMethod<CostReport>('cost', {
+      root: params.root,
+      ...(params.runId !== undefined ? { runId: params.runId } : {}),
+    })
   }
 
   subscribe(handler: EventHandler): Unsubscribe {

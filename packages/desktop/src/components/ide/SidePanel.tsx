@@ -14,6 +14,7 @@ import DebuggerPanel from '../../panels/ide/DebuggerPanel';
 import { ProviderSettings } from '../../panels/ProviderSettings';
 import { McpTools } from '../../panels/McpTools';
 import { TestResults } from '../../panels/TestResults';
+import { CostDashboard } from '../../panels/CostDashboard';
 
 export default function SidePanel() {
   const { ideActivePanel } = useAppState();
@@ -77,6 +78,11 @@ export default function SidePanel() {
       // Task 7.4: the nine-stage contract, resolved on mount and run on request.
       title = 'Test Results';
       content = <TestResults />;
+      break;
+    case 'cost':
+      // Task 8.4: the total, summed from the event log. The one cost source.
+      title = 'Cost';
+      content = <CostDashboard />;
       break;
     default:
       return null;

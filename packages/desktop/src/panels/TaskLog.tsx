@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Activity, Zap, CheckCircle, AlertCircle, Clock, ChevronDown, ChevronRight } from '../components/Icons';
+import { useAppDispatch } from '../state/AppState';
 import styles from './TaskLog.module.css';
 
 type TaskStatus = 'running' | 'done' | 'failed';
@@ -13,6 +14,7 @@ const MOCK_TASKS = [
 ];
 
 export function TaskLog() {
+  const dispatch = useAppDispatch();
   const [filter, setFilter] = useState('All');
   const [expanded, setExpanded] = useState<number | null>(null);
 
@@ -39,11 +41,22 @@ export function TaskLog() {
         </select>
       </div>
 
-      <div className={styles.costBar}>
+      {/* The `$1.4025` cost bar is GONE (task 8.4). It was the same invented string the
+          status bar carried, and a third copy lived in `AppState.totalCost`. The real
+          total is summed from the event log by the Cost panel, which is the one source
+          Requirement 20.2 requires. A link, not a number: a second figure here would be
+          a second source, and two money numbers disagree eventually.
+
+          `MOCK_TASKS` below is still a fixture and is task 10.4's to replace — it is
+          left alone deliberately rather than half-fixed here. */}
+      <button
+        type="button"
+        className={styles.costBar}
+        onClick={() => dispatch({ type: 'SET_ACTIVE_PANEL', payload: 'cost' })}
+      >
         <Zap size={14} className={styles.zapIcon} />
-        <span>Total Session Cost:</span>
-        <span className={styles.costAmount}>$1.4025</span>
-      </div>
+        <span>Session cost is summed from the event log — open the Cost panel</span>
+      </button>
 
       <div className={styles.timeline}>
         {MOCK_TASKS.map((task, idx) => (

@@ -314,6 +314,13 @@ export class MockSketchClient implements SketchClient {
     return this.noEngine('mcp-catalog')
   }
 
+  // A fabricated cost report is a fabricated INVOICE. `$1.4025` was on screen in two
+  // places before this task and meant nothing; a number a user might act on has to come
+  // from the log or not exist.
+  async cost(): Promise<never> {
+    return this.noEngine('cost')
+  }
+
   private nextRunId(): string {
     // Time-prefixed so ids sort chronologically, matching the engine's scheme.
     this.runCounter += 1
