@@ -24,6 +24,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "bench": "node scripts/bench.mjs",
+    "bench:check": "node scripts/bench.mjs --check",
     "pin:registry": "node scripts/pin-registry.mjs"
   },
   "devDependencies": {
