@@ -14,6 +14,7 @@ import type {
   EvalResult,
   GitStatusResult,
   ProviderDescriptor,
+  ProviderSettingsEntry,
   ProviderSettingsFile,
   ProviderTestResult,
   RunResult,
@@ -516,6 +517,12 @@ export interface MemorySupersedeResult {
 }
 
 export interface RunOptions {
+  /**
+   * Exact key-free provider entry selected from persisted settings for this run.
+   * Omitted means no provider was selected; the engine refuses unless its explicit
+   * offline fake switch is enabled. This type cannot carry an API key.
+   */
+  provider?: ProviderSettingsEntry
   /** Project root for this run. Required by the desktop to match the open folder. */
   root?: string
   /** Leave emitted patches open for human hunk review instead of auto-applying. */

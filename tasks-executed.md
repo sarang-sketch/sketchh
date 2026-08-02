@@ -993,10 +993,25 @@ The deterministic gate result is `offline-scripted-v1 + Sketch` versus the same 
 | # | Task | Status | Notes |
 |---|---|---|---|
 | 12.1 | Cross-platform Tauri builds with a documented size budget | 🔄 evidence-gated | Added native Windows/NSIS, macOS/DMG, and Ubuntu 22.04/AppImage jobs; host-native sidecar build and protocol smoke check; strict `<100,000,000-byte` artifact validator with SHA-256 size manifests; artifact upload; release-size Cargo profile; and `PACKAGING.md`. Corrected two real Tauri packaging defects: the invalid v2 window `name` property and a macOS-conflicting identifier ending in `.app`. Local sidecar is 87 MiB and passes protocol checks. The Windows Tauri build reached Rust compilation, then this host's Application Control blocked Cargo build scripts (OS error 4551) and `dlltool.exe` was missing. macOS/Linux were not run here. The task remains open until all three native workflow jobs produce uploaded installers whose manifests pass the budget. |
+| 12.2 | Clean-machine local-first proof | 🔄 preflight built; evidence pending | Fixed the shipped run path so AgentChat resolves `selectedProvider` against the one key-free AppState provider list and both HTTP/stdin transports forward that exact entry. Added a direct production-sidecar preflight that refuses non-loopback, missing-model, and unavailable endpoints, requires Ollama's identity/model responses, and never starts or substitutes a stub/fake provider; it indexes a fresh fixture, requires plan/edit/verify/completion events, verifies exact bytes, and writes a limitation-labelled artifact. Added `OFFLINE-PROOF.md` for installer, UI review/apply, graph, event, final-byte, process-tree, DNS, socket, and packet evidence. Ollama is absent on this host, so no real-model run occurred and task 12.2 remains open. |
 
 ### Task 12.1 validation so far
 
 `npm run build`, `npm run typecheck`, core **1,028 tests / 51 files**, desktop **484 tests / 49 files**, `build:sidecar`, and `verify:sidecar` pass. The native package attempt is recorded as a blocked attempt, not a pass. Mutation evidence: changing the package ceiling from strict `<` to `<=` failed one test; removing the Linux matrix identity failed one test; restoring the invalid Tauri window `name` failed one test. Each mutation was restored and all three packaging tests pass.
+
+### Task 12.2 preparation validation
+
+Canonical order passes: `npm run build`, `npm run typecheck`, core **1,028 tests / 51 files**, and desktop **489 tests / 51 files**. The rebuilt 87 MiB host sidecar passes its protocol smoke check with `fakeProvider: false`. The forwarding-focused set passes **18 tests / 3 files**. On this machine `npm run preflight:ollama -- --model definitely-not-installed` refuses with exit 1 because `127.0.0.1:11434` is unavailable and states that no stub/fake fallback is permitted; this is refusal evidence only, not a real-Ollama run.
+
+Mutation evidence, each restored and re-run green:
+
+| Mutation | Observed failure |
+|---|---|
+| Remove provider from stdio `run` frame | exact-frame test failed: received `undefined` |
+| Remove provider from HTTP `run` request | exact-request test failed: received `undefined` |
+| Ignore `selectedProvider` and take the first configured row | both AgentChat selection/no-fallback tests failed |
+
+No provider key was added to AppState or the wire type: `RunOptions.provider` is the canonical key-free `ProviderSettingsEntry`. No real model was called, no native installer was exercised, and no network capture was taken.
 
 ---
 
@@ -1004,6 +1019,9 @@ The deterministic gate result is `offline-scripted-v1 + Sketch` versus the same 
 
 | Date | Decision | Rationale |
 |---|---|---|
+| 2026-08-02 | A desktop run forwards the **selected persisted entry**, not a model string or a fallback | Provider configuration already has one authority: the key-free `ProviderSettingsEntry` loaded into AppState. AgentChat resolves `selectedProvider` against that list at send time and both transports carry the exact object. An absent/stale selection stays absent so core gives its existing `params.provider is required` refusal; selecting the first row would silently run a model the user did not choose. The type cannot carry `apiKey`, preserving the persisted-state boundary. |
+| 2026-08-02 | Real-Ollama preflight and Requirement 26.2 proof are **different artifacts** | The preflight is deliberately useful but narrower: production sidecar, fresh index, operator-supplied loopback Ollama with identity/model endpoint checks, edit, verification, exact bytes. It starts no stub or fake fallback, yet it does not attest process provenance, install the Tauri app, exercise UI review/apply, or observe process-level egress. Its JSON labels those limits. Only the retained clean-snapshot procedure in `OFFLINE-PROOF.md` can close 12.2. |
+| 2026-08-02 | No-egress means **raw process-attributed attempts**, not a source scan or firewall success | A denied connect is still attempted egress; a packet trace without PID attribution cannot distinguish Sketch from Ollama or the OS; a process list without packets can miss DNS. The proof therefore retains packet/DNS/socket data plus process start/exit identity and treats gaps, dropped records, unresolved PIDs, and any non-loopback attempt as inconclusive/failed. |
 | 2026-08-02 | Cross-platform packaging means **one native runner per OS**, never a renamed runtime | The sidecar embeds `process.execPath`; setting `SKETCH_TARGET_TRIPLE` only changes its filename and cannot turn a Windows Node executable into a macOS or Linux binary. Each job therefore builds and verifies its own sidecar before Tauri packaging. |
 | 2026-08-02 | Keep the PRD's size target as strict **`<100,000,000 bytes` per deliverable** | “100 MB” is decimal and `<` excludes the boundary. The measured object is the largest distributable NSIS, DMG or AppImage artifact, not unpacked app bytes or debug output. The current 87 MiB uncompressed Node runtime makes the margin explicit rather than silently raising the target. |
 | 2026-08-02 | A packaging workflow is **not build evidence** | Source tests prove that three native jobs, sidecar verification, budget enforcement and artifact upload are wired. Only a successful native job and its uploaded SHA-256 size manifest prove an OS build exists. Task 12.1 stays open until all three do. |

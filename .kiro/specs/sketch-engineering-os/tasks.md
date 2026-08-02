@@ -402,6 +402,7 @@ Phase 4 numbering stays intact for anything that references it.
   - _Requirements: 26.1_
 - [~] 12.2 Prove local-first on a clean offline machine
   - Install, index a repository, and complete a task on local Ollama with no external network call beyond the local model endpoint
+  - The desktop now forwards the authoritative selected key-free provider through both production transports. A direct host-sidecar preflight requires loopback plus Ollama's identity/model endpoints and an exact installed model, indexes a fresh fixture, runs and verifies an edit, and never starts or substitutes a stub/fake provider. `OFFLINE-PROOF.md` defines the retained clean-machine procedure and evidence bundle. Completion remains blocked on a verified native installer, a fresh-machine installed-app UI run, and raw process-attributed DNS/socket evidence.
   - _Requirements: 26.2_
 - [~] 12.3 Ship the open-source scaffolding
   - `CONTRIBUTING.md` and signed releases; the marketplace retains hash, scope, and review

@@ -1,7 +1,7 @@
 # NEED TO DO — Sketch, from here to done
 
 **Audience:** the developer who is going to write this code.
-**Status date:** task 12.1 packaging path implemented; native artifact evidence pending.
+**Status date:** task 12.2 provider forwarding and real-Ollama preflight implemented; native and clean-machine evidence pending.
 **Authority:** `.kiro/specs/sketch-engineering-os/{requirements,design,tasks}.md` are the contract.
 This file is the working plan on top of them. Where this file and the spec disagree, the spec wins
 and you should fix this file.
@@ -85,8 +85,8 @@ writes down what happened. Do not describe a wired interface as a working featur
 
 ## 1. Where the project actually stands
 
-**Status date: Phase 11 gated; task 12.1 in progress. 78 of 96 tasks complete.** Core 1,028
-tests / 51 files, desktop 484 tests / 49 files, build and typecheck green. The native sidecar build
+**Status date: Phase 11 gated; tasks 12.1 and 12.2 in progress. 78 of 96 tasks complete.** Core
+1,028 tests / 51 files, desktop 489 tests / 51 files, build and typecheck green. The native sidecar build
 and protocol smoke check pass. Cross-platform package jobs and the strict `<100,000,000-byte` size
 gate are implemented, but 12.1 remains open until native Windows, macOS, and Linux workflow jobs
 produce uploaded installers and passing size manifests.
@@ -1042,9 +1042,12 @@ because it demos well. The plan forbids that.
   100 MB. Those two facts do not fit. Either shrink the sidecar (it is an esbuild bundle of a
   zero-dependency engine — 91 MB is the embedded Node runtime, not our code), ship Node as a
   requirement, or amend the target. Decide explicitly and record it.
-- **12.2 Local-first proof** _(26.2)_ — on a clean offline machine: install, index a repository,
-  complete a task on local Ollama, with **no external network call** beyond the local model endpoint.
-  Verify with a packet capture, not by trusting the code.
+- **12.2 Local-first proof** _(26.2)_ — provider forwarding is implemented through both production
+  transports, and the source-sidecar preflight requires real loopback Ollama, indexes a fresh
+  fixture, runs an edit, and verifies exact bytes with no stub/fake fallback. `OFFLINE-PROOF.md`
+  defines the evidence procedure. **Still open:** run the matching native installer on a clean
+  offline snapshot, index through the installed UI, review/apply a real Ollama edit, and retain raw
+  process-attributed packet/DNS/socket evidence proving no non-loopback attempt.
 - **12.3 Open-source scaffolding** _(26.3)_ — `CONTRIBUTING.md`, signed releases; the marketplace keeps
   hash, scope, and review.
 - **12.4 Prove the flywheel turns server-less** _(26.4)_ — a community skill installs, runs, and trains

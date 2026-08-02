@@ -129,6 +129,35 @@ describe('StdioSketchClient — framing', () => {
     expect(received.ok).toBe(false)
   })
 
+  it('forwards the exact key-free provider entry in a run frame', async () => {
+    const fake = new FakeSidecar()
+    const client = new StdioSketchClient({ spawn: fake.spawn, onDiagnostic: () => {} })
+    const provider = {
+      id: 'local-ollama',
+      kind: 'openai-compatible' as const,
+      baseUrl: 'http://127.0.0.1:11434/v1',
+      model: 'qwen2.5-coder:7b',
+      label: 'Local Ollama',
+    }
+
+    const pending = client.run(
+      { id: 'provider-run', prompt: 'edit locally', verify: [] },
+      { provider },
+    )
+    const request = await nextRequest(fake)
+
+    expect(request.method).toBe('run')
+    expect(request.params.provider).toEqual(provider)
+    expect(JSON.stringify(request.params.provider)).not.toContain('apiKey')
+
+    fake.stdout(`${JSON.stringify({
+      id: request.id,
+      ok: true,
+      result: { runId: 'r-provider', ok: true, finalText: 'done', iterations: 1, verify: [], events: [] },
+    })}\n`)
+    await expect(pending).resolves.toMatchObject({ runId: 'r-provider' })
+  })
+
   it('accepts a whole frame delivered without a trailing newline', async () => {
     // Tauri's shell plugin emits one `data` event per line, terminator stripped.
     const fake = new FakeSidecar()

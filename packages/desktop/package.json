@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "build:sidecar": "node scripts/build-sidecar.mjs",
     "verify:sidecar": "node scripts/verify-sidecar.mjs",
+    "preflight:ollama": "node scripts/preflight-ollama.mjs",
     "package": "tauri build",
     "package:windows": "tauri build --bundles nsis",
     "package:macos": "tauri build --bundles dmg",

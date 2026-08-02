@@ -74,10 +74,25 @@ Then configure it in **Provider Settings**, or write `~/.sketch/providers.json` 
 }
 ```
 
-No key. No account. Press **Test** in Provider Settings and it verifies the endpoint and the model
-name with no internet connection at all — `packages/core/test/phase4-gate.test.ts` proves exactly
-that against `http://localhost:11434/v1`. [LM Studio](https://lmstudio.ai) works the same way on
-`http://localhost:1234/v1`, as does `llama.cpp`'s server.
+No key. No account. Press **Test** in Provider Settings and it checks the endpoint and model
+name without needing an internet service. `packages/core/test/phase4-gate.test.ts` covers this
+protocol path against a real Ollama when one is already listening, otherwise against an explicitly
+labelled loopback stub; it is not real-Ollama evidence.
+
+For an explicitly real local check, build the host sidecar and run:
+
+```bash
+npm run build:sidecar -w @sketch/desktop
+npm run preflight:ollama -- --model llama3.2
+```
+
+That preflight refuses unavailable/non-loopback endpoints and fake fallback, and requires Ollama's
+`/api/version` and `/api/tags` responses plus the exact installed model. It still is
+not clean-machine proof; [`OFFLINE-PROOF.md`](OFFLINE-PROOF.md) defines the installed-app, UI
+review/apply, and process-attributed network evidence required for Requirement 26.2.
+[LM Studio](https://lmstudio.ai) works through the same provider adapter on
+`http://localhost:1234/v1`, as does `llama.cpp`'s server, but neither satisfies the Ollama-specific
+preflight.
 
 **This file never holds a key.** Two independent guards enforce it: a field whitelist, and a
 byte-level check of the serialized JSON against the same credential-pattern table the event-log

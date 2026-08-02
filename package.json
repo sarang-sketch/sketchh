@@ -23,6 +23,7 @@
     "bench:check": "npm run build -w @sketch/core && npm run bench:check -w @sketch/core",
     "build:desktop": "npm run build -w @sketch/desktop",
     "package:desktop": "npm run package -w @sketch/desktop",
+    "preflight:ollama": "npm run preflight:ollama -w @sketch/desktop --",
     "dev:desktop": "npm run dev -w @sketch/desktop"
   }
 }

@@ -97,6 +97,7 @@ export class HttpSketchClient implements SketchClient {
   async run(task: Task, options: RunOptions = {}): Promise<RunResult> {
     return this.callMethod<RunResult>('run', {
       task,
+      ...(options.provider !== undefined ? { provider: options.provider } : {}),
       ...(options.root !== undefined ? { root: options.root } : {}),
       ...(options.reviewEdits !== undefined ? { reviewEdits: options.reviewEdits } : {}),
       // Omitted means the single-agent path, unchanged. See the note on the stdio transport.

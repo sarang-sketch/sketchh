@@ -19,14 +19,16 @@ Phase 3 and had gone four phases stale.
 
 ## IMMEDIATE NEXT ACTION
 
-**Task 12.1's native packaging path is implemented but remains evidence-gated. Commit this green
-point, then run `.github/workflows/package.yml` on GitHub and require all three native jobs and size
-manifests before checking 12.1 complete. Do not begin 12.2 first.**
+**Task 12.1 remains externally evidence-gated. Task 12.2 preparation now fixes the production
+provider-forwarding blocker and adds a no-fallback real-Ollama sidecar preflight plus
+`OFFLINE-PROOF.md`. Run that preflight on a host with genuine Ollama, then perform the retained
+installed-app procedure only after a matching native installer exists. Do not mark either task
+complete from source tests or preflight output.**
 
-**78 of 96 tasks complete.** Phases 1 through 11 are done and gated; 12.1 is in progress.
+**78 of 96 tasks complete.** Phases 1 through 11 are done and gated; 12.1 and 12.2 are in progress.
 
-Current source verification: build and typecheck pass; **core 1,028 tests / 51 files, desktop 484
-tests / 49 files**. The native Windows sidecar is 87 MiB and its protocol smoke test passes. The
+Current source verification: build and typecheck pass; **core 1,028 tests / 51 files, desktop 489
+tests / 51 files**. The native Windows sidecar is 87 MiB and its protocol smoke test passes. The
 first Tauri package attempt fixed an invalid v2 window `name` field, then reached Rust compilation
 but was blocked by this host's Application Control policy (OS error 4551) and missing `dlltool.exe`.
 No Windows installer was produced; macOS and Linux were not run on this host.
@@ -170,7 +172,7 @@ because there was nothing to bisect.
 | 9 — Versioned memory with hygiene (9.1–9.5) | **DONE**, gate green cold |
 | 10 — Eval-gated multi-agent (10.1–10.5) | **DONE**, gate green. `swarm` ships **off**: no measured strategy lift |
 | 11 — Honest benchmarks (11.1–11.6) | **DONE**, gate green cold. CI result is synthetic only; real-provider public matrix unperformed |
-| 12 — Packaging and open flywheel | **IN PROGRESS** — 12.1 wired and locally source-green; native Windows/macOS/Linux artifacts still required |
+| 12 — Packaging and open flywheel | **IN PROGRESS** — 12.1 native artifacts required; 12.2 forwarding/preflight built, installed-app clean-machine evidence required |
 
 Task counts: 96 total, **78 complete**.
 
@@ -183,8 +185,9 @@ seven-action agent loop with the plan gate enforced *in the engine*; shell-less 
 harness; SkillOpt trainer with a strict `>` validation gate; stdio JSON-line CLI; `StdioSketchClient`
 and `HttpSketchClient` with a Vite dev bridge; capture-as-eval that re-scores 1.0; Monaco editor with
 one authoritative file cache; real Explorer, Terminal, Search, Git panel and per-hunk Diff Review;
-Tauri hardening; provider settings with a key-free `providers.json` and a real connection test; OS
-credential storage in Rust with a presence-only read surface; vendored fonts and a zero-egress guard;
+Tauri hardening; provider settings with a key-free `providers.json` and a real connection test; the
+selected key-free provider is forwarded by AgentChat through both production transports into `run`;
+OS credential storage in Rust with a presence-only read surface; vendored fonts and a zero-egress guard;
 persisted incremental repo graph; hybrid lexical+vector retrieval with RRF and rerank; offline-first
 embeddings; budgeted context assembly that degrades detail before coverage; the seven-view
 architecture generator and the Live Architecture panel.
@@ -201,18 +204,20 @@ architecture generator and the Live Architecture panel.
 - `TaskLog` (`MOCK_TASKS`), `AgentTeamPanel` (fixture, and unreachable — no ActivityBar item
   dispatches `agents`) → **10.4**
 - Cost dashboard absent; `StatusBar` hardcodes `$1.4025` → **8.4**
-- **Requirement 17.4 is half-wired.** A key can be stored and its presence reported, and the engine
-  can resolve a key from an injected `SecretStore` at call time — but there is deliberately **no read
-  command**, so a stored key cannot reach a model call today. Only a just-typed key does. Closing it
-  needs a spec decision about where the key crosses (Rust → sidecar stdin, or the sidecar reading the
-  OS store itself)
+- **Requirement 17.4 remains half-wired for keyed hosted providers.** Key-free local providers now
+  reach a desktop run through the selected persisted entry. A hosted key can be stored and its
+  presence reported, and the engine can resolve a key from an injected `SecretStore` at call time —
+  but there is deliberately **no read command**, so a stored hosted key cannot reach a model call
+  today. Closing it needs a spec decision about where the key crosses (Rust → sidecar stdin, or the
+  sidecar reading the OS store itself)
 - `src/memory/` and the legacy `verifier/` + `orchestrator/` state machine are pre-existing code
   **not wired into the new loop** → **9, 10**
 - The eval harness has **no per-case context seam**: `runEvalSet` takes one `deps` for all cases, so
   the Phase 5 gate calls `runEval` per case instead
 
-**Nothing has ever run against a real provider.** Every adapter is exercised only against
-`FakeChatAdapter`, synthetic responses, and loopback stubs.
+**Nothing has ever run against a real provider.** The production local-provider route is now wired,
+but this host has no Ollama installation; every executed adapter test/run still used
+`FakeChatAdapter`, synthetic responses, or explicitly labelled loopback stubs.
 
 ---
 

@@ -39,10 +39,13 @@ export const AgentChat: React.FC = () => {
 
   // Sends go through the client seam. The reply is the engine's real `finalText`,
   // and the events the run emits show up in the Timeline and the Agent Console as
-  // they arrive — no simulated response.
+  // they arrive — no simulated response. Provider selection has one authority:
+  // the key-free entry in AppState loaded from providers.json. No selection means
+  // no provider on the wire, so the engine gives its existing honest refusal.
   const handleSend = () => {
     const prompt = inputText.trim();
     if (!prompt) return;
+    const provider = state.providers.find((entry) => entry.id === state.selectedProvider);
 
     dispatch({
       type: 'ADD_MESSAGE',
@@ -54,7 +57,11 @@ export const AgentChat: React.FC = () => {
     client
       .run(
         { id: newId(), prompt, verify: [] },
-        { ...(state.projectRoot ? { root: state.projectRoot } : {}), reviewEdits: true },
+        {
+          ...(provider !== undefined ? { provider } : {}),
+          ...(state.projectRoot ? { root: state.projectRoot } : {}),
+          reviewEdits: true,
+        },
       )
       .then((result) => {
         dispatch({ type: 'SET_THINKING', payload: { isThinking: false } });
