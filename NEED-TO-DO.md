@@ -1,7 +1,7 @@
 # NEED TO DO — Sketch, from here to done
 
 **Audience:** the developer who is going to write this code.
-**Status date:** Phase 11 gated; implementation commits `fc51f5e`, `2a5f0f9`, `c13967d`.
+**Status date:** task 12.1 packaging path implemented; native artifact evidence pending.
 **Authority:** `.kiro/specs/sketch-engineering-os/{requirements,design,tasks}.md` are the contract.
 This file is the working plan on top of them. Where this file and the spec disagree, the spec wins
 and you should fix this file.
@@ -85,10 +85,16 @@ writes down what happened. Do not describe a wired interface as a working featur
 
 ## 1. Where the project actually stands
 
-**Status date: Phase 11 gated. 78 of 96 tasks complete. Phases 1 through 11 are done and gated;
-Phase 12 (packaging and the open flywheel) is next.** Core 1,028 tests / 51 files, desktop 481
-tests / 48 files, build and typecheck green from a cold reinstall, and identical with
-`SKETCH_FAKE_PROVIDER=1` set and unset. `bench:check` is green with synthetic pass@2 lift 1.000.
+**Status date: Phase 11 gated; task 12.1 in progress. 78 of 96 tasks complete.** Core 1,028
+tests / 51 files, desktop 484 tests / 49 files, build and typecheck green. The native sidecar build
+and protocol smoke check pass. Cross-platform package jobs and the strict `<100,000,000-byte` size
+gate are implemented, but 12.1 remains open until native Windows, macOS, and Linux workflow jobs
+produce uploaded installers and passing size manifests.
+
+**Packaging evidence is honest.** The local Windows Tauri attempt reached Rust compilation but this
+host's Application Control blocked Cargo build scripts (OS error 4551) and `dlltool.exe` is absent.
+No Windows installer was produced or measured, and macOS/Linux were not run here. `PACKAGING.md`
+defines the release matrix, measurement basis, unsigned status, and exact blocker.
 
 **Benchmark evidence is deliberately narrow.** The internal CI result compares
 `offline-scripted-v1 + Sketch` with the same scripted model plus `naive`. It is deterministic

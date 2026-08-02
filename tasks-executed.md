@@ -988,10 +988,25 @@ The deterministic gate result is `offline-scripted-v1 + Sketch` versus the same 
 
 ---
 
+## Phase 12 — Packaging and the open flywheel (spec: `.kiro/specs/sketch-engineering-os`)
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| 12.1 | Cross-platform Tauri builds with a documented size budget | 🔄 evidence-gated | Added native Windows/NSIS, macOS/DMG, and Ubuntu 22.04/AppImage jobs; host-native sidecar build and protocol smoke check; strict `<100,000,000-byte` artifact validator with SHA-256 size manifests; artifact upload; release-size Cargo profile; and `PACKAGING.md`. Corrected two real Tauri packaging defects: the invalid v2 window `name` property and a macOS-conflicting identifier ending in `.app`. Local sidecar is 87 MiB and passes protocol checks. The Windows Tauri build reached Rust compilation, then this host's Application Control blocked Cargo build scripts (OS error 4551) and `dlltool.exe` was missing. macOS/Linux were not run here. The task remains open until all three native workflow jobs produce uploaded installers whose manifests pass the budget. |
+
+### Task 12.1 validation so far
+
+`npm run build`, `npm run typecheck`, core **1,028 tests / 51 files**, desktop **484 tests / 49 files**, `build:sidecar`, and `verify:sidecar` pass. The native package attempt is recorded as a blocked attempt, not a pass. Mutation evidence: changing the package ceiling from strict `<` to `<=` failed one test; removing the Linux matrix identity failed one test; restoring the invalid Tauri window `name` failed one test. Each mutation was restored and all three packaging tests pass.
+
+---
+
 ## Decision Log
 
 | Date | Decision | Rationale |
 |---|---|---|
+| 2026-08-02 | Cross-platform packaging means **one native runner per OS**, never a renamed runtime | The sidecar embeds `process.execPath`; setting `SKETCH_TARGET_TRIPLE` only changes its filename and cannot turn a Windows Node executable into a macOS or Linux binary. Each job therefore builds and verifies its own sidecar before Tauri packaging. |
+| 2026-08-02 | Keep the PRD's size target as strict **`<100,000,000 bytes` per deliverable** | “100 MB” is decimal and `<` excludes the boundary. The measured object is the largest distributable NSIS, DMG or AppImage artifact, not unpacked app bytes or debug output. The current 87 MiB uncompressed Node runtime makes the margin explicit rather than silently raising the target. |
+| 2026-08-02 | A packaging workflow is **not build evidence** | Source tests prove that three native jobs, sidecar verification, budget enforcement and artifact upload are wired. Only a successful native job and its uploaded SHA-256 size manifest prove an OS build exists. Task 12.1 stays open until all three do. |
 | 2026-08-02 | The detailed eval seam is **additive** | `runEvalDetailed` returns both the score and actual run while `runEval` remains the result-only wrapper. Existing callers and exactly-one `eval_scored` semantics remain unchanged, while benchmarks can project real timing, events and verification. |
 | 2026-08-02 | Fixtures are **content-pinned and freshly copied per attempt** | Formatting-independent suite identity is not enough if fixture bytes drift or one attempt contaminates another. Every regular fixture file participates in the digest; symlinks/special entries are refused; every attempt starts in a new workspace. |
 | 2026-08-02 | Unknown manual edits and cost are **`null`, never zero** | An automated run did not observe human edits, and an unpriced model is not free. Null preserves the distinction between measured zero and not measured. |

@@ -118,12 +118,18 @@ npm run build
 npm run dev:desktop      # Vite dev server; the engine runs over a loopback bridge
 ```
 
-For the packaged desktop build you also need a Rust toolchain (Tauri 2):
+For native packages you also need a Rust toolchain (Tauri 2):
 
 ```bash
 npm run build:sidecar -w @sketch/desktop
-npm run tauri -w @sketch/desktop -- build
+npm run verify:sidecar -w @sketch/desktop
+npm run package:windows -w @sketch/desktop  # use macos/linux on those native hosts
 ```
+
+The native workflow builds NSIS, DMG, and AppImage artifacts on Windows, macOS, and Linux runners.
+Every deliverable must be **strictly under 100,000,000 bytes**; the gate and current evidence status
+are documented in [PACKAGING.md](PACKAGING.md). A configured workflow is not itself proof that a
+platform artifact exists—only its successful native job and uploaded size manifest are.
 
 Requirements: Node 20+, and Rust only for the Tauri build.
 

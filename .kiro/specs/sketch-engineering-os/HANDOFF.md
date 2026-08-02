@@ -19,16 +19,23 @@ Phase 3 and had gone four phases stale.
 
 ## IMMEDIATE NEXT ACTION
 
-**Phase 11 is gated and its implementation is committed. Commit the gate/docs update, then start
-Phase 12.1 (cross-platform packaging).**
+**Task 12.1's native packaging path is implemented but remains evidence-gated. Commit this green
+point, then run `.github/workflows/package.yml` on GitHub and require all three native jobs and size
+manifests before checking 12.1 complete. Do not begin 12.2 first.**
 
-**78 of 96 tasks complete.** Phases 1 through 11 are done and gated.
+**78 of 96 tasks complete.** Phases 1 through 11 are done and gated; 12.1 is in progress.
 
-Cold reinstall verification, in order: `npm install`, build, typecheck, core tests, desktop tests,
-`bench:check` — all exit 0. **Core 1,028 tests / 51 files; desktop 481 tests / 48 files.** The suites
-are identical with `SKETCH_FAKE_PROVIDER=1` set and unset, and known provider-key variables were
-absent. Cache/network conditions were not instrumented, so the successful install is **not proof of
-offline installation**.
+Current source verification: build and typecheck pass; **core 1,028 tests / 51 files, desktop 484
+tests / 49 files**. The native Windows sidecar is 87 MiB and its protocol smoke test passes. The
+first Tauri package attempt fixed an invalid v2 window `name` field, then reached Rust compilation
+but was blocked by this host's Application Control policy (OS error 4551) and missing `dlltool.exe`.
+No Windows installer was produced; macOS and Linux were not run on this host.
+
+Task 12.1 now has native Windows/NSIS, macOS/DMG, and Ubuntu 22.04/AppImage jobs. Each rebuilds and
+smoke-tests its own host-native sidecar, packages with Tauri, enforces a strict `<100,000,000-byte`
+installer budget, writes a SHA-256 size manifest, and uploads both. `PACKAGING.md` defines the
+measurement and states the unsigned pre-release status. A configured workflow is not build evidence:
+12.1 stays open until all three jobs have successful uploaded artifacts.
 
 The Phase 11 gate proof is `packages/core/test/phase11-gate.test.ts`. The internal suite has two
 content-pinned repair cases, fresh workspaces per attempt, mandatory `verify-pass`, the canonical
@@ -163,7 +170,7 @@ because there was nothing to bisect.
 | 9 — Versioned memory with hygiene (9.1–9.5) | **DONE**, gate green cold |
 | 10 — Eval-gated multi-agent (10.1–10.5) | **DONE**, gate green. `swarm` ships **off**: no measured strategy lift |
 | 11 — Honest benchmarks (11.1–11.6) | **DONE**, gate green cold. CI result is synthetic only; real-provider public matrix unperformed |
-| 12 | Not started |
+| 12 — Packaging and open flywheel | **IN PROGRESS** — 12.1 wired and locally source-green; native Windows/macOS/Linux artifacts still required |
 
 Task counts: 96 total, **78 complete**.
 

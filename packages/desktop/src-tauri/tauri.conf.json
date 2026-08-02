@@ -2,7 +2,7 @@
   "$schema": "https://raw.githubusercontent.com/nicholasrice/tauri-2-schema/refs/heads/main/tauri.conf.2.json",
   "productName": "Sketch",
   "version": "0.1.0",
-  "identifier": "dev.sketch.app",
+  "identifier": "dev.sketch.desktop",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,6 @@
   "app": {
     "windows": [
       {
-        "name": "main",
         "title": "Sketch",
         "width": 1280,
         "height": 800,

@@ -15,6 +15,13 @@ tokio = { version = "1", features = ["full"] }
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1
+panic = "abort"
+opt-level = "s"
+
 [[bin]]
 name = "sketch-desktop"
 path = "src/main.rs"

@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "unit": "bytes",
+  "basis": "Each native job's largest distributable installer artifact; unpacked applications, debug symbols, checksums, and manifests are excluded.",
+  "platforms": {
+    "windows": {
+      "bundle": "nsis",
+      "artifactDir": "nsis",
+      "extensions": [".exe"],
+      "maxBytesExclusive": 100000000
+    },
+    "macos": {
+      "bundle": "dmg",
+      "artifactDir": "dmg",
+      "extensions": [".dmg"],
+      "maxBytesExclusive": 100000000
+    },
+    "linux": {
+      "bundle": "appimage",
+      "artifactDir": "appimage",
+      "extensions": [".AppImage"],
+      "maxBytesExclusive": 100000000
+    }
+  }
+}

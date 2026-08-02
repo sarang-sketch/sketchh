@@ -398,6 +398,7 @@ Phase 4 numbering stays intact for anything that references it.
 - [ ] 12. Packaging, offline proof, and extensibility
 - [~] 12.1 Produce cross-platform builds
   - macOS, Windows, and Linux Tauri builds with a documented size budget
+  - Native jobs, sidecar smoke checks, strict `<100,000,000-byte` manifests, and uploads are wired. Completion remains blocked until all three jobs actually produce passing artifacts; local Windows packaging is blocked by OS Application Control and missing `dlltool.exe`.
   - _Requirements: 26.1_
 - [~] 12.2 Prove local-first on a clean offline machine
   - Install, index a repository, and complete a task on local Ollama with no external network call beyond the local model endpoint
