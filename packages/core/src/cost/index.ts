@@ -18,3 +18,25 @@ export type { CostAnswer, ModelPrice, PriceLookup } from './pricing.js'
 
 export { describeLedger, ledgerFor, ledgerForRun } from './ledger.js'
 export type { Ledger, LedgerEntry } from './ledger.js'
+
+export { checkBudget, describeBudget, estimateRequestTokens } from './budget.js'
+export type { BreachAction, BudgetVerdict, RunBudget, Router } from './budget.js'
+
+export {
+  FileResponseCache,
+  MemoryResponseCache,
+  RESPONSE_CACHE_VERSION,
+  cachedAdapter,
+  clearResponseCache,
+  hashMessages,
+  responseCacheDir,
+  responseCacheKey,
+  responseCacheSize,
+  stableJson,
+} from './response-cache.js'
+export type {
+  ResponseCache,
+  ResponseCacheIdentity,
+  ResponseCacheRecord,
+  ResponseCacheStats,
+} from './response-cache.js'

@@ -41,6 +41,8 @@ import { runCommands } from '../verify/runner.js'
 import type { VerifyEventSink } from '../verify/runner.js'
 import { formatPolicyResult, runVerifyPolicy } from '../verify/policy.js'
 import type { PolicyResult, VerifyPolicy } from '../verify/policy.js'
+import { checkBudget, estimateRequestTokens } from '../cost/budget.js'
+import type { Router, RunBudget } from '../cost/budget.js'
 import type { FileWriter } from '../orchestrator/file-writer.js'
 import type {
   ChatAdapter,
@@ -183,6 +185,29 @@ export interface RunTaskDeps {
    * and that is the caller's knowledge (`rpc/methods.ts`), not the loop's.
    */
   tools?: ToolDispatch
+  /**
+   * Per-run token / currency / call ceiling (Requirement 20.3).
+   *
+   * CHECKED BEFORE EVERY REQUEST, because a budget checked afterwards has already been
+   * exceeded. The spend it compares against is `ledgerFor(this run's events)` — the same
+   * pure function the cost dashboard uses, so the number that stops a run is the number
+   * the user was shown.
+   *
+   * Omitted means unbounded, which is the behaviour every existing caller has. That is
+   * deliberately NOT a safe default and it is not pretended to be one: the desktop and
+   * the CLI are expected to set one, and `describeBudget` says so when nothing bounds a
+   * run. A default ceiling invented here would silently truncate a long legitimate task.
+   */
+  budget?: RunBudget
+  /**
+   * Where to go when the budget breaches with `onBreach: 'downgrade'`, and the policy
+   * for routing mechanical turns cheaply (Requirement 20.6).
+   *
+   * The loop cannot tell a hard turn from an easy one, so it does not guess: the caller
+   * declares a policy. Without a `cheap` adapter a downgrade degrades to a stop and says
+   * so, rather than reporting a downgrade it did not perform.
+   */
+  router?: Router
   /** File reader used to resolve search/replace edits. Injectable for tests. */
   readText?: TextReader
   /**
@@ -500,6 +525,32 @@ export async function runTask(task: Task, deps: RunTaskDeps): Promise<RunResult>
     verifyStages: task.verify.map((v) => v.name),
   })
 
+  /**
+   * The adapter in force. Mutable, because a budget breach with `onBreach: 'downgrade'`
+   * switches it for the rest of the run, and because `router.policy` can route the
+   * mechanical turns cheaply (Requirement 20.6).
+   *
+   * `deps.adapter` remains the FRONTIER model — the one the caller chose for hard work.
+   * Nothing here reassigns `deps`, so the caller's choice is never lost.
+   */
+  let adapter: ChatAdapter = deps.adapter
+
+  /**
+   * `always` routes the whole task to the cheap model. Declared by the caller rather
+   * than guessed here: the loop cannot tell a hard turn from an easy one, and a router
+   * that guessed would sometimes send the turn that matters to the weaker model.
+   */
+  if (deps.router?.policy === 'always' && deps.router.cheap !== undefined) {
+    adapter = deps.router.cheap
+    await emit('strategy_selected', {
+      component: 'router',
+      policy: 'always',
+      adapter: adapter.id,
+      ...(adapter.model !== undefined ? { model: adapter.model } : {}),
+      reason: 'the caller routed this whole task to the inexpensive model',
+    })
+  }
+
   const messages: Message[] = [
     { role: 'system', content: systemPrompt(task, maxIterations) },
     ...contextMessages(deps),
@@ -534,21 +585,90 @@ export async function runTask(task: Task, deps: RunTaskDeps): Promise<RunResult>
 
       iterations++
 
+      // ── THE COST GUARD (Requirements 20.3–20.5) ─────────────────────────
+      //
+      // Before the request, never after. The spend it reads is `ledgerFor` over this
+      // run's own events, so the number that stops a run is the number the dashboard
+      // shows — there is no second counter to disagree with.
+      if (deps.budget !== undefined) {
+        const pendingUsage = estimateRequestTokens(messages)
+        const verdict = checkBudget({
+          budget: deps.budget,
+          events: await events.forRun(runId),
+          pending: {
+            usage: pendingUsage,
+            ...(adapter.model !== undefined ? { model: adapter.model } : {}),
+            provider: adapter.id,
+          },
+        })
+
+        if (!verdict.allowed) {
+          // `downgrade` is only real when there is somewhere cheaper to go. Without a
+          // cheap adapter it becomes a stop, and the event says which happened rather
+          // than reporting a downgrade that did not occur.
+          const canDowngrade =
+            verdict.action === 'downgrade' &&
+            deps.router?.cheap !== undefined &&
+            adapter !== deps.router.cheap
+
+          await emit('budget_exceeded', {
+            iteration: iterations,
+            limit: verdict.limit,
+            detail: verdict.detail,
+            configured: verdict.action,
+            // What was actually done. Deterministic given the configuration.
+            outcome: canDowngrade ? 'downgraded' : 'stopped',
+            ...(canDowngrade ? { from: adapter.id, to: deps.router!.cheap!.id } : {}),
+            ...(verdict.action === 'downgrade' && !canDowngrade
+              ? {
+                  degraded:
+                    'no cheaper adapter was supplied, so the configured downgrade could not be performed',
+                }
+              : {}),
+            spent: verdict.spent,
+            budget: {
+              ...(deps.budget.maxTokens !== undefined ? { maxTokens: deps.budget.maxTokens } : {}),
+              ...(deps.budget.maxUsd !== undefined ? { maxUsd: deps.budget.maxUsd } : {}),
+              ...(deps.budget.maxCalls !== undefined ? { maxCalls: deps.budget.maxCalls } : {}),
+            },
+          })
+
+          if (!canDowngrade) {
+            return finish(false, `Run stopped: ${verdict.detail}`, {
+              reason: 'budget',
+              limit: verdict.limit,
+              detail: verdict.detail,
+              spent: verdict.spent,
+            })
+          }
+
+          // Switched for the REST OF THE RUN, not for one call: a run that ping-pongs
+          // between price tiers has no predictable cost at all.
+          adapter = deps.router!.cheap!
+          messages.push({
+            role: 'user',
+            content:
+              `BUDGET: ${verdict.detail}. You have been switched to a cheaper model ` +
+              `(${adapter.id}) for the rest of this run. Finish with what you have.`,
+          })
+        }
+      }
+
       await emit('llm_request', {
         iteration: iterations,
-        adapter: deps.adapter.id,
+        adapter: adapter.id,
         // The MODEL, not just the provider. One provider serves models whose prices
         // differ by a factor of sixteen, so `adapter` alone cannot attribute cost
         // (Requirement 20.1). An adapter that does not report one produces an event the
         // ledger has to call unpriced, which is the honest reading.
-        ...(deps.adapter.model !== undefined ? { model: deps.adapter.model } : {}),
+        ...(adapter.model !== undefined ? { model: adapter.model } : {}),
         messages: messages.length,
       })
 
       let text: string
       let usage: Usage | undefined
       try {
-        const response = await deps.adapter.chat(messages, signal ? { signal } : undefined)
+        const response = await adapter.chat(messages, signal ? { signal } : undefined)
         text = response.text ?? ''
         usage = response.usage
       } catch (err) {
@@ -560,7 +680,7 @@ export async function runTask(task: Task, deps: RunTaskDeps): Promise<RunResult>
         const message = redact(err instanceof Error ? err.message : String(err))
         return finish(false, `Provider error: ${message}`, {
           reason: 'provider_error',
-          adapter: deps.adapter.id,
+          adapter: adapter.id,
           detail: message,
         })
       }
@@ -574,8 +694,8 @@ export async function runTask(task: Task, deps: RunTaskDeps): Promise<RunResult>
       await emit('llm_response', {
         iteration: iterations,
         text,
-        adapter: deps.adapter.id,
-        ...(deps.adapter.model !== undefined ? { model: deps.adapter.model } : {}),
+        adapter: adapter.id,
+        ...(adapter.model !== undefined ? { model: adapter.model } : {}),
         usage: { in: usage?.in ?? 0, out: usage?.out ?? 0 },
       })
 
@@ -609,6 +729,27 @@ export async function runTask(task: Task, deps: RunTaskDeps): Promise<RunResult>
                 : '') +
               ' You may now propose edits.',
           })
+
+          // ROUTING (Requirement 20.6). The planning turn is the one whose quality
+          // determines every turn after it, so `after-plan` spends the frontier model
+          // there and drops to the cheap one for the mechanical work that follows —
+          // applying edits, reading verify output, retrying. Switched HERE, at the point
+          // the plan actually landed, rather than after a fixed iteration count: a run
+          // whose first turn was unparseable has not planned yet.
+          const cheap = deps.router?.cheap
+          if (deps.router?.policy === 'after-plan' && cheap !== undefined && adapter !== cheap) {
+            const previous = adapter.id
+            adapter = cheap
+            await emit('strategy_selected', {
+              component: 'router',
+              policy: 'after-plan',
+              from: previous,
+              adapter: adapter.id,
+              ...(adapter.model !== undefined ? { model: adapter.model } : {}),
+              reason:
+                'the plan is written, so the remaining turns are mechanical and run on the inexpensive model',
+            })
+          }
           break
         }
 
