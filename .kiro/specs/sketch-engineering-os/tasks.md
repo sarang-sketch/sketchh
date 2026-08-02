@@ -1,4 +1,4 @@
-# Implementation Plan
+﻿# Implementation Plan
 
 Phase gates are hard. No phase begins until the previous phase's gate task is green. Every gate command must exit 0 **offline with no API key set** — the single documented exception is task 6.10.
 
@@ -304,21 +304,21 @@ Phase 4 numbering stays intact for anything that references it.
 
 ## Phase 8 — Cost and budget
 
-- [ ] 8. Cost accounting, budget guard, routing, and cache
-- [~] 8.1 Implement usage accounting
+- [x] 8. Cost accounting, budget guard, routing, and cache
+- [x] 8.1 Implement usage accounting
   - Every `llm_response` carries usage; the session total equals the sum over events with no independent source
   - _Requirements: 20.1, 20.2_
-- [~] 8.2 Implement the cost guard and router
+- [x] 8.2 Implement the cost guard and router
   - Enforce per-task token and currency budgets inside the loop; on breach either downgrade or stop with `run_failed{reason:"budget"}`, deterministically by configuration
   - Emit `budget_exceeded`; route cheap or mechanical calls to a local or inexpensive model and reserve a frontier model for hard calls
   - _Requirements: 20.3, 20.4, 20.5, 20.6, 5.10_
-- [~] 8.3 Implement the content-addressed response cache
+- [x] 8.3 Implement the content-addressed response cache
   - Key on provider, model, messages, and options; store under `.sketch/cache/`; a repeated identical request emits `cache_hit` and issues no second network call
   - _Requirements: 20.7_
-- [~] 8.4 Build the Cost Dashboard
+- [x] 8.4 Build the Cost Dashboard
   - Reconcile exactly with the event log; replace the hardcoded `$1.4025` in `StatusBar` and `TaskLog` and the never-rendered `state.totalCost`
   - _Requirements: 20.8, 27.1, 14.6_
-- [~] 8.5 Phase 8 gate
+- [x] 8.5 Phase 8 gate
   - Prove an overrun stops or downgrades deterministically, a cache hit avoids the second call, and the dashboard equals the log
   - _Requirements: 20.4, 20.7, 20.8_
 

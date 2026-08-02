@@ -646,10 +646,107 @@ And **nothing in this project has ever run against a real provider.**
 
 ---
 
+## Phase 8 — Cost accounting, budget, routing, cache (spec: `.kiro/specs/sketch-engineering-os`)
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| 8.1 | Usage accounting | ✅ | `cost/pricing.ts` is the ONE price table and carries `PRICED_AT`, so no surface can show money without the date it was true. **An unknown model costs `null`, never zero** — reporting unknown as `$0.00` is how a user finds out what a run cost from an invoice. Local runtimes get a real, *marked* zero, distinguishable from an absent one by construction. `cost/ledger.ts` is a **pure function of the event log**: no counter, no cached subtotal, nothing the loop keeps. Deleted three private `COSTS` tables and six `estimateCost` stubs that returned `0` — for Groq, OpenRouter, Grok, Kimi and a custom endpoint that read as FREE for a paid run. Added `ChatAdapter.model` and put `adapter` + `model` on both `llm_` events, because one provider serves models whose prices differ 16× |
+| 8.2 | Cost guard and router | ✅ | Checked **before** the request, between the iteration increment and the call, against `ledgerFor(this run's events)` — so the number that stops a run is the number the dashboard shows. `onBreach` is **required with no default**: a user who cannot predict what happens when the money runs out does not have a budget. A `downgrade` with no cheaper adapter **stops** and records that it could not downgrade, rather than reporting one it did not perform. Router policies `never` / `after-plan` / `always`, declared by the caller because the loop cannot tell a hard turn from an easy one; `after-plan` switches when the plan actually lands, not on an iteration count |
+| 8.3 | Response cache | ✅ | Keyed on provider, model, **sorted-key** options and role-tagged messages — `{a,b}` and `{b,a}` are the same request, `temperature: 0` and `1` are not. Sharded under `.sketch/cache/responses/<ab>/`. **Stores the response text and only the HASH of the request messages**: a prompt holds source and sometimes a pasted secret, and a cache is a place people forget exists. Atomic pid-suffixed writes, every field re-verified on read, expiry is a miss not an error, a failure is never cached, `clearResponseCache` is one call. Implemented as an adapter **decorator**, so the eval harness and trainer get it without the loop learning about caching |
+| 8.4 | Cost Dashboard | ✅ | New `cost` RPC reads the JSONL log and calls `ledgerFor`. **No running total anywhere** — not in the method, the seam, the panel, or `AppState`. Deleted the `$1.4025` in `StatusBar`, the `$1.4025` in `TaskLog`, and `AppState.totalCost` (`12.45`). Neither figure is replaced with a live number: a second figure in the status bar would be a second source, so it is a *button*. Also removed three neighbouring `StatusBar` fixtures — a hardcoded provider name, `14.2k tokens`, and `0 errors / 2 warnings` with no diagnostics pipeline behind it. The panel shows unknown as unknown, a local-only run as a real `$0.00` *and says why*, the pricing date with a staleness warning, and links every row to its `eventId` |
+| 8.5 | Phase 8 gate | ✅ | See below |
+
+### Phase 8 gate result
+
+**One chain over one project**, because each claim can hold alone and still be useless: a
+budget can stop correctly while the number it stopped on differs from the dashboard's; a
+cache can avoid a call and not say so; a dashboard can sum correctly over an in-memory log
+and disagree with the JSONL bytes the app reads.
+
+```
+stopped after 2 call(s), 500000 of 600000 tokens, $2.0000
+dashboard $2.0000 === log $2.0000
+cache: 1 hit, 0 extra calls, $2.5000 avoided
+```
+
+**Reconciliation is `toBe`, not `toBeCloseTo`.** Both sides are the same function over the
+same bytes, so a tolerance would hide a bug rather than allow for one. Requirement 20.8
+says "reconcile exactly", and this is what exactly means — the total, the token counts, the
+call count, the entry count, the summary sentence, and the per-run subtotal all match.
+
+**The bug the gate found, and it was green-for-the-wrong-reason again.** The pre-flight
+projection compared a ~1 500-token prompt estimate against calls that really cost 250 000
+tokens each, so a 600 000-token ceiling was overshot to **750 000 while the guard reported
+success**. `checkBudget` now projects the next call using the **largest call observed in
+this run**, falling back to the prompt estimate only before anything has been observed.
+Largest rather than mean, because a ceiling that holds on average is not a ceiling. The
+ceiling now holds outright.
+
+**The residual limitation is stated, not glossed.** No pre-flight check can guarantee a
+ceiling is never crossed, because the first call's real cost is unknowable before making
+it. So the guaranteed bound is *the ceiling plus one call*, `describeBudget` says so in
+words, and the gate asserts both the honest bound and the tighter one that now holds.
+
+**Section 3 asserts what the guard CANNOT do.** A currency-only budget provably fails to
+bound an unpriced model — the spend it can see is zero — and a token budget on the same
+model provably succeeds. That is why both ceilings exist, and it is asserted rather than
+left as a footnote.
+
+**Cold verification** (`node_modules`, `packages/core/dist` and both workspace
+`node_modules` deleted, then `npm install && npm run build && npm run typecheck && npm
+test`): install 0, build 0, typecheck 0, test 0. **Core 875 tests / 45 files, desktop 438
+tests / 44 files** — 1 313 total. Offline, no API key, identical with
+`SKETCH_FAKE_PROVIDER=1` and unset.
+
+**Mutation evidence** (each broken, watched fail, restored, watched pass):
+
+| Mutation | Result |
+|---|---|
+| Budget check moved after the call (`false &&`) | 6 tests fail in `budget.test.ts`, including all four guard tests and both downgrade tests (21 passed) |
+| Options dropped from the response-cache key | 1 test fails: "treats a different OPTION as a different request" (26 passed) |
+| `cost` RPC adds `0.01` to the total | 1 gate test fails: the reconciliation equality (4 passed) |
+| Every cache hit re-calls the adapter (`false &&`) | 4 tests fail across the gate and `budget.test.ts` (28 passed) |
+
+**A guard mechanism extracted rather than duplicated.** The fixture guards for `$1.4025`
+and `14.2k tokens` failed on this task's own comments — the second time that has happened,
+after task 7.4's `mcpToolsStatus`. The comment stripper now lives once in
+`packages/desktop/src/testing/source.ts` with its own self-test, instead of a second copy
+in a second test file: a copied guard mechanism drifts, and the drift is **silent**,
+because a stripper that removed too much would make every assertion built on it pass for
+no reason. One `GitPanel` test also had to change — its "the rest of the bar is there"
+probe was itself the deleted `Anthropic` fixture. The guarantee it tests is unchanged and
+it now additionally asserts that no provider is claimed when none is configured.
+
+**Real vs seam after Phase 8.**
+
+Real: the price table with its date and staleness flag; the ledger as a pure function of
+the log; the pre-call budget guard with a learned projection; the two deterministic breach
+outcomes; the model router with three declared policies; the content-addressed response
+cache on disk; the `cost` RPC and the dashboard that reconciles with it exactly.
+
+**Not real.** The prices are a table transcribed from vendor pages on `PRICED_AT` and they
+*will* go stale — what is proved is the arithmetic over the table and that the date travels
+with every figure, not that any number is currently correct. The budget is **opt-in**: a
+run with no `budget` is unbounded, and that is not pretended to be a safe default — the
+desktop does not yet set one, which is a gap. OpenRouter returns a real per-request cost in
+its own response body that this build ignores in favour of the static table. And **nothing
+in this project has ever spent real money, because nothing has ever run against a real
+provider.**
+
+---
+
 ## Decision Log
 
 | Date | Decision | Rationale |
 |---|---|---|
+| 2026-08-02 | An unpriced model costs **`null`, never `0`**, and the ledger counts those calls separately | This is the single most expensive lie a cost surface can tell. `$0.00` for a model that is not in the price table means the user sees free, leaves it running, and finds out from an invoice — and it fails in the direction that costs them money, which is the direction to be paranoid about. So `null` propagates: a run with one unpriced call reports a priced subtotal *and* `unpriced: 1`, and `describeLedger` calls the total a lower bound. The consequence is accepted rather than worked around: a currency budget cannot constrain an unpriced model, which is exactly why `maxTokens` exists beside `maxUsd` and why `describeBudget` warns about a currency-only policy (Requirements 20.1, 20.3) |
+| 2026-08-02 | The money number is a **pure function of the event log**, with no second source anywhere | Fifth time this codebase has made the one-source bet — one file cache (3.1), one authorisation point (6.3), one skill-state home (6.4), one way to read a run (7.5) — and cost is the highest-stakes instance, because the number is money and a user will act on it. A running counter and a log agree right up until they do not, and when a *money* figure disagrees with itself nobody can tell which half to believe. So `ledgerFor(events)` and nothing else: no counter in the loop, no subtotal on the seam, no `totalCost` in `AppState`, no accumulation in the panel. It also makes 8.5's reconciliation an **equality** rather than a tolerance, which is the only version of that test worth writing (Requirement 20.2) |
+| 2026-08-02 | Nine price tables collapsed to one, and `PRICED_AT` travels with every figure | Three private `COSTS` tables meant three answers to "what did that cost", and six `estimateCost` overrides returning `0` meant a real run on Groq or OpenRouter reported **free** — the same drift the provider catalog and the secret-pattern table were centralised to avoid, but with money attached. One table, one `estimateCost` in `BaseAdapter`, and a test asserting no module outside `cost/` declares a per-model price. The date is part of the data because a table without one implies live pricing, which this product cannot do without a startup network call it refuses to make; `costFor` flags itself stale after 180 days and the panel says so (Requirements 20.1, 20.8) |
+| 2026-08-02 | `onBreach` is **required, with two values and no default** | Requirement 20.4 asks for deterministic-by-configuration, and a default would have quietly made that choice on the user's behalf — the worst outcome, because it is the one they never see. Forgetting it is now a compile error. `downgrade` is also held to meaning something: with no cheaper adapter it becomes a stop and the event records `outcome: 'stopped'` with the reason, because a run reporting "downgraded" while calling the same expensive model is worse than one that stops (Requirements 20.4, 20.5) |
+| 2026-08-02 | The pre-flight projection uses the **largest call observed in this run**, and the residual overshoot is stated | The gate caught a 600 000-token ceiling being overshot to 750 000 *while the guard reported success*: a ~1 500-token prompt estimate was being compared against calls that really cost 250 000 each. After one call there is better evidence than a guess — what a call in this run actually cost — so the projection uses the worst observed, largest rather than mean because a ceiling that holds on average is not a ceiling. What no pre-flight check can do is guarantee the ceiling is never crossed, since the first call's cost is unknowable before making it; the guaranteed bound is therefore *ceiling plus one call*, and that sentence is in `describeBudget` rather than in a comment nobody reads (Requirement 20.3) |
+| 2026-08-02 | The response cache stores the response but only the **hash** of the request | This is the first cache in the project to store model output, and `embedding-cache.ts` next door deliberately stores no text at all with a test asserting it — so the difference needed a decision rather than a default. The response has to be stored: replaying it is the entire feature. The prompt does not, and it routinely contains the user's source and occasionally a secret they pasted. A hash is enough to match a repeat and useless to anyone reading the directory. Every option is in the key, sorted, because a cache that ignores `temperature` returns a wrong answer **with total confidence**, which is worse than a miss by a wide margin — a miss costs money, a wrong hit costs correctness and is invisible (Requirement 20.7) |
+| 2026-08-02 | The status bar shows a **button**, not a figure | A live total in the corner of the window would be a second cost source by definition, and two money numbers disagree eventually — at which point the user has to work out which one lied. Deleting `$1.4025` without replacing it is the honest move: the panel owns the number, the bar links to it. The same reasoning retired three neighbouring fixtures, and `0 errors / 2 warnings` is worth naming separately — a status bar claiming two warnings while the editor shows none teaches the user to ignore the status bar, which is a durable cost for a decorative gain (Requirements 20.8, 27.3, 14.6) |
+| 2026-08-02 | The comment stripper the fixture guards need lives in **one** place, with a self-test | Two guards in two files needed it, and copying it was tempting and wrong: a duplicated guard mechanism drifts, and this drift would be **silent**, because a stripper that removed too much would make every assertion built on it pass for no reason at all. A false positive is loud; a hollow guard is not. `testing/source.ts` holds it and `testing/source.test.ts` proves it keeps code, string literals, JSX and a `//` inside a URL while dropping prose. Third time the "comment tripped the guard" shape has appeared — after `deps.test.ts`'s stopword array and task 7.4's `mcpToolsStatus` — so it is now a shared tool rather than a lesson to relearn (Rule 4) |
 | 2026-08-02 | `skipped` and `not-run` stay **different words** all the way to the panel | Nothing ran in either case, so the temptation is one grey badge. But they call for opposite responses: `skipped` means this project configures no command for the stage and the fix is to configure one; `not-run` means an earlier stage failed and the sequence stopped, and the fix is above. Collapsing them also hides the more dangerous reading — a wall of grey that a user interprets as "fine". The same reasoning is why `verifiedAnything` exists: `ok` is true for a project that configures nothing, and that must never read as evidence (Requirements 4.3, 4.8) |
 | 2026-08-02 | Live feedback is **how the `integration` stage is performed**, not a tenth stage | Requirement 4.3 fixes nine stages. Adding a tenth would have meant either editing the contract or putting a check outside the `ok` rule, and the second is worse: a runtime error that does not count is a runtime error nobody acts on. So `policy.live` runs after the integration stage's commands and its verdict counts exactly like theirs. Its full verdict is carried separately from its result row because a row cannot say `failed-to-start` versus `runtime-error`, and those point at completely different bugs (Requirements 4.3, 23.2) |
 | 2026-08-02 | The MCP catalog is **data in this repository**, pinned to exact versions, with no runtime name resolution | Requirement 22.2 asks for curated, pinned and isolated. So the list is a committed table and there is deliberately no code path that turns a server name into a command at runtime: adding one is a diff where the argv and the capability it costs are both visible. `@latest` is forbidden and asserted, because a command that changes under you means a supply-chain compromise arrives silently on the next invocation. Honestly labelled: these are launch descriptions for third-party packages, fetched by the user's own package manager, **not audited here** — the content pin that protects skills cannot reach them without vendoring (Requirement 22.2) |

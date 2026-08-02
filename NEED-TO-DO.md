@@ -85,27 +85,27 @@ writes down what happened. Do not describe a wired interface as a working featur
 
 ## 1. Where the project actually stands
 
-**Status date: Phase 7 gated. 55 of 96 tasks complete. Phases 1, 1.5, 2, 3, 4, 5, 6 and 7 are done
-and gated. Phase 8 (cost and budget) is next.** The per-task detail below still reads from the
-Phase 3 vantage point in places — where it does, `tasks-executed.md` and
+**Status date: Phase 8 gated. 60 of 96 tasks complete. Phases 1, 1.5, 2, 3, 4, 5, 6, 7 and 8 are
+done and gated. Phase 9 (memory and hygiene) is next.** The per-task detail below still reads from
+the Phase 3 vantage point in places — where it does, `tasks-executed.md` and
 `.kiro/specs/sketch-engineering-os/HANDOFF.md` are newer and win. (The `Status date` line at the
 very top of this file is older still; treat this section as the current one.)
 
 ```
+c58dcf9  phase 8 task 8.5 — Phase 8 gate, plus a real overshoot the gate found
+3decd9c  phase 8 task 8.4 — Cost Dashboard, three fake cost numbers deleted
+3ab3a59  phase 8 tasks 8.2/8.3 — cost guard before the call, router, response cache
+f89bc67  phase 8 task 8.1 — usage accounting, one price table, nine duplicates deleted
+94aa773  phase 7 complete — gate green cold, gate result and eight decisions logged
 17c99ad  phase 7 task 7.5 — Phase 7 gate, plus two real bugs it found
 a36fc39  phase 7 task 7.4 — Test Results panel, MCP Tools panel, hardcoded badge deleted
 1105826  phase 7 task 7.3 — curated MCP tool layer, hang latch, the run seam
-01d2d75  phase 7 task 7.2 — live environment feedback, capture before kill, kill the group
-d394831  phase 7 task 7.1 — nine-stage verification contract, verify.yaml over detection
 3140073  phase 6 complete — gate green cold, gate result and eight decisions logged
-24f465d  phase 6 task 6.5 — marketplace gate, open registries need an approved review of the bytes
-d0d3cc0  phase 6 task 6.4 — real Skills surface, three fixtures deleted, grant shown before consent
-90e6c57  phase 5 task 5.6 — phase 5 gate, claims measured on a fifty-file fixture
 d759311  phase 4 complete — self-hosted fonts, README zero-dollar recipe, gate green cold
 ```
 
 Current suite, from a **cold install** (`node_modules`, `packages/core/dist` and both workspace
-`node_modules` deleted): **core 820 tests / 42 files green, desktop 419 tests / 42 files green**,
+`node_modules` deleted): **core 875 tests / 45 files green, desktop 438 tests / 44 files green**,
 build 0, typecheck 0, offline, no key, identical with `SKETCH_FAKE_PROVIDER=1` and unset.
 
 **Run the suites per workspace** — `npm test -w @sketch/core`, `npm test -w @sketch/desktop`. Not
@@ -174,9 +174,11 @@ phantom errors. §0.2's ordering was written before this bit, and this is the co
 | `TaskLog` | `MOCK_TASKS`, non-functional filter | **10.4** |
 | `AgentTeamPanel` | fixture data **and unreachable** — no ActivityBar item dispatches `agents` | **10.4** |
 | `ModelSelector` | hardcoded providers; `state.providers` never rendered | **4.1** |
-| Cost dashboard | absent; `StatusBar` hardcodes `\.4025` | **8.4** |
+| Cost dashboard | **real** — summed from the event log, unknown shown as unknown, every row linked to its event id (8.4). All three fake figures are deleted: both `$1.4025` strings and `AppState.totalCost` | done |
+| Cost guard | **real** — checked before every call, deterministic by configuration, projection learns from the run (8.2). But **opt-in**: a run with no `budget` is unbounded and the desktop does not set one | done (8.2); desktop wiring open |
+| Response cache | **real** — content-addressed under `.sketch/cache/responses`, stores the response and only the hash of the prompt (8.3). Applied as an adapter decorator, so no caller is required to use it | done |
 | `SecretStore` | interface with no persisting implementation | **4.2** |
-| `src/context/` | **wired** — graph, hybrid retrieval, embeddings, assembly, generator, and a `retrievedContext` seam into `runTask`. But retrieval is **opt-in on the wire** (`contextBudgetTokens`) and the desktop does not pass it, so a default desktop run sends no repository context | done (5); default-on waits on **8** |
+| `src/context/` | **wired** — graph, hybrid retrieval, embeddings, assembly, generator, and a `retrievedContext` seam into `runTask`. But retrieval is **opt-in on the wire** (`contextBudgetTokens`) and the desktop does not pass it, so a default desktop run sends no repository context | done (5); default-on was blocked on **8**, which is now gated — the spend guard exists, so this is unblocked and simply not switched on yet |
 | `src/memory/`, legacy `verifier/`, legacy `orchestrator/` state machine | pre-existing code **not wired into the new loop** | **9, 10** |
 
 ### 1.3 Two deliberate duplications
@@ -862,10 +864,33 @@ cannot hang a run.
 
 ---
 
-### Phase 8 — Cost and budget (5 tasks)
+### Phase 8 — Cost and budget (5 tasks) — **DONE, gated**
 
 Nothing here is optional. A tool that can spend money without a ceiling is a tool nobody can safely
 leave running.
+
+Kept below as the record of what was asked for. What shipped, and where it differs from this brief:
+
+- **An unpriced model costs `null`, never `0`.** The brief did not say what to do about a model with
+  no price. Showing unknown as `$0.00` is how a user finds out from an invoice, so `null` propagates
+  and the unpriced calls are counted beside the total, which is reported as a lower bound.
+- **Nine price tables became one**, carrying `PRICED_AT`. Three private `COSTS` tables and six
+  `estimateCost` overrides returning `0` are deleted — for Groq, OpenRouter, Grok, Kimi and a custom
+  endpoint that last one read as *free for a paid run*.
+- **The projection learns from the run.** The gate caught a 600 000-token ceiling being overshot to
+  750 000 because a prompt estimate was being compared against far larger real calls. It now
+  projects using the largest call observed. The residual limit — no pre-flight check can bound the
+  *first* call — is stated in `describeBudget`, not buried.
+- **`onBreach` is required, with no default.** A default would have made the user's decision for
+  them invisibly, which is the outcome Requirement 20.4 exists to prevent.
+- **A `downgrade` with nowhere cheaper to go stops** and records that it could not downgrade.
+- **The response cache stores the response but only the HASH of the prompt.** It is an adapter
+  decorator, so the eval harness and trainer get it without the loop learning about caching.
+- **The status bar shows a button, not a figure.** A live total there would be a second cost source.
+  Three neighbouring `StatusBar` fixtures went with it: a hardcoded provider, `14.2k tokens`, and
+  `0 errors / 2 warnings` with no diagnostics pipeline behind it.
+- **Still open**: the budget is opt-in and the desktop does not set one; OpenRouter's real
+  per-request cost is ignored in favour of the static table.
 
 - **8.1 Usage accounting** _(20.1, 20.2)_ — every `llm_response` carries usage; the session total is
   the **sum over events with no independent source**. One source of truth, same as everything else. A

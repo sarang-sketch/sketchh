@@ -19,14 +19,31 @@ Phase 3 and had gone four phases stale.
 
 ## IMMEDIATE NEXT ACTION
 
-**Phase 7 is gated and committed. The working tree is clean. Start task 8.1 (cost and budget).**
+**Phase 8 is gated and committed. The working tree is clean. Start task 9.1 (versioned memory).**
 
-**55 of 96 tasks complete.** Phases 1, 1.5, 2, 3, 4, 5, 6 and 7 are done and gated.
+**60 of 96 tasks complete.** Phases 1, 1.5, 2, 3, 4, 5, 6, 7 and 8 are done and gated.
 
 Cold install (`node_modules`, `packages/core/dist` and both workspace `node_modules` deleted, then
 `npm install && npm run build && npm run typecheck && npm test`): install 0, build 0, typecheck 0,
-test 0 — **core 820 tests / 42 files, desktop 419 tests / 42 files**, offline, no API key, and
+test 0 — **core 875 tests / 45 files, desktop 438 tests / 44 files**, offline, no API key, and
 identical with `SKETCH_FAKE_PROVIDER=1` and unset.
+
+The Phase 8 gate proof is `packages/core/test/phase8-gate.test.ts`: an overrun stops
+deterministically, a cache hit avoids the second call, and the dashboard equals the log — the
+last of those with `toBe`, not `toBeCloseTo`, because both sides are the same function over the
+same bytes. Four guards were mutation-verified.
+
+**The bug that gate found**, same green-for-the-wrong-reason shape as Phase 7's two: the pre-call
+budget projection compared a ~1 500-token prompt estimate against calls that really cost 250 000
+each, so a 600 000-token ceiling was overshot to 750 000 *while the guard reported success*. The
+projection now uses the largest call observed in the run. The residual limitation is real and
+documented rather than hidden: no pre-flight check can bound the FIRST call, so the guaranteed
+bound is the ceiling plus one call.
+
+**Two Phase 8 gaps worth knowing.** The budget is **opt-in** — a run with no `budget` is unbounded
+and the desktop does not set one yet. And the prices are a table transcribed on `cost.PRICED_AT`;
+what is proved is the arithmetic and that the date travels with every figure, not that any number
+is currently right.
 
 **Run `build` BEFORE `typecheck` on a cold tree.** The desktop typecheck resolves `@sketch/core`
 through its emitted `.d.ts`, so with `packages/core/dist` deleted it fails with ~43 phantom errors
@@ -73,15 +90,15 @@ Seven guards were mutation-verified at this gate — see the Phase 5 gate result
 ## Git state
 
 ```
-17c99ad  sketch: phase 7 task 7.5 - Phase 7 gate, plus two real bugs it found   <- HEAD
+c58dcf9  sketch: phase 8 task 8.5 - Phase 8 gate, plus a real overshoot the gate found   <- HEAD
+3decd9c  sketch: phase 8 task 8.4 - Cost Dashboard, and three fake cost numbers deleted
+3ab3a59  sketch: phase 8 tasks 8.2 and 8.3 - cost guard checked before the call, router, response cache
+f89bc67  sketch: phase 8 task 8.1 - usage accounting, one price table, nine duplicates deleted
+94aa773  sketch: phase 7 complete - gate green cold, tasks ticked, gate result and eight decisions logged
+17c99ad  sketch: phase 7 task 7.5 - Phase 7 gate, plus two real bugs it found
 a36fc39  sketch: phase 7 task 7.4 - Test Results panel, MCP Tools panel, and the hardcoded badge deleted
 1105826  sketch: phase 7 task 7.3 - curated MCP tool layer, hang latch, and the run seam
-01d2d75  sketch: phase 7 task 7.2 - live environment feedback, capture before kill, kill the group, refuse an occupied port
-d394831  sketch: phase 7 task 7.1 - nine-stage verification contract, verify.yaml over detection, wired into the loop
-3140073  sketch: phase 6 complete - gate green cold, tasks ticked, gate result and eight decisions logged
-24f465d  sketch: phase 6 task 6.5 - the marketplace gate, open registries require an approved review of the pinned bytes
-d0d3cc0  sketch: phase 6 task 6.4 - real Skills surface over the pinned registry, three fixtures deleted, grant and digest shown before consent
-90e6c57  sketch: phase 5 task 5.6 - phase 5 gate, context and diagram claims measured on a fifty-file fixture
+3140073  sketch: phase 6 complete - gate green cold, gate result and eight decisions logged
 d759311  sketch: phase 4 complete - self-hosted fonts remove Google egress, README zero-dollar recipe, gate green cold
 ```
 
