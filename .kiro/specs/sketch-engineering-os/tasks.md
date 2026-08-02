@@ -431,8 +431,9 @@ Phase 4 numbering stays intact for anything that references it.
   - Replace the keytar-specific credential rule with "the OS credential store, accessed outside the core"
   - Completed: Rule 4 now permits roles and consensus only through eval-gated `swarm`, preserves `single` as the default, and keeps `swarm` off without measured pass@k lift. Rule 6 now names the OS credential store and the host-outside-core boundary, limits key transit to purpose-bound credential/invocation channels, and preserves no-log/no-return guarantees.
   - _Requirements: 28.1_
-- [~] 13.2 Amend `what-not-we-are-building.md`
+- [x] 13.2 Amend `what-not-we-are-building.md`
   - Scope the skills registry to v1 and the open marketplace to v2 with signing and capability scoping as preconditions
+  - Completed: the document now permits the curated pinned/content-hash-verified registry and discovery/install surface delivered in the v1.5 implementation phase, while keeping open community publishing v2-only behind tested integrity, capability, review-queue, and exact-digest approval gates. It explicitly does not claim public-key author signatures.
   - _Requirements: 28.2_
 - [~] 13.3 Amend `trd.md` and `architecture.md`
   - Record the dependency-free core decision, replacing mandated `better-sqlite3`, `sqlite-vec`, `keytar`, and MCP SDK dependencies with the seam approach

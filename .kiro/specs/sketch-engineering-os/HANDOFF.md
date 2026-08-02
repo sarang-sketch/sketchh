@@ -27,24 +27,25 @@ provenance Authenticode or Apple Developer ID signing/notarization. For 12.4, re
 third-party community skill's source and license provenance and run it through the existing gate.
 Source tests, workflow configuration, and local fixtures alone complete none of those claims.**
 
-While those external evidence tasks are blocked, the next actionable local leaf is **13.2**:
-reconcile `what-not-we-are-building.md` with the already-gated curated registry and open marketplace
-boundary.
+While those external evidence tasks are blocked, the next actionable local leaf is **13.3**:
+reconcile `trd.md` and `architecture.md` with the dependency-free workspace, persistence, and
+verification contracts that are already implemented.
 
-**81 of 96 tasks complete.** Phases 1 through 11, tasks 12.5–12.6, and task 13.1 are done; 12.1 through 12.4 are in progress.
+**82 of 96 tasks complete.** Phases 1 through 11, tasks 12.5–12.6, and tasks 13.1–13.2 are done; 12.1 through 12.4 are in progress.
 
 Current source verification: build and typecheck pass; **core 1,036 tests / 54 files, desktop 503
-tests / 54 files** with `SKETCH_FAKE_PROVIDER` both unset and set to `1`. Task 13.1 reconciles Rule
-4 with the eval-gated strategy contract (`single` default, `swarm` off without measured pass@k lift,
-consensus only inside `swarm`) and Rule 6 with the existing OS-store/host-outside-core credential
-boundary. No production behavior changed. The Phase 12.6 canonical acceptance uses scripted
-offline model turns over real filesystem bytes, real Node child processes, durable JSONL events,
-production dispatch/merge/consensus/budget contracts, and Timeline rendering. It is harness
-evidence, not evidence that a real provider can build a booking product. The native Windows sidecar
-is 87 MiB and its protocol smoke test passes. The first Tauri package attempt fixed an invalid v2
-window `name` field, then reached Rust compilation but was blocked by this host's Application Control
-policy (OS error 4551) and missing `dlltool.exe`. No Windows installer was produced; macOS and Linux
-were not run on this host.
+tests / 54 files** with `SKETCH_FAKE_PROVIDER` both unset and set to `1`. Task 13.2 now distinguishes
+the curated pinned/content-hash registry and discovery/install surface from an open publishing
+ecosystem: the latter remains v2-only behind tested integrity and capability scopes, a review queue,
+exact-digest approvals, and separately persisted digest-bound grants. “Signed” is not presented as
+public-key author identity. No production marketplace behavior changed. During verification the
+known `verify-live` Windows port-release flake recurred; commit `012e109` increased only its post-kill
+settle allowance from 300 ms to 1,000 ms while preserving the exact port-closed assertion. The test
+passed three focused runs and both final full core suites. The Phase 12.6 canonical acceptance
+remains scripted harness evidence, not evidence that a real provider can build a booking product.
+The native Windows sidecar is 87 MiB and its protocol smoke test passes. The first Tauri package
+attempt reached Rust compilation but was blocked by Application Control error 4551 and missing
+`dlltool.exe`; no native installer was produced on this host.
 
 Task 12.1 now has native Windows/NSIS, macOS/DMG, and Ubuntu 22.04/AppImage jobs. Each rebuilds and
 smoke-tests its own host-native sidecar, packages with Tauri, enforces a strict `<100,000,000-byte`
@@ -120,10 +121,13 @@ the same shape as retrieval being opt-in behind `contextBudgetTokens`. And **not
 during a run** — the loop records no decisions, so the store fills only from the panel or the legacy
 orchestrator through `legacyProjectMemory`.
 
-**One flake, named rather than hidden.** `verify-live.test.ts`'s "starts, answers its probe,
-survives the settle window" failed once on a cold run and passed on every re-run including the
-second cold pass. It binds a real port, so it is timing-sensitive under parallel load. Not related
-to Phase 9. If it recurs the fix is a longer readiness window, not a weaker assertion.
+**Previously recurring Windows timing issue, now stabilized.** `verify-live.test.ts`'s
+"starts, answers its probe, survives the settle window" check binds a real port. Under full-suite
+process pressure, Windows twice retained the listener beyond the old 300 ms post-kill allowance.
+Commit `012e109` increases only that allowance to 1,000 ms; the exact assertion that the port is no
+longer listening remains unchanged. The test passed 28/28 three consecutive focused runs and both
+final full core suites. If it fails again, investigate process cleanup rather than weakening the
+closed-port assertion.
 
 The Phase 8 gate proof is `packages/core/test/phase8-gate.test.ts`: an overrun stops
 deterministically, a cache hit avoids the second call, and the dashboard equals the log — the
@@ -187,7 +191,9 @@ Seven guards were mutation-verified at this gate — see the Phase 5 gate result
 ## Git state
 
 ```
-(Current task 13.1 completion commit containing this file)                       <- HEAD
+(Current task 13.2 completion commit containing this file)                       <- HEAD
+012e109  test: stabilize live app port release check
+aa8b274  sketch: phase 13 task 13.1 - reconcile contributor rules
 cbd1de5  sketch: phase 12 task 12.6 - canonical acceptance gate
 4488ba7  sketch: phase 12 task 12.5 - complete extension registries
 87a5889  sketch: phase 12 task 12.5 - add editor extension registries
@@ -233,9 +239,9 @@ because there was nothing to bisect.
 | 10 — Eval-gated multi-agent (10.1–10.5) | **DONE**, gate green. `swarm` ships **off**: no measured strategy lift |
 | 11 — Honest benchmarks (11.1–11.6) | **DONE**, gate green cold. CI result is synthetic only; real-provider public matrix unperformed |
 | 12 — Packaging and open flywheel | **IN PROGRESS** — 12.1 native artifacts required; 12.2 forwarding/preflight built with installed-app clean-machine evidence required; 12.3 deterministic release/provenance path built with real tag-release evidence and native signing identities absent; 12.4 production flywheel proved with a local community-format fixture, with genuine third-party source/license evidence absent; **12.5 DONE** with production-consumed contracts for all nine categories and behavioral/mutation evidence; **12.6 DONE** with scripted offline canonical acceptance and Timeline evidence, not real-provider capability evidence |
-| 13 — Documentation reconciliation | **IN PROGRESS** — **13.1 DONE**: Rules 4 and 6 now match the eval-gated strategy and host-owned OS credential-store contracts; 13.2 is the next actionable local task |
+| 13 — Documentation reconciliation | **IN PROGRESS** — **13.1 DONE**: Rules 4 and 6 match the strategy/credential contracts; **13.2 DONE**: curated pinned registry allowed while open publishing remains v2-only behind integrity, scope, review, and digest gates; 13.3 is next |
 
-Task counts: 96 total, **81 complete**.
+Task counts: 96 total, **82 complete**.
 
 ---
 

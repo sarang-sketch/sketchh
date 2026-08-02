@@ -1104,6 +1104,7 @@ Task 12.6 is complete and the task count at that checkpoint was **80/96**. Tasks
 | # | Task | Status | Notes |
 |---|---|---|---|
 | 13.1 | Reconcile `rules.md` | ✅ complete | Rule 4 now permits roles and consensus only through eval-gated `swarm`, keeps `single` as the default, and keeps `swarm` off without measured pass@k lift. Rule 6 replaces the keytar mandate with the OS credential store through a host outside core, limits key transit to purpose-bound credential/invocation channels, and preserves no-log/no-event/no-return guarantees. |
+| 13.2 | Reconcile `what-not-we-are-building.md` | ✅ complete | The curated pinned/content-hash registry and discovery/install surface are allowed as the v1-family foundation delivered in the v1.5 implementation phase. Open community publishing remains v2-only behind tested integrity and capability scopes, a review queue, exact-digest approvals, and separately persisted digest-bound grants. The document does not claim public-key author signatures. |
 
 ### Task 13.1 completion result
 
@@ -1111,7 +1112,17 @@ No production code changed. The stale phrases `Multi-model consensus logic`, `st
 
 Focused behavioral validation passes: core **31 tests / 2 files** (`phase10-gate`, `secrets.store`) and desktop **49 tests / 2 files** (`ProviderSettings`, `security`). Canonical order also passes with hosted-provider keys unset: `npm run build`, `npm run typecheck`, core **1,036 tests / 54 files**, and desktop **503 tests / 54 files**. Both complete workspace suites pass at the same counts with `SKETCH_FAKE_PROVIDER=1`.
 
-This task copies already-resolved Requirements 17.3–17.4 and 24.1/24.8/24.9 plus design conflicts 4 and 10 into the contributor rules; it introduces no new architecture. Task 13.1 is complete and the task count is **81/96**.
+This task copies already-resolved Requirements 17.3–17.4 and 24.1/24.8/24.9 plus design conflicts 4 and 10 into the contributor rules; it introduces no new architecture. Task 13.1 is complete and the task count at that checkpoint was **81/96**.
+
+### Task 13.2 completion result
+
+No marketplace production code changed. The broad stale prohibitions `No skill registry`, `no skill discovery UI`, the old `Not a Skills Marketplace (v1)` heading, and `Plugin store in v1` scope-trap row are absent. `what-not-we-are-building.md` now permits the curated pinned/content-hash-verified registry and discovery/install surface as the staged v1-family foundation delivered in the v1.5 implementation phase. Open community publishing remains v2-only behind tested content integrity and capability scopes, a review queue with exact-digest approvals, and separately persisted digest-bound grants that changed bytes invalidate. The document explicitly states that current “signed registry” evidence is not public-key author identity, native application signing, or release provenance.
+
+Focused validation passes: core **42 tests / 4 files** (`registry`, seed pins, Phase 6 chain, Phase 12.4 flywheel preparation) and desktop **15 tests / 1 file** (`SkillsMarketplace`). Canonical final verification passes with hosted-provider keys unset: `npm run build`, `npm run typecheck`, core **1,036 tests / 54 files**, and desktop **503 tests / 54 files**; both complete workspace suites pass at the same counts with `SKETCH_FAKE_PROVIDER=1`. Document diagnostics are clean except for the pre-existing `tasks.md` heading/dependency-graph diagnostics, and `git diff --check` passes.
+
+The first unset core attempt reproduced the documented Windows `verify-live` port-release flake: the listener remained visible after the 300 ms post-kill wait. The prescribed recurring-flake fix was committed separately as `012e109`: only the settle allowance changed to 1,000 ms, while the exact `isPortListening(port) === false` assertion stayed intact. The file passed **28/28** three consecutive focused runs and the final full core suites in both provider environments. No assertion was weakened.
+
+Task 13.2 copies the already-resolved Requirement 11/28.2 and design conflict 5 boundary into the scope document; it creates no new marketplace architecture and does not complete evidence-gated task 12.4. Task 13.2 is complete and the task count is **82/96**.
 
 ---
 

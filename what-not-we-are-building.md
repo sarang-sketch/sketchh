@@ -47,10 +47,12 @@ This document exists to keep the team focused. Every item here is a real temptat
 
 ---
 
-## Not a Skills Marketplace (v1)
-- We do not build a community marketplace in v1
-- Ecosystems follow adoption — we build the platform first
-- No skill registry, no skill discovery UI, no skill publishing pipeline in v1
+## Not an Open Skills Marketplace (v1/v1.5)
+- The staged v1-family foundation may ship a curated, pinned, content-hash-verified skill registry and its registry-backed discovery/install surface; this foundation was delivered in the v1.5 implementation phase
+- That curated surface is not an open community marketplace or a public skill-publishing pipeline
+- The open marketplace is a v2 deliverable and must not ship until content integrity verification and capability scoping are implemented and tested; it must include a review queue whose approvals are bound to the exact reviewed digest
+- Installed authority comes from a separately persisted, digest-bound grant that may be narrower than the skill's request; changed bytes invalidate review and authority
+- “Signed registry” in this project currently means pinned content-hash integrity, not public-key author identity, native application signing, or release provenance
 
 ---
 
@@ -97,7 +99,7 @@ This document exists to keep the team focused. Every item here is a real temptat
 | OAuth login for ChatGPT/Claude.ai web | Fragile, may violate ToS, breaks on UI changes |
 | Real-time collaborative editing | Massive scope, not core to the mission |
 | Mobile app | Wrong form factor for coding |
-| Plugin store in v1 | Ecosystem play, needs users first |
+| Open skill publishing marketplace before the v2 integrity, scope, and review gates | Ecosystem play; unreviewed or over-privileged submissions are a supply-chain risk |
 | Custom model fine-tuning | Out of scope entirely |
 | Voice input/output | Nice to have, not core |
 | Built-in browser | MCP covers this via Playwright |

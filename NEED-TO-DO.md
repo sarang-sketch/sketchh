@@ -1,7 +1,7 @@
 # NEED TO DO — Sketch, from here to done
 
 **Audience:** the developer who is going to write this code.
-**Status date:** task 13.1 complete; Rules 4 and 6 now match the eval-gated strategy and host-owned OS credential-store contracts. Third-party, native, release, clean-machine, and real-provider evidence remain open.
+**Status date:** task 13.2 complete; the curated pinned registry is distinguished from the v2-only open publishing ecosystem and all integrity/scope/review gates remain explicit. Third-party, native, release, clean-machine, and real-provider evidence remain open.
 **Authority:** `.kiro/specs/sketch-engineering-os/{requirements,design,tasks}.md` are the contract.
 This file is the working plan on top of them. Where this file and the spec disagree, the spec wins
 and you should fix this file.
@@ -85,16 +85,16 @@ writes down what happened. Do not describe a wired interface as a working featur
 
 ## 1. Where the project actually stands
 
-**Status date: Phase 11 gated; tasks 12.1 through 12.4 in progress, tasks 12.5–12.6 complete, and documentation task 13.1 complete. 81 of 96 tasks complete.** Core
+**Status date: Phase 11 gated; tasks 12.1 through 12.4 in progress, tasks 12.5–12.6 complete, and documentation tasks 13.1–13.2 complete. 82 of 96 tasks complete.** Core
 1,036 tests / 54 files, desktop 503 tests / 54 files, build and typecheck green with
-`SKETCH_FAKE_PROVIDER` both unset and set to `1`. Task 13.1 is documentation-only and reconciles the
-strategy and credential rules with already-tested production contracts. Task 12.6 remains scripted
-offline harness evidence over real filesystem bytes, child processes, JSONL events,
-dispatch/merge/consensus/budget contracts, and Timeline rendering; it is not evidence that a real
-provider can build a booking product. The native sidecar build and protocol smoke check pass.
-Cross-platform package jobs and the strict `<100,000,000-byte` size gate are implemented, but 12.1
-remains open until native Windows, macOS, and Linux workflow jobs produce uploaded installers and
-passing size manifests.
+`SKETCH_FAKE_PROVIDER` both unset and set to `1`. Task 13.2 is documentation-only and preserves the
+curated-registry/open-marketplace integrity, capability, review, and digest boundaries. The recurring
+Windows `verify-live` port-release flake was stabilized separately in `012e109` by increasing only
+the post-kill settle allowance while preserving the exact closed-port assertion. Task 12.6 remains
+scripted offline harness evidence, not real-provider capability evidence. The native sidecar build
+and protocol smoke check pass. Cross-platform package jobs and the strict `<100,000,000-byte` size
+gate are implemented, but 12.1 remains open until native Windows, macOS, and Linux workflow jobs
+produce uploaded installers and passing size manifests.
 
 **Packaging evidence is honest.** The local Windows Tauri attempt reached Rust compilation but this
 host's Application Control blocked Cargo build scripts (OS error 4551) and `dlltool.exe` is absent.
@@ -1102,8 +1102,11 @@ true**, not in a batch at the end — a doc amended before the code is just a di
   pass@k lift. Rule 6 now requires the OS credential store through a host outside core, limits key
   transit to purpose-bound credential/invocation channels, and preserves no-log/no-event/no-return
   guarantees.
-- **13.2 `what-not-we-are-building.md`** — scope the skills registry to v1 and the open marketplace to
-  v2, with signing and capability scoping as preconditions.
+- **13.2 `what-not-we-are-building.md`** — **complete.** The v1-family curated registry,
+  delivered in the v1.5 implementation phase, is explicitly allowed as pinned content-hash
+  integrity plus registry-backed discovery/install. Open community publishing remains v2-only
+  behind tested integrity and capability scopes, a review queue, exact-digest approvals, and
+  separately persisted digest-bound grants. The wording does not claim public-key author signing.
 - **13.3 `trd.md` and `architecture.md`** — record the dependency-free core decision, replacing
   mandated `better-sqlite3`, `sqlite-vec`, `keytar`, and MCP SDK dependencies with the seam approach.
   Record the workspace layout, the event-sourced JSONL log, the `.sketch/` layout, and the nine-stage
