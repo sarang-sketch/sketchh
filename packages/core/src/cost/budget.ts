@@ -147,6 +147,33 @@ export function checkBudget(options: {
     unpriced: ledger.unpriced,
   }
 
+  // ── THE PROJECTION LEARNS FROM THIS RUN ─────────────────────────────────
+  //
+  // `estimateRequestTokens` counts the prompt and assumes a modest reply. That is the
+  // only information available before the FIRST call, and it is badly wrong for a model
+  // whose replies are large: the Phase 8 gate caught a run overshooting a 600 000-token
+  // ceiling by 150 000, because a ~1 500-token estimate was compared against calls that
+  // really cost 250 000 each.
+  //
+  // After one call, there is better evidence than a guess — what a call in THIS run
+  // actually cost. So the projection uses the largest observed call, and the pre-flight
+  // estimate only wins while nothing has been observed or when the prompt has grown
+  // beyond anything seen so far. Largest rather than mean, because a ceiling that holds
+  // on average is not a ceiling.
+  //
+  // WHAT THIS STILL CANNOT DO, and no pre-flight check can: guarantee the ceiling is
+  // never crossed. The first call's real cost is unknowable in advance, so the
+  // guaranteed bound is `maxTokens + the first call's usage`. That is stated in
+  // `describeBudget` and asserted in the gate rather than glossed over.
+  const observedMaxTokens = ledger.entries.reduce(
+    (worst, entry) => Math.max(worst, entry.usage.in + entry.usage.out),
+    0,
+  )
+  const observedMaxUsd = ledger.entries.reduce(
+    (worst, entry) => Math.max(worst, entry.usd ?? 0),
+    0,
+  )
+
   const deny = (limit: 'tokens' | 'usd' | 'calls', detail: string): BudgetVerdict => ({
     allowed: false,
     limit,
@@ -163,28 +190,34 @@ export function checkBudget(options: {
   }
 
   if (budget.maxTokens !== undefined) {
-    const projected = spentTokens + (pending === undefined ? 0 : pending.usage.in + pending.usage.out)
-    if (projected > budget.maxTokens) {
+    const estimated = pending === undefined ? 0 : pending.usage.in + pending.usage.out
+    const expected = Math.max(estimated, observedMaxTokens)
+    if (spentTokens + expected > budget.maxTokens) {
       return deny(
         'tokens',
-        `budget reached: this request is an estimated ${
-          pending === undefined ? 0 : pending.usage.in + pending.usage.out
-        } token(s) and ${spentTokens} of ${budget.maxTokens} are already spent`,
+        `budget reached: the next request is expected to cost ${expected} token(s)` +
+          (observedMaxTokens > estimated
+            ? ` (the largest call in this run so far)`
+            : ` (estimated from the prompt)`) +
+          ` and ${spentTokens} of ${budget.maxTokens} are already spent`,
       )
     }
   }
 
   if (budget.maxUsd !== undefined) {
-    const pendingUsd =
+    const estimatedUsd =
       pending === undefined
         ? 0
         : (costFor(pending.usage, pending.model, pending.provider, now).usd ?? 0)
-    const projected = spent.usd + pendingUsd
-    if (projected > budget.maxUsd) {
+    const expectedUsd = Math.max(estimatedUsd, observedMaxUsd)
+    if (spent.usd + expectedUsd > budget.maxUsd) {
       return deny(
         'usd',
-        `budget reached: this request is an estimated $${pendingUsd.toFixed(4)} and ` +
-          `$${spent.usd.toFixed(4)} of $${budget.maxUsd.toFixed(4)} is already spent`,
+        `budget reached: the next request is expected to cost $${expectedUsd.toFixed(4)}` +
+          (observedMaxUsd > estimatedUsd
+            ? ` (the most expensive call in this run so far)`
+            : ` (estimated from the prompt)`) +
+          ` and $${spent.usd.toFixed(4)} of $${budget.maxUsd.toFixed(4)} is already spent`,
       )
     }
   }
@@ -205,7 +238,12 @@ export function describeBudget(budget: RunBudget, ledger?: Ledger): string {
   if (budget.maxUsd !== undefined) parts.push(`$${budget.maxUsd.toFixed(2)}`)
   if (parts.length === 0) return 'No budget is configured, so nothing bounds this run.'
 
-  const head = `Budget: ${parts.join(', ')}; on breach, ${budget.onBreach}.`
+  const head =
+    `Budget: ${parts.join(', ')}; on breach, ${budget.onBreach}. ` +
+    // Stated, because a user who thinks a ceiling is absolute will be surprised once.
+    'The first call\u2019s real cost cannot be known before it is made, so the ceiling ' +
+    'is enforced from the second call onward and the guaranteed bound is the ceiling ' +
+    'plus one call.'
   if (
     budget.maxUsd !== undefined &&
     budget.maxTokens === undefined &&
