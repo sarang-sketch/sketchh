@@ -865,25 +865,57 @@ export function compareFused(a: FusedCandidate, b: FusedCandidate): number {
   return a.chunkIndex - b.chunkIndex
 }
 
-/** Fuse ranked lists by reciprocal rank. `score(d) = Σ 1/(k + rank_i(d))`. */
-export function reciprocalRankFusion(lists: readonly RankedList[], k: number = RRF_K): FusedCandidate[] {
-  const merged = new Map<string, FusedCandidate>()
+/** One channel's ranking, over ids alone. The corpus-agnostic input to fusion. */
+export interface RankedIds<C extends string = string> {
+  channel: C
+  /** Ids in this channel's own order; position 0 is rank 1. */
+  ids: readonly string[]
+}
+
+/** A fused id, with where it ranked and how strongly. */
+export interface FusedId<C extends string = string> {
+  id: string
+  ranks: Partial<Record<C, number>>
+  channels: C[]
+  /** `Σ 1/(k + rank_i)`. */
+  rrf: number
+  /** The best (numerically lowest) rank across channels. First tie-break. */
+  bestRank: number
+}
+
+/**
+ * The reciprocal-rank arithmetic, over ids and nothing else.
+ *
+ * ── WHY THIS IS SEPARATE FROM `reciprocalRankFusion` ───────────────────────
+ *
+ * `RankedItem` carries `path`, `chunkIndex` and line numbers, because a code hit has
+ * those. Memory entries (Phase 9) do not: they are rows, not file ranges. Forcing them
+ * through that shape would mean inventing a fake path and a fake chunk index purely to
+ * satisfy a signature, and invented data in a retrieval pipeline is how a surface ends
+ * up displaying `entry.ts#0` for something that was never in a file.
+ *
+ * So the ARITHMETIC lives here, generic over the id, and `reciprocalRankFusion` below is
+ * a thin wrapper that re-attaches the code-specific fields. One implementation of the
+ * fusion, two shapes of caller — which is the point, because two copies of a scoring rule
+ * drift and the drift is invisible in the output.
+ */
+export function fuseRankedIds<C extends string>(
+  lists: readonly RankedIds<C>[],
+  k: number = RRF_K,
+): FusedId<C>[] {
+  const merged = new Map<string, FusedId<C>>()
 
   for (const list of lists) {
-    for (let i = 0; i < list.items.length; i++) {
-      const item = list.items[i]!
+    for (let i = 0; i < list.ids.length; i++) {
+      const id = list.ids[i]!
       const rank = i + 1
       const contribution = 1 / (k + rank)
 
-      const existing = merged.get(item.id)
+      const existing = merged.get(id)
       if (existing === undefined) {
-        merged.set(item.id, {
-          id: item.id,
-          path: item.path,
-          chunkIndex: item.chunkIndex,
-          startLine: item.startLine,
-          endLine: item.endLine,
-          ranks: { [list.channel]: rank },
+        merged.set(id, {
+          id,
+          ranks: { [list.channel]: rank } as Partial<Record<C, number>>,
           channels: [list.channel],
           rrf: contribution,
           bestRank: rank,
@@ -900,10 +932,41 @@ export function reciprocalRankFusion(lists: readonly RankedList[], k: number = R
     }
   }
 
-  const fused = [...merged.values()]
-  for (const candidate of fused) candidate.channels.sort()
-  fused.sort(compareFused)
-  return fused
+  return [...merged.values()]
+}
+
+/** Fuse ranked lists by reciprocal rank. `score(d) = Σ 1/(k + rank_i(d))`. */
+export function reciprocalRankFusion(lists: readonly RankedList[], k: number = RRF_K): FusedCandidate[] {
+  // The fields a code hit has and an id does not, kept aside and re-attached below.
+  const details = new Map<string, RankedItem>()
+  for (const list of lists) {
+    for (const item of list.items) if (!details.has(item.id)) details.set(item.id, item)
+  }
+
+  const merged = new Map<string, FusedCandidate>()
+  for (const fused of fuseRankedIds<ChannelName>(
+    lists.map((list) => ({ channel: list.channel, ids: list.items.map((item) => item.id) })),
+    k,
+  )) {
+    const item = details.get(fused.id)
+    if (item === undefined) continue
+    merged.set(fused.id, {
+      id: fused.id,
+      path: item.path,
+      chunkIndex: item.chunkIndex,
+      startLine: item.startLine,
+      endLine: item.endLine,
+      ranks: fused.ranks,
+      channels: fused.channels,
+      rrf: fused.rrf,
+      bestRank: fused.bestRank,
+    })
+  }
+
+  const candidates = [...merged.values()]
+  for (const candidate of candidates) candidate.channels.sort()
+  candidates.sort(compareFused)
+  return candidates
 }
 
 // ── rerank ──────────────────────────────────────────────────────────────────
