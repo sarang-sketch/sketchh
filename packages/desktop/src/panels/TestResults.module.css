@@ -1,0 +1,315 @@
+/* Test Results. Colour is never the only signal: every status also carries a word,
+   because a red/green badge alone is unreadable to a colour-blind user and invisible
+   to a screen reader. */
+
+.container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  font-size: 12px;
+  color: var(--text-primary, #ccc);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border, #2a2a2a);
+  flex: 0 0 auto;
+}
+
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 11px;
+}
+
+.runButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border: 1px solid var(--border, #2a2a2a);
+  border-radius: 4px;
+  background: var(--bg-elevated, #252525);
+  color: inherit;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.runButton:hover:not(:disabled) {
+  background: var(--bg-hover, #2f2f2f);
+}
+
+.runButton:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 8px 10px 16px;
+}
+
+.error {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 7px 8px;
+  margin-bottom: 8px;
+  border: 1px solid #6b2b2b;
+  border-radius: 4px;
+  background: rgba(120, 40, 40, 0.18);
+  color: #f0a0a0;
+  line-height: 1.45;
+}
+
+.source {
+  margin-bottom: 10px;
+  line-height: 1.5;
+  color: var(--text-secondary, #9a9a9a);
+}
+
+.source p {
+  margin: 0 0 4px;
+}
+
+.sourceNote {
+  color: var(--text-tertiary, #7a7a7a);
+}
+
+.diagnostics {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+}
+
+.diagnostic {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 5px 7px;
+  margin-bottom: 4px;
+  border-left: 2px solid #b58900;
+  background: rgba(181, 137, 0, 0.12);
+  color: #e0c060;
+  line-height: 1.45;
+}
+
+.summary {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 9px;
+  margin-bottom: 10px;
+  border-radius: 4px;
+  border: 1px solid var(--border, #2a2a2a);
+  line-height: 1.45;
+}
+
+.summaryOk {
+  border-color: #2f5c34;
+  background: rgba(46, 92, 52, 0.16);
+}
+
+.summaryBad {
+  border-color: #6b2b2b;
+  background: rgba(120, 40, 40, 0.16);
+}
+
+.summary span {
+  color: var(--text-secondary, #9a9a9a);
+}
+
+.stages {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.stage {
+  padding: 7px 0;
+  border-bottom: 1px solid var(--border, #232323);
+}
+
+.stageHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.stageHead:disabled {
+  cursor: default;
+}
+
+.stageName {
+  font-weight: 500;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 92px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  border: 1px solid transparent;
+}
+
+.passed {
+  color: #7fc98a;
+  border-color: #2f5c34;
+  background: rgba(46, 92, 52, 0.2);
+}
+
+.failed {
+  color: #f0a0a0;
+  border-color: #6b2b2b;
+  background: rgba(120, 40, 40, 0.2);
+}
+
+/* Not configured. Grey, and worded as such: it did not pass, and it did not fail. */
+.skipped {
+  color: #8a8a8a;
+  border-color: #333;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* An earlier stage failed and the sequence stopped. Deliberately NOT the same
+   presentation as `skipped`: the two call for opposite responses. */
+.notRun {
+  color: #9a8fb8;
+  border-color: #3b3350;
+  background: rgba(80, 66, 120, 0.18);
+}
+
+.passedText {
+  color: #7fc98a;
+}
+
+.failedText {
+  color: #f0a0a0;
+}
+
+.duration {
+  margin-left: auto;
+  color: var(--text-tertiary, #7a7a7a);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.commands {
+  list-style: none;
+  margin: 5px 0 0 100px;
+  padding: 0;
+}
+
+.command code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  color: var(--text-secondary, #9a9a9a);
+}
+
+.stageNote {
+  margin: 5px 0 0 100px;
+  color: var(--text-tertiary, #7a7a7a);
+  line-height: 1.5;
+}
+
+.outputs {
+  list-style: none;
+  margin: 7px 0 0 100px;
+  padding: 0;
+}
+
+.output {
+  margin-bottom: 8px;
+}
+
+.outputHead {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 4px;
+}
+
+.outputHead code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+}
+
+.log {
+  margin: 0 0 5px;
+  padding: 6px 8px;
+  max-height: 260px;
+  overflow: auto;
+  border: 1px solid var(--border, #2a2a2a);
+  border-radius: 3px;
+  background: var(--bg-code, #1a1a1a);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text-secondary, #9a9a9a);
+}
+
+.logErr {
+  border-color: #4a2a2a;
+  color: #e0a8a8;
+}
+
+.live {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border, #2a2a2a);
+}
+
+.liveHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.footNote {
+  margin: 12px 0 0;
+  color: var(--text-tertiary, #7a7a7a);
+  line-height: 1.5;
+}
+
+.emptyState {
+  padding: 24px 14px;
+  text-align: center;
+}
+
+.emptyText {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.emptySubtext {
+  margin: 0;
+  color: var(--text-tertiary, #7a7a7a);
+  line-height: 1.55;
+  text-align: left;
+}

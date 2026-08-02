@@ -36,6 +36,8 @@ import type {
   SkillsCatalogResult,
   SkillInstallResult,
   SkillTrainResult,
+  VerifyContractResult,
+  McpCatalogResult,
   ProviderCatalogResult,
   ProviderTestRequest,
 } from './client'
@@ -558,6 +560,31 @@ export class StdioSketchClient implements SketchClient {
       ...(params.maxCalls !== undefined ? { maxCalls: params.maxCalls } : {}),
       ...(params.maxTokens !== undefined ? { maxTokens: params.maxTokens } : {}),
     })
+  }
+
+  // ── verification contract and MCP ─────────────────────────────────────────
+  //
+  // `run` is forwarded only when true, so the wire carries the deliberate act and not
+  // an explicit `false` that reads like a decision the caller made about running.
+
+  async verify(params: {
+    root: string
+    run?: boolean
+    continueOnFailure?: boolean
+    runId?: string
+  }): Promise<VerifyContractResult> {
+    return this.call<VerifyContractResult>('verify', {
+      root: params.root,
+      ...(params.run === true ? { run: true } : {}),
+      ...(params.continueOnFailure !== undefined
+        ? { continueOnFailure: params.continueOnFailure }
+        : {}),
+      ...(params.runId !== undefined ? { runId: params.runId } : {}),
+    })
+  }
+
+  async mcpCatalog(): Promise<McpCatalogResult> {
+    return this.call<McpCatalogResult>('mcp-catalog', {})
   }
 
   subscribe(handler: EventHandler): Unsubscribe {

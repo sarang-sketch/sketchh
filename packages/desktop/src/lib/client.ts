@@ -171,6 +171,123 @@ export interface SkillTrainResult {
   body?: string
 }
 
+// ── the verification contract, as a surface sees it ─────────────────────────
+
+/** The nine stages, fixed in contract order by Requirement 4.3. */
+export type VerifyStageName =
+  | 'format'
+  | 'lint'
+  | 'typecheck'
+  | 'build'
+  | 'unit'
+  | 'integration'
+  | 'security'
+  | 'performance'
+  | 'dependency-audit'
+
+/**
+ * `skipped` and `not-run` are DIFFERENT WORDS and stay different all the way here.
+ *
+ * Nothing ran in either case, but `skipped` means the project configures no command for
+ * this stage and `not-run` means an earlier stage failed and the sequence stopped. One
+ * grey badge for both hides which, and the two call for opposite responses: configure
+ * something, or go fix the failure above.
+ */
+export type VerifyStageStatus = 'passed' | 'failed' | 'skipped' | 'not-run'
+
+export interface VerifyCommandResult {
+  name: string
+  ok: boolean
+  exitCode: number
+  stdout: string
+  stderr: string
+  durationMs: number
+}
+
+export interface VerifyStageResult {
+  stage: VerifyStageName
+  status: VerifyStageStatus
+  results: VerifyCommandResult[]
+  durationMs: number
+  /** Why it is skipped or not-run, in words. Null when it ran. */
+  reason: string | null
+}
+
+/** One stage of the contract, whether or not this project configures it. */
+export interface VerifyContractStage {
+  stage: VerifyStageName
+  configured: boolean
+  /** The command lines this stage would run, as written. */
+  commands: string[]
+}
+
+export interface VerifyPolicyResult {
+  ok: boolean
+  stages: VerifyStageResult[]
+  failedStage: VerifyStageName | null
+  ranStages: VerifyStageName[]
+  /**
+   * True when at least one command actually ran.
+   *
+   * `ok` is true for a project that configures nothing, and that must never read as
+   * evidence that anything was verified.
+   */
+  verifiedAnything: boolean
+  totalDurationMs: number
+  /** The live application check's verdict, when the policy configured one. */
+  live?: {
+    verdict: 'passed' | 'failed-to-start' | 'runtime-error' | 'probe-failed' | 'skipped'
+    detail: string
+    heuristic?: boolean
+    stdout?: string
+    stderr?: string
+  }
+}
+
+export interface VerifyContractResult {
+  root: string
+  /** `file` when a policy file was read, `detected` per stack, `none` when neither. */
+  source: 'file' | 'detected' | 'none'
+  /** The policy file, when one was read. */
+  path?: string
+  /** The detected stack, when detection ran. */
+  language?: 'node' | 'python' | 'rust' | 'go' | 'unknown'
+  /** Problems found reading a policy file. A malformed file is NOT silent. */
+  diagnostics: string[]
+  contract: VerifyContractStage[]
+  /** Whether a live application check is folded into the `integration` stage. */
+  live: boolean
+  continueOnFailure: boolean
+  ran: boolean
+  result: VerifyPolicyResult | null
+}
+
+// ── the curated MCP catalog, as a surface sees it ───────────────────────────
+
+export interface McpCatalogEntryStatus {
+  id: string
+  title: string
+  summary: string
+  /** The one capability every tool on this server costs. */
+  requires: string
+  /** The pinned argv, so a user can see exactly what would run. Never `@latest`. */
+  command: string
+  requiresEnv: string[]
+  /** Of `requiresEnv`, what this environment does not have. */
+  missingEnv: string[]
+  /** Could start. NOT "is running": nothing runs between runs. */
+  configured: boolean
+  /** Why this server is riskier than its capability alone suggests. */
+  caveat?: string
+}
+
+export interface McpCatalogResult {
+  servers: McpCatalogEntryStatus[]
+  total: number
+  configured: number
+  note: string
+}
+
 export interface RunOptions {
   /** Project root for this run. Required by the desktop to match the open folder. */
   root?: string
@@ -318,6 +435,41 @@ export interface SketchClient {
     },
     options?: { signal?: AbortSignal },
   ): Promise<SkillTrainResult>
+
+  // ── verification contract ─────────────────────────────────────────────────
+  //
+  // The nine stages, `verify.yaml` parsing, per-stack detection, and the runner all
+  // live in packages/core/src/verify/. Same seam reasoning as git and skills: one
+  // implementation, reachable under the dev bridge as well as in the app.
+  //
+  // RESOLVING IS FREE AND IS THE DEFAULT. `run: true` executes the project's whole
+  // gauntlet, which for most projects means a build and a test suite, and for a policy
+  // with a `live` check means binding a port. That cannot happen because a panel
+  // mounted, so the Test Results panel resolves on mount and runs only when a user
+  // presses the button.
+
+  /**
+   * The verification contract for a project, and optionally its results.
+   *
+   * `contract` is always all nine stages in contract order, including the ones this
+   * project does not configure — "lint is not set up here" is information, and a panel
+   * that lists only what exists cannot say it.
+   */
+  verify?(
+    params: { root: string; run?: boolean; continueOnFailure?: boolean; runId?: string },
+    options?: { signal?: AbortSignal },
+  ): Promise<VerifyContractResult>
+
+  // ── MCP ───────────────────────────────────────────────────────────────────
+  //
+  // READ-ONLY, and it reports `configured`, never `connected`. MCP servers are started
+  // per run, by a run that asked for them, and only when the run's grant covers the
+  // capability they cost — the unavailability latch is per-run by definition. So there
+  // is nothing to be connected to between runs, and a badge claiming five live
+  // connections would be the hardcoded fixture this replaced (Requirement 27.5).
+
+  /** The curated catalog, with each entry's missing environment named. */
+  mcpCatalog?(): Promise<McpCatalogResult>
 
   /**
    * Attach a handler to the engine's event stream. Called for every event from

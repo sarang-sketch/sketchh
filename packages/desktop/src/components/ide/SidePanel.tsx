@@ -12,6 +12,8 @@ import { AgentTimelinePanel } from '../../ui/panels/AgentTimeline';
 import { AgentConsolePanel } from '../../ui/panels/AgentConsole';
 import DebuggerPanel from '../../panels/ide/DebuggerPanel';
 import { ProviderSettings } from '../../panels/ProviderSettings';
+import { McpTools } from '../../panels/McpTools';
+import { TestResults } from '../../panels/TestResults';
 
 export default function SidePanel() {
   const { ideActivePanel } = useAppState();
@@ -65,8 +67,18 @@ export default function SidePanel() {
       title = 'Provider Settings';
       content = <ProviderSettings />;
       break;
+    case 'mcp':
+      // Task 7.3: the curated catalog, what each server costs, and what it is missing.
+      // No connection count, because nothing is connected between runs.
+      title = 'MCP Tools';
+      content = <McpTools />;
+      break;
+    case 'tests':
+      // Task 7.4: the nine-stage contract, resolved on mount and run on request.
+      title = 'Test Results';
+      content = <TestResults />;
+      break;
     default:
-      // MCP Tools has an ActivityBar button but its real panel belongs to task 7.3.
       return null;
   }
 

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import styles from './IdeChatSidebar.module.css';
 import { 
-  Plus, Refresh, X, Sparkles, AlertTriangle
+  Plus, Refresh, X, Sparkles
 } from '../../components/Icons';
 import { useAppState, useAppDispatch } from '../../state/AppState';
 import { ThinkingIndicator } from '../../components/ThinkingIndicator';
@@ -114,10 +114,12 @@ export default function IdeChatSidebar() {
                 machine, configured or not. */}
             <ModelSelector />
 
-            <div className={styles.mcpWarningBadge} title="MCP Tools Active (cloudrun, firebase, notebooks, visualization)">
-              <AlertTriangle size={12} className={styles.warnIcon} />
-              <span>MCP...</span>
-            </div>
+            {/* The "MCP Tools Active (cloudrun, firebase, notebooks, visualization)"
+                badge that used to sit here is gone. It named four servers this product
+                does not have and claimed they were active, on every machine, always.
+                MCP servers start per run and only for the capabilities that run holds,
+                so nothing is active while a prompt is being typed. The curated catalog
+                and what each server costs live in the MCP Tools panel (Req 27.5). */}
 
             <button 
               className={`${styles.sendArrowBtn} ${inputText.trim() ? styles.sendActive : ''}`}

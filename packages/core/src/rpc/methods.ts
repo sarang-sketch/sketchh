@@ -67,7 +67,12 @@ import {
   trainSkill,
 } from '../skills/index.js'
 import { GitTool } from '../tools/index.js'
-import { parsePolicyJson, resolveVerifyPolicy } from '../verify/index.js'
+import {
+  VERIFY_STAGES,
+  parsePolicyJson,
+  resolveVerifyPolicy,
+  runVerifyPolicy,
+} from '../verify/index.js'
 import type { VerifyPolicy } from '../verify/index.js'
 import type {
   ChatAdapter,
@@ -580,6 +585,86 @@ async function openToolLayerFor(
       `reachable with ${granted.length === 0 ? 'no capabilities' : granted.join(', ')}`,
   )
   return { host, dispatcher }
+}
+
+/**
+ * The project's verification contract: the nine stages, where they came from, and —
+ * only when asked — what happens when they run.
+ *
+ * ── RESOLVE IS THE DEFAULT; RUNNING IS OPT-IN (`params.run`) ───────────────
+ *
+ * A Test Results panel mounts when a user clicks a button in a sidebar. Executing nine
+ * stages because a panel mounted would run the project's whole build and test suite as
+ * a side effect of navigation — minutes of CPU, and for a policy with a `live` check, a
+ * server bound to a port. So the default reports the CONTRACT: every stage in order,
+ * the commands each would run, whether it is configured, and whether the policy came
+ * from a file or from detection. `run: true` is a deliberate act.
+ *
+ * ── THE NINE ARE ALWAYS ALL NINE ───────────────────────────────────────────
+ *
+ * `stages` is `VERIFY_STAGES` in contract order whether the project configures them or
+ * not, because "lint is not configured here" is information a user needs and a panel
+ * that only lists what exists cannot convey it. `skipped` and `not-run` stay distinct
+ * words all the way to the surface (see `policy.ts`): nothing ran either way, but one
+ * means "you configured nothing" and the other means "an earlier stage failed and we
+ * stopped", and a panel showing one grey badge for both hides which.
+ */
+async function verify(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
+  const root = resolve(optionalString(params, 'root', 'params.root') ?? ctx.cwd())
+  const shouldRun = optionalBoolean(params, 'run', 'params.run') ?? false
+
+  const resolved = await resolveVerifyPolicy(root)
+  for (const diagnostic of resolved.diagnostics) ctx.log(`verify policy: ${diagnostic}`)
+
+  // Contract order, every stage, configured or not.
+  const contract = VERIFY_STAGES.map((stage) => {
+    const commands = resolved.policy[stage] ?? []
+    return {
+      stage,
+      configured: commands.length > 0,
+      commands: commands.map((command) => [command.cmd, ...(command.args ?? [])].join(' ')),
+    }
+  })
+
+  const base = {
+    root,
+    source: resolved.source,
+    ...(resolved.path !== undefined ? { path: resolved.path } : {}),
+    ...(resolved.language !== undefined ? { language: resolved.language } : {}),
+    diagnostics: resolved.diagnostics,
+    contract,
+    /** Whether a live application check is part of the `integration` stage. */
+    live: resolved.policy.live !== undefined,
+  }
+
+  // A FULL REPORT, so `continueOnFailure` defaults to TRUE here and only here.
+  //
+  // The loop is fail-fast on purpose: the first failure in an ordered gauntlet is
+  // usually the explanation for the rest, and a model does not need eight more. A
+  // panel is the opposite case — a user looking at a report wants to know that lint
+  // failed AND the tests fail, not to fix lint and discover the tests separately. The
+  // cost is real (every stage runs), so the flag is reported back and a caller can
+  // ask for fail-fast with `continueOnFailure: false`.
+  const continueOnFailure =
+    optionalBoolean(params, 'continueOnFailure', 'params.continueOnFailure') ?? true
+
+  if (!shouldRun) return { ...base, ran: false, continueOnFailure, result: null }
+
+  // Events go where the run log lives, so a verification the user triggered from the
+  // panel is in the same durable timeline as one a run triggered.
+  const events = new StreamingEventStore(
+    new JsonlEventStore({ baseDir: root, secrets: () => ctx.secrets() }),
+    (event) => ctx.emitEvent(event),
+  )
+  const result = await runVerifyPolicy(resolved.policy, {
+    sink: events,
+    runId: optionalString(params, 'runId', 'params.runId') ?? 'verify',
+    // `root` is not optional in practice: without it a `live` check skips itself and
+    // reports ok, which is exactly the bug task 7.2 found in the loop.
+    root,
+    continueOnFailure,
+  })
+  return { ...base, ran: true, continueOnFailure, result }
 }
 
 /**
@@ -1322,6 +1407,9 @@ export const METHODS: Readonly<Record<string, MethodHandler>> = {
   // what each entry is missing. Nothing here starts a server — that happens inside a
   // run, from `params.mcpServers`, and only for a capability the run's grant covers.
   'mcp-catalog': mcpCatalog,
+  // Task 7.4's Test Results panel. Resolving the contract is free and is the default;
+  // `run: true` executes the gauntlet and is a deliberate act, never a mount.
+  verify,
 }
 
 /** The five the protocol contract names. Every build answers at least these. */

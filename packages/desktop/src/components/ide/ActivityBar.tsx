@@ -1,5 +1,23 @@
+// The activity bar.
+//
+// ── THE MCP BADGE IS GONE, AND THAT IS THE FIX ──────────────────────────────
+//
+// This bar used to render `badge: mcpToolsStatus.connected`, whose value came from
+// `{ connected: 5, total: 8, warning: true }` hardcoded in `AppState`. Five servers
+// were never connected; eight never existed. The number moved for no reason and meant
+// nothing.
+//
+// It is not replaced with a real count, because there is no real count to show. MCP
+// servers are started PER RUN and only for the capabilities that run holds — the
+// unavailability latch is per-run by definition (Requirement 22.3: unavailable "for the
+// remainder of the run"). Between runs nothing is connected, so a number here would be
+// a fixture whichever value it held. What a user can know before a run is which servers
+// COULD start, and that is a list with reasons, which is a panel and not a badge.
+//
+// Validates: Requirements 27.1, 27.4, 27.5
+
 import styles from './ActivityBar.module.css';
-import { Files, Search, GitBranch, GitPullRequest, Layers, Play, Puzzle, Settings, Server, Activity, MessageSquare } from '../Icons';
+import { Files, Search, GitBranch, GitPullRequest, Layers, Play, Puzzle, Settings, Server, Activity, MessageSquare, Check } from '../Icons';
 import { useAppState, useAppDispatch, type AppState } from '../../state/AppState';
 
 type PanelId = NonNullable<AppState['ideActivePanel']>;
@@ -8,11 +26,10 @@ interface ActivityItem {
   id: PanelId;
   icon: typeof Files;
   label: string;
-  badge?: number;
 }
 
 export default function ActivityBar() {
-  const { ideActivePanel, mcpToolsStatus } = useAppState();
+  const { ideActivePanel } = useAppState();
   const dispatch = useAppDispatch();
 
   // The cast is gone: `ideActivePanel` now includes null, which is what a toggle
@@ -33,8 +50,9 @@ export default function ActivityBar() {
     { id: 'timeline', icon: Activity, label: 'Timeline' },
     { id: 'console', icon: MessageSquare, label: 'Agent Console' },
     { id: 'run', icon: Play, label: 'Run & Debug' },
+    { id: 'tests', icon: Check, label: 'Test Results' },
     { id: 'skills', icon: Puzzle, label: 'Extensions & Skills' },
-    { id: 'mcp', icon: Server, label: 'MCP Tools', badge: mcpToolsStatus.connected }
+    { id: 'mcp', icon: Server, label: 'MCP Tools' }
   ];
 
   return (
@@ -51,9 +69,6 @@ export default function ActivityBar() {
             >
               <div className={styles.iconWrapper}>
                 <Icon size={20} />
-                {item.badge !== undefined && (
-                  <span className={styles.mcpBadge}>{item.badge}</span>
-                )}
               </div>
             </button>
           );

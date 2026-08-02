@@ -186,7 +186,11 @@ export interface AppState {
   agentView: 'new_task' | 'projects' | 'artifacts' | 'scheduled' | 'customize' | 'timeline' | 'console';
   workspaces: WorkspaceEntry[];
   artifacts: ArtifactEntry[];
-  mcpToolsStatus: { connected: number; total: number; warning?: boolean };
+  // `mcpToolsStatus` is deliberately GONE. It held `{ connected: 5, total: 8 }`, a
+  // fixture claiming five live tool servers. The real answer belongs to the engine and
+  // is fetched by `McpTools` through `mcp-catalog`, and it is a list of what COULD start
+  // with what each server costs — never a connection count, because MCP servers are
+  // started per run and nothing is connected between runs (Requirement 27.5).
 
   // Agent Mode State
   conversations: Conversation[];
@@ -213,6 +217,9 @@ export interface AppState {
     | 'timeline'
     | 'console'
     | 'run'
+    /** Test Results: the nine-stage verification contract (Req 4.3, 27.1). */
+    | 'tests'
+    /** MCP Tools: the curated catalog and what each server costs (Req 22.2, 27.5). */
     | 'mcp'
     | null;
   terminalOpen: boolean;
@@ -332,7 +339,7 @@ const initialState: AppState = {
     { id: 'art1', title: 'implementation_plan.md', type: 'Markdown Plan', createdAt: Date.now() - 3600000, content: '# Dual-Mode Architecture Plan...' },
     { id: 'art2', title: 'walkthrough.md', type: 'Walkthrough', createdAt: Date.now() - 1800000, content: '# Build Walkthrough...' }
   ],
-  mcpToolsStatus: { connected: 5, total: 8, warning: true },
+  // No `mcpToolsStatus` here either. See the note on the interface field above.
   
   conversations: [
     {

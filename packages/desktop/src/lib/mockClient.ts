@@ -298,6 +298,22 @@ export class MockSketchClient implements SketchClient {
     return this.noEngine('skill-train')
   }
 
+  // ── verification contract and MCP ─────────────────────────────────────────
+  //
+  // The same rule a fourth and fifth time. A fabricated verify report is the worst
+  // fixture in this application: nine green badges are a claim that a project's tests
+  // pass, and a user who trusts one ships broken code. A fabricated MCP status is a
+  // claim that servers are connected, which is what the hardcoded
+  // `{ connected: 5, total: 8 }` badge said before this task deleted it.
+
+  async verify(): Promise<never> {
+    return this.noEngine('verify')
+  }
+
+  async mcpCatalog(): Promise<never> {
+    return this.noEngine('mcp-catalog')
+  }
+
   private nextRunId(): string {
     // Time-prefixed so ids sort chronologically, matching the engine's scheme.
     this.runCounter += 1

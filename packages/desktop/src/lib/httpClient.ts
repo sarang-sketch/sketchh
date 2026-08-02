@@ -9,6 +9,8 @@ import type {
   SkillsCatalogResult,
   SkillInstallResult,
   SkillTrainResult,
+  VerifyContractResult,
+  McpCatalogResult,
   ProviderCatalogResult,
   ProviderTestRequest,
 } from './client'
@@ -232,6 +234,28 @@ export class HttpSketchClient implements SketchClient {
       ...(params.maxCalls !== undefined ? { maxCalls: params.maxCalls } : {}),
       ...(params.maxTokens !== undefined ? { maxTokens: params.maxTokens } : {}),
     })
+  }
+
+  // ── verification contract and MCP ─────────────────────────────────────────
+
+  async verify(params: {
+    root: string
+    run?: boolean
+    continueOnFailure?: boolean
+    runId?: string
+  }): Promise<VerifyContractResult> {
+    return this.callMethod<VerifyContractResult>('verify', {
+      root: params.root,
+      ...(params.run === true ? { run: true } : {}),
+      ...(params.continueOnFailure !== undefined
+        ? { continueOnFailure: params.continueOnFailure }
+        : {}),
+      ...(params.runId !== undefined ? { runId: params.runId } : {}),
+    })
+  }
+
+  async mcpCatalog(): Promise<McpCatalogResult> {
+    return this.callMethod<McpCatalogResult>('mcp-catalog', {})
   }
 
   subscribe(handler: EventHandler): Unsubscribe {
