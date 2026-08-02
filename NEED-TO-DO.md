@@ -1,7 +1,7 @@
 # NEED TO DO — Sketch, from here to done
 
 **Audience:** the developer who is going to write this code.
-**Status date:** task 13.2 complete; the curated pinned registry is distinguished from the v2-only open publishing ecosystem and all integrity/scope/review gates remain explicit. Third-party, native, release, clean-machine, and real-provider evidence remain open.
+**Status date:** task 13.3 complete; the architecture documents now match the dependency-free workspace, seam-plus-implementation persistence boundaries, append-only JSONL state, on-demand `.sketch/` layout, and nine-stage verification policy. Third-party, native, release, clean-machine, and real-provider evidence remain open.
 **Authority:** `.kiro/specs/sketch-engineering-os/{requirements,design,tasks}.md` are the contract.
 This file is the working plan on top of them. Where this file and the spec disagree, the spec wins
 and you should fix this file.
@@ -85,16 +85,18 @@ writes down what happened. Do not describe a wired interface as a working featur
 
 ## 1. Where the project actually stands
 
-**Status date: Phase 11 gated; tasks 12.1 through 12.4 in progress, tasks 12.5–12.6 complete, and documentation tasks 13.1–13.2 complete. 82 of 96 tasks complete.** Core
+**Status date: Phase 11 gated; tasks 12.1 through 12.4 in progress, tasks 12.5–12.6 complete, and documentation tasks 13.1–13.3 complete. 83 of 96 tasks complete.** Core
 1,036 tests / 54 files, desktop 503 tests / 54 files, build and typecheck green with
-`SKETCH_FAKE_PROVIDER` both unset and set to `1`. Task 13.2 is documentation-only and preserves the
-curated-registry/open-marketplace integrity, capability, review, and digest boundaries. The recurring
-Windows `verify-live` port-release flake was stabilized separately in `012e109` by increasing only
-the post-kill settle allowance while preserving the exact closed-port assertion. Task 12.6 remains
-scripted offline harness evidence, not real-provider capability evidence. The native sidecar build
-and protocol smoke check pass. Cross-platform package jobs and the strict `<100,000,000-byte` size
-gate are implemented, but 12.1 remains open until native Windows, macOS, and Linux workflow jobs
-produce uploaded installers and passing size manifests.
+`SKETCH_FAKE_PROVIDER` both unset and set to `1`. Task 13.3 is documentation-only and reconciles the
+workspace, zero-runtime-dependency core, append-only persistence, `.sketch/` state, credential/MCP
+boundaries, and nine-stage verification policy with shipped contracts. It preserves the current
+in-memory vector default, date-sharded memory layout, absent automatic live-run memory ingestion,
+and lack of real hosted-provider/MCP evidence. The recurring Windows `verify-live` port-release
+flake was stabilized separately in `012e109` without weakening the exact closed-port assertion.
+Task 12.6 remains scripted offline harness evidence, not real-provider capability evidence. The
+native sidecar build and protocol smoke check pass. Cross-platform package jobs and the strict
+`<100,000,000-byte` size gate are implemented, but 12.1 remains open until native Windows, macOS,
+and Linux workflow jobs produce uploaded installers and passing size manifests.
 
 **Packaging evidence is honest.** The local Windows Tauri attempt reached Rust compilation but this
 host's Application Control blocked Cargo build scripts (OS error 4551) and `dlltool.exe` is absent.
@@ -1107,10 +1109,11 @@ true**, not in a batch at the end — a doc amended before the code is just a di
   integrity plus registry-backed discovery/install. Open community publishing remains v2-only
   behind tested integrity and capability scopes, a review queue, exact-digest approvals, and
   separately persisted digest-bound grants. The wording does not claim public-key author signing.
-- **13.3 `trd.md` and `architecture.md`** — record the dependency-free core decision, replacing
-  mandated `better-sqlite3`, `sqlite-vec`, `keytar`, and MCP SDK dependencies with the seam approach.
-  Record the workspace layout, the event-sourced JSONL log, the `.sketch/` layout, and the nine-stage
-  verification contract.
+- **13.3 `trd.md` and `architecture.md`** — **complete.** Both documents now record the
+  npm workspace, zero-runtime-dependency core, seam-plus-implementation storage/vector/credential/MCP
+  boundaries, append-only event and memory JSONL, on-demand `.sketch/` layout, and fixed nine-stage
+  verification policy. They preserve the in-memory vector default, date-sharded memory files,
+  absent automatic live-run memory ingestion, and lack of third-party/real-provider evidence.
 - **13.4 `prd.md`** — reflect the two-surface product and the three optimisation metrics: lift,
   reliability, compounding.
 - **13.5 `tasks-executed.md`** — update at **each** phase gate, with a decision-log row for every

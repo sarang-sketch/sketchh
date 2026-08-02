@@ -1105,6 +1105,7 @@ Task 12.6 is complete and the task count at that checkpoint was **80/96**. Tasks
 |---|---|---|---|
 | 13.1 | Reconcile `rules.md` | ✅ complete | Rule 4 now permits roles and consensus only through eval-gated `swarm`, keeps `single` as the default, and keeps `swarm` off without measured pass@k lift. Rule 6 replaces the keytar mandate with the OS credential store through a host outside core, limits key transit to purpose-bound credential/invocation channels, and preserves no-log/no-event/no-return guarantees. |
 | 13.2 | Reconcile `what-not-we-are-building.md` | ✅ complete | The curated pinned/content-hash registry and discovery/install surface are allowed as the v1-family foundation delivered in the v1.5 implementation phase. Open community publishing remains v2-only behind tested integrity and capability scopes, a review queue, exact-digest approvals, and separately persisted digest-bound grants. The document does not claim public-key author signatures. |
+| 13.3 | Reconcile `trd.md` and `architecture.md` | ✅ complete | The documents now match the npm workspace, zero-runtime-dependency core, seam-plus-implementation persistence/vector/credential/MCP boundaries, event-sourced JSONL run log, on-demand `.sketch/` layout, versioned date-sharded memory, and fixed nine-stage verification contract. |
 
 ### Task 13.1 completion result
 
@@ -1122,7 +1123,17 @@ Focused validation passes: core **42 tests / 4 files** (`registry`, seed pins, P
 
 The first unset core attempt reproduced the documented Windows `verify-live` port-release flake: the listener remained visible after the 300 ms post-kill wait. The prescribed recurring-flake fix was committed separately as `012e109`: only the settle allowance changed to 1,000 ms, while the exact `isPortListening(port) === false` assertion stayed intact. The file passed **28/28** three consecutive focused runs and the final full core suites in both provider environments. No assertion was weakened.
 
-Task 13.2 copies the already-resolved Requirement 11/28.2 and design conflict 5 boundary into the scope document; it creates no new marketplace architecture and does not complete evidence-gated task 12.4. Task 13.2 is complete and the task count is **82/96**.
+Task 13.2 copies the already-resolved Requirement 11/28.2 and design conflict 5 boundary into the scope document; it creates no new marketplace architecture and does not complete evidence-gated task 12.4. Task 13.2 is complete and the task count at that checkpoint was **82/96**.
+
+### Task 13.3 completion result
+
+No production code changed. `trd.md` and `architecture.md` now replace the former mandatory `better-sqlite3`, `sqlite-vec`, `keytar`, `hnswlib-node`, and MCP SDK choices with the contracts actually shipped: a zero-runtime-dependency `@sketch/core`; `EventStore`, `MemoryStore`, `VectorStore`, and `SecretStore` seams; append-only JSONL/file defaults; native-host OS credential persistence; and hand-rolled JSON-RPC 2.0 over stdio. The documents record the `packages/core` + `packages/desktop` workspace, the event log as the source of run history, the on-demand `.sketch/` artifacts, and the fixed `format → lint → typecheck → build → unit → integration → security → performance → dependency-audit` policy.
+
+The reconciliation preserves implementation limits rather than copying an aspirational shape: vectors currently default to `MemoryVectorStore`; `.sketch/index/graph.json` persists graph/index metadata rather than a sqlite-vec database; `JsonlMemoryStore` writes date-sharded `.sketch/memory/<YYYY-MM-DD>.jsonl`; project memory is separate from the run log and does not yet automatically ingest every live run; MCP catalog coverage is not third-party execution/audit evidence; and nothing is described as real hosted-provider evidence.
+
+Validation passes in canonical order: `npm run build`, `npm run typecheck`, core **1,036 tests / 54 files**, and desktop **503 tests / 54 files** with `SKETCH_FAKE_PROVIDER` unset; both full suites pass at the same counts with it set to `1`. Focused source-contract validation passes **163 tests / 6 files** (`deps`, event store/redaction, verification policy, memory, MCP, and secret store). Both amended documents have no diagnostics and `git diff --check` passes. No guard or production path changed, so no guard mutation was required; the mandatory `sanitizePayload` phase-gate mutation rule remains unchanged.
+
+Task 13.3 copies Requirements 1, 3, 4, 17, 21, 22, and 28.3–28.4 plus design conflicts 1, 2, 6, and 7 into the prior-generation architecture documents. It introduces no new architecture and completes no external Phase 12 evidence gate. Task 13.3 is complete and the task count is **83/96**.
 
 ---
 

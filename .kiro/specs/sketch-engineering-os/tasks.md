@@ -435,9 +435,10 @@ Phase 4 numbering stays intact for anything that references it.
   - Scope the skills registry to v1 and the open marketplace to v2 with signing and capability scoping as preconditions
   - Completed: the document now permits the curated pinned/content-hash-verified registry and discovery/install surface delivered in the v1.5 implementation phase, while keeping open community publishing v2-only behind tested integrity, capability, review-queue, and exact-digest approval gates. It explicitly does not claim public-key author signatures.
   - _Requirements: 28.2_
-- [~] 13.3 Amend `trd.md` and `architecture.md`
+- [x] 13.3 Amend `trd.md` and `architecture.md`
   - Record the dependency-free core decision, replacing mandated `better-sqlite3`, `sqlite-vec`, `keytar`, and MCP SDK dependencies with the seam approach
   - Record the workspace layout, the event-sourced JSONL log, the `.sketch/` directory layout, and the nine-stage verification contract
+  - Completed: both documents now describe the npm workspace, zero-runtime-dependency core, host-owned OS credential persistence, hand-rolled MCP transport, append-only run and memory stores, on-demand `.sketch/` paths, and the fixed nine-stage policy. The documents distinguish the current in-memory vector default from persisted graph metadata and do not claim automatic live-run memory ingestion.
   - _Requirements: 28.3, 28.4_
 - [~] 13.4 Amend `prd.md`
   - Reflect the two-surface product and the three optimization metrics of lift, reliability, and compounding
