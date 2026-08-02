@@ -30,6 +30,22 @@ export {
 } from './roles.js'
 export type { Role, RoleDefinition, RoleSignal, RoleVerification } from './roles.js'
 
+export {
+  RegisteredAgentRegistry,
+  RegisteredWorkflowRegistry,
+  executeRegisteredAgent,
+} from './extensions.js'
+export type {
+  RegisteredAgentDescriptor,
+  RegisteredAgentExecution,
+  RegisteredAgentGrade,
+  RegisteredAgentOptions,
+  RegisteredWorkflow,
+  RegisteredWorkflowContext,
+  RegisteredWorkflowDescriptor,
+  RegisteredWorkflowExecutor,
+} from './extensions.js'
+
 export { extractCitations, diskPathExists, gradeRole } from './grade.js'
 export type { Citation, PathExists, RoleGrade } from './grade.js'
 

@@ -34,6 +34,8 @@ export {
   asMemoryOp,
   memoryDir,
 } from './store.js'
+export { MemoryStoreRegistry } from './registry.js'
+export type { MemoryStoreFactory, MemoryStoreRegistration } from './registry.js'
 export type {
   AddOp,
   CloseOp,

@@ -248,3 +248,99 @@ export class ProviderRegistry {
     return PROVIDER_CATALOG
   }
 }
+
+
+/** A host-supplied canonical provider constructor. Called once for every resolve. */
+export type ProviderFactory = (config: ProviderConfig) => ChatAdapter
+
+export interface ProviderRegistration {
+  descriptor: ProviderDescriptor
+  factory: ProviderFactory
+}
+
+function providerDescriptorKey(descriptor: ProviderDescriptor): string {
+  return JSON.stringify(descriptor)
+}
+
+function validateProviderDescriptor(descriptor: ProviderDescriptor): ProviderDescriptor {
+  if (descriptor === null || typeof descriptor !== 'object') {
+    throw new Error('provider descriptor must be an object')
+  }
+  if (typeof descriptor.id !== 'string' || !/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/.test(descriptor.id)) {
+    throw new Error(`invalid provider id ${JSON.stringify(descriptor.id)}`)
+  }
+  if (typeof descriptor.name !== 'string' || descriptor.name.trim() === '') {
+    throw new Error(`provider ${descriptor.id} has no name`)
+  }
+  if (descriptor.kind !== 'openai-compatible' && descriptor.kind !== 'anthropic-messages') {
+    throw new Error(`provider ${descriptor.id} has unknown kind`)
+  }
+  if (typeof descriptor.defaultBaseUrl !== 'string') {
+    throw new Error(`provider ${descriptor.id} defaultBaseUrl must be a string`)
+  }
+  if (typeof descriptor.needsKey !== 'boolean' || typeof descriptor.serverless !== 'boolean') {
+    throw new Error(`provider ${descriptor.id} needsKey and serverless must be booleans`)
+  }
+  if (descriptor.defaultBaseUrl !== '') {
+    let url: URL
+    try { url = new URL(descriptor.defaultBaseUrl) } catch { throw new Error(`provider ${descriptor.id} has an invalid defaultBaseUrl`) }
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+      throw new Error(`provider ${descriptor.id} defaultBaseUrl must use http or https`)
+    }
+  }
+  return Object.freeze({ ...descriptor })
+}
+
+/**
+ * Immutable canonical registry. It contains the fixed built-ins plus validated host
+ * registrations, and it never retains a config or adapter returned by a factory.
+ */
+export class CanonicalProviderRegistry {
+  readonly #descriptors = new Map<string, ProviderDescriptor>()
+  readonly #factories = new Map<string, ProviderFactory>()
+
+  constructor(registrations: readonly ProviderRegistration[] = []) {
+    for (const descriptor of PROVIDER_CATALOG) this.#descriptors.set(descriptor.id, descriptor)
+    for (const registration of registrations) {
+      const descriptor = validateProviderDescriptor(registration.descriptor)
+      if (typeof registration.factory !== 'function') {
+        throw new Error(`provider ${descriptor.id} must provide a factory`)
+      }
+      const existingDescriptor = this.#descriptors.get(descriptor.id)
+      const existingFactory = this.#factories.get(descriptor.id)
+      if (existingDescriptor !== undefined) {
+        if (existingFactory === registration.factory && providerDescriptorKey(existingDescriptor) === providerDescriptorKey(descriptor)) continue
+        throw new Error(`conflicting provider registration: ${descriptor.id}`)
+      }
+      this.#descriptors.set(descriptor.id, descriptor)
+      this.#factories.set(descriptor.id, registration.factory)
+    }
+  }
+
+  catalog(): readonly ProviderDescriptor[] {
+    return [...this.#descriptors.values()]
+  }
+
+  describe(id: string): ProviderDescriptor | undefined {
+    return this.#descriptors.get(id)
+  }
+
+  resolve(config: ProviderConfig, env: ProviderEnv = process.env): ChatAdapter {
+    // The environment override is checked before custom code, so offline means offline.
+    if (fakeProviderEnabled(env)) return new FakeChatAdapter()
+    const descriptor = this.#descriptors.get(config.id)
+    const resolved = config.baseUrl ? config : { ...config, baseUrl: descriptor?.defaultBaseUrl ?? '' }
+    const factory = this.#factories.get(config.id)
+    if (factory !== undefined) {
+      const adapter = factory(resolved)
+      if (
+        adapter === null || typeof adapter !== 'object' ||
+        adapter.id !== config.id || typeof adapter.chat !== 'function'
+      ) {
+        throw new Error(`provider factory ${config.id} must return a ChatAdapter with the registered id`)
+      }
+      return adapter
+    }
+    return resolveAdapter(resolved, env)
+  }
+}

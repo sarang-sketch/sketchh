@@ -33,7 +33,7 @@
 //
 // Validates: Requirements 22.2, 22.4
 
-import type { Capability } from '../capabilities/index.js'
+import { isCapability, type Capability } from '../capabilities/index.js'
 
 /** How a server is launched. Argv only — there is no command string anywhere. */
 export interface McpLaunch {
@@ -244,4 +244,79 @@ export function missingEnv(entry: McpCatalogEntry, env: NodeJS.ProcessEnv): stri
     const value = env[name]
     return typeof value !== 'string' || value.trim() === ''
   })
+}
+
+
+function mcpEntryKey(entry: McpCatalogEntry): string {
+  return JSON.stringify(entry)
+}
+
+function validateMcpEntry(candidate: McpCatalogEntry): McpCatalogEntry {
+  if (candidate === null || typeof candidate !== 'object') {
+    throw new Error('MCP catalog entry must be an object')
+  }
+  if (typeof candidate.id !== 'string' || !/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/.test(candidate.id)) {
+    throw new Error(`invalid MCP id ${JSON.stringify(candidate.id)}`)
+  }
+  if (
+    typeof candidate.title !== 'string' || candidate.title.trim() === '' ||
+    typeof candidate.summary !== 'string' || candidate.summary.trim() === ''
+  ) {
+    throw new Error(`MCP entry ${candidate.id} needs a title and summary`)
+  }
+  if (!isCapability(candidate.requires)) {
+    throw new Error(`MCP entry ${candidate.id} has unrecognized capability ${String(candidate.requires)}`)
+  }
+  if (candidate.launch === null || typeof candidate.launch !== 'object') {
+    throw new Error(`MCP entry ${candidate.id} needs a launch description`)
+  }
+  const { command, args } = candidate.launch
+  if (typeof command !== 'string' || command.trim() === '' || /\s|[;&|<>]/.test(command)) {
+    throw new Error(`MCP entry ${candidate.id} launch.command must be one executable, not a shell string`)
+  }
+  if (!Array.isArray(args) || args.some((arg) => typeof arg !== 'string' || /(?:^|\s)(?:&&|\|\||;)(?:\s|$)/.test(arg))) {
+    throw new Error(`MCP entry ${candidate.id} launch.args must be an argv array without shell operators`)
+  }
+  if (args.some((arg) => /@latest(?:$|\s)/.test(arg)) || !args.some((arg) => /@\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(arg))) {
+    throw new Error(`MCP entry ${candidate.id} must pin an exact package version in argv`)
+  }
+  if (candidate.requiresEnv !== undefined && !Array.isArray(candidate.requiresEnv)) {
+    throw new Error(`MCP entry ${candidate.id} requiresEnv must be an array`)
+  }
+  const requiresEnv = candidate.requiresEnv ?? []
+  for (const name of requiresEnv) {
+    if (typeof name !== 'string' || !/^[A-Z_][A-Z0-9_]*$/.test(name)) {
+      throw new Error(`MCP entry ${candidate.id} has invalid required env name ${String(name)}`)
+    }
+  }
+  if (candidate.caveat !== undefined && (typeof candidate.caveat !== 'string' || candidate.caveat.trim() === '')) {
+    throw new Error(`MCP entry ${candidate.id} caveat must be non-empty when present`)
+  }
+  return Object.freeze({
+    ...candidate,
+    launch: Object.freeze({ command, args: Object.freeze([...args]) }) as McpLaunch,
+    ...(requiresEnv.length > 0 ? { requiresEnv: Object.freeze([...new Set(requiresEnv)]) as string[] } : {}),
+  })
+}
+
+/** Immutable curated catalog plus validated host-supplied entries. */
+export class McpCatalogRegistry {
+  readonly #entries = new Map<string, McpCatalogEntry>()
+
+  constructor(entries: readonly McpCatalogEntry[] = []) {
+    for (const entry of MCP_CATALOG) this.#entries.set(entry.id, entry)
+    for (const candidate of entries) {
+      const entry = validateMcpEntry(candidate)
+      const existing = this.#entries.get(entry.id)
+      if (existing !== undefined) {
+        if (mcpEntryKey(existing) === mcpEntryKey(entry)) continue
+        throw new Error(`conflicting MCP catalog entry: ${entry.id}`)
+      }
+      this.#entries.set(entry.id, entry)
+    }
+  }
+
+  list(): readonly McpCatalogEntry[] { return [...this.#entries.values()] }
+  find(id: string): McpCatalogEntry | null { return this.#entries.get(id) ?? null }
+  ids(): string[] { return [...this.#entries.keys()].sort() }
 }

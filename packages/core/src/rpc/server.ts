@@ -34,6 +34,7 @@
 
 import { createInterface } from 'node:readline'
 
+import type { ExtensionBundle } from '../extensions/index.js'
 import { sanitizePayload } from '../events/index.js'
 import { isSensitiveKeyName, MIN_SECRET_LENGTH } from '../secrets/index.js'
 import { encodeFrame, parseRequest } from './frames.js'
@@ -57,6 +58,8 @@ export interface ServerIO {
   cwd?: () => string
   /** Method table override, for tests. Defaults to {@link METHODS}. */
   methods?: Readonly<Record<string, MethodHandler>>
+  /** Optional immutable extension bundle owned by the embedding host. */
+  extensions?: ExtensionBundle
 }
 
 function messageOf(err: unknown): string {
@@ -121,6 +124,7 @@ export interface MethodContextIO {
    * request 2's frames.
    */
   secrets: Set<string>
+  extensions?: ExtensionBundle
 }
 
 /**
@@ -146,6 +150,7 @@ export function createMethodContext(requestId: FrameId, io: MethodContextIO): Me
     secrets: () => [...envSecrets(io.env), ...io.secrets],
     env: io.env,
     cwd: io.cwd,
+    ...(io.extensions !== undefined ? { extensions: io.extensions } : {}),
   }
 }
 
@@ -250,6 +255,7 @@ export class ProtocolServer {
       env: this.#env,
       cwd: this.#cwd,
       secrets: this.#secrets,
+      ...(this.#io.extensions !== undefined ? { extensions: this.#io.extensions } : {}),
     })
   }
 
@@ -286,6 +292,7 @@ export async function main(io: Partial<ServerIO> = {}): Promise<void> {
     ...(io.env ? { env: io.env } : {}),
     ...(io.cwd ? { cwd: io.cwd } : {}),
     ...(io.methods ? { methods: io.methods } : {}),
+    ...(io.extensions ? { extensions: io.extensions } : {}),
   })
 
   const input = createInterface({ input: process.stdin, crlfDelay: Infinity })

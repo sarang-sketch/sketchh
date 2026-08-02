@@ -88,6 +88,17 @@ export * as evals from './evals/index.js'
 // That function has no override parameter on purpose.
 export * as strategy from './strategy/index.js'
 
+// Host-owned, immutable production extension registries. One bundle is injected into
+// either transport; importing the package registers nothing globally.
+export * as extensions from './extensions/index.js'
+export { createEngineExtensionRegistry, createExtensionBundle } from './extensions/index.js'
+export type {
+  EngineExtensionRegistry,
+  EngineExtensionRegistryOptions,
+  ExtensionBundle,
+  ExtensionBundleOptions,
+} from './extensions/index.js'
+
 // Honest benchmark reports: fixed budgets, explicit unknowns, versioned harness identity,
 // strict comparability, and validated artifacts under `.sketch/bench/`.
 export * as bench from './bench/index.js'
@@ -107,6 +118,7 @@ export {
   NotImplementedError,
 } from './rpc/methods.js'
 export type { MethodContext, MethodHandler } from './rpc/methods.js'
+export type { ServerIO } from './rpc/server.js'
 
 export {
   parseRequest,
@@ -125,6 +137,12 @@ export type {
   ParseResult,
 } from './rpc/frames.js'
 
-export { createMethodContext, sanitizeFrame, collectParamSecrets } from './rpc/server.js'
+export {
+  ProtocolServer,
+  createServer,
+  createMethodContext,
+  sanitizeFrame,
+  collectParamSecrets,
+} from './rpc/server.js'
 export type { MethodContextIO } from './rpc/server.js'
 

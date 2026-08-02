@@ -86,6 +86,7 @@ import {
   describeSignal,
   dispatch,
   emptyReport,
+  executeRegisteredAgent,
   isStrategy,
   shouldDefaultToSwarm,
   type Strategy,
@@ -110,6 +111,7 @@ import type {
   Task,
   VerifyCommand,
 } from '../types.js'
+import type { ExtensionBundle } from '../extensions/index.js'
 import { StreamingEventStore } from './streaming-store.js'
 import { ENGINE_NAME, ENGINE_VERSION, PROTOCOL_VERSION } from './version.js'
 
@@ -148,6 +150,8 @@ export interface MethodContext {
   secrets(): readonly string[]
   env: NodeJS.ProcessEnv
   cwd(): string
+  /** One immutable, host-owned production extension bundle. */
+  extensions?: ExtensionBundle
 }
 
 export type MethodHandler = (
@@ -384,9 +388,10 @@ function adapterFor(params: Record<string, unknown>, ctx: MethodContext): ChatAd
         'params.provider is required; set SKETCH_FAKE_PROVIDER=1 to run against the offline provider instead',
       )
     }
-    return resolveAdapter(OFFLINE_CONFIG, ctx.env)
+    return ctx.extensions?.providers.resolve(OFFLINE_CONFIG, ctx.env) ?? resolveAdapter(OFFLINE_CONFIG, ctx.env)
   }
-  return resolveAdapter(readProviderConfig(provider, ctx), ctx.env)
+  const config = readProviderConfig(provider, ctx)
+  return ctx.extensions?.providers.resolve(config, ctx.env) ?? resolveAdapter(config, ctx.env)
 }
 
 /**
@@ -464,10 +469,18 @@ async function ping(_params: Record<string, unknown>, ctx: MethodContext): Promi
 async function run(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
   const task = readTask(params['task'], 'params.task')
   const root = resolve(optionalString(params, 'root', 'params.root') ?? ctx.cwd())
+  const strategy = readStrategy(params)
+  const workflowId = optionalString(params, 'workflow', 'params.workflow')
+  if (strategy !== undefined && workflowId !== undefined) {
+    throw new InvalidParamsError('params.workflow and params.strategy are mutually exclusive')
+  }
+  const workflow = workflowId === undefined ? undefined : ctx.extensions?.workflows.get(workflowId)
+  if (workflowId !== undefined && workflow === undefined) {
+    throw new InvalidParamsError(`unknown params.workflow ${JSON.stringify(workflowId)}`)
+  }
   const adapter = adapterFor(params, ctx)
   const maxIterations = optionalNumber(params, 'maxIterations', 'params.maxIterations')
   const reviewEdits = optionalBoolean(params, 'reviewEdits', 'params.reviewEdits')
-  const strategy = readStrategy(params)
   const escalate = optionalBoolean(params, 'escalate', 'params.escalate')
   const contextBudgetTokens = optionalNumber(
     params,
@@ -520,6 +533,17 @@ async function run(params: Record<string, unknown>, ctx: MethodContext): Promise
   }
 
   try {
+    if (workflow !== undefined) {
+      return await workflow.execute({
+        task,
+        runAgent: async (id, options) => {
+          const agent = ctx.extensions?.agents.get(id)
+          if (agent === undefined) throw new InvalidParamsError(`unknown registered agent ${JSON.stringify(id)}`)
+          return executeRegisteredAgent(agent, task, loopDeps, granted, options)
+        },
+      })
+    }
+
     // ── THE STRATEGY FORK (Requirement 24.1) ────────────────────────────────
     //
     // ABSENT means `runTask`, byte for byte what this method did before Phase 10: one run,
@@ -618,21 +642,28 @@ async function openToolLayerFor(
   const requested = optionalStringArray(params['mcpServers'], 'params.mcpServers')
   if (requested === undefined || requested.length === 0) return undefined
 
+  const catalog = ctx.extensions?.mcp
   const host = new McpHost({
     root,
     events,
     runId: task.id,
     log: (line) => ctx.log(line),
     env: ctx.env,
+    allowedLaunches: new Set(requested.filter((id) => {
+      const entry = catalog?.find(id) ?? findCatalogEntry(id)
+      return entry !== null && granted.includes(entry.requires)
+    })),
+    ...(catalog !== undefined ? { catalog } : {}),
     ...(optionalNumber(params, 'mcpRequestTimeoutMs', 'params.mcpRequestTimeoutMs') !== undefined
       ? { requestTimeoutMs: optionalNumber(params, 'mcpRequestTimeoutMs', 'params.mcpRequestTimeoutMs')! }
       : {}),
   })
 
   for (const id of requested) {
-    const entry = findCatalogEntry(id)
+    const entry = catalog?.find(id) ?? findCatalogEntry(id)
     if (entry === null) {
-      ctx.log(`mcp: no server named "${id}" in the curated catalog (have: ${catalogIds().join(', ')})`)
+      const ids = catalog?.ids() ?? catalogIds()
+      ctx.log(`mcp: no server named "${id}" in the curated catalog (have: ${ids.join(', ')})`)
       continue
     }
     if (!granted.includes(entry.requires)) {
@@ -678,9 +709,15 @@ async function openToolLayerFor(
 // requires a reason on the wire — there is no way to close an entry silently, because
 // "superseded, no reason given" is indistinguishable from a bug months later.
 
-/** The store for a project. One per call; it holds no state between them. */
-function memoryStore(root: string): memory.MemoryStore {
-  return new memory.JsonlMemoryStore({ baseDir: root })
+/** The store selected for this call. No selector preserves the Jsonl default. */
+function memoryStore(root: string, params: Record<string, unknown>, ctx: MethodContext): memory.MemoryStore {
+  const id = optionalString(params, 'memoryStore', 'params.memoryStore')
+  if (id === undefined) return new memory.JsonlMemoryStore({ baseDir: root })
+  const registry = ctx.extensions?.memoryStores
+  if (registry === undefined || !registry.has(id)) {
+    throw new InvalidParamsError(`unknown params.memoryStore ${JSON.stringify(id)}`)
+  }
+  return registry.create(id, root)
 }
 
 /**
@@ -700,8 +737,11 @@ async function memoryList(params: Record<string, unknown>, ctx: MethodContext): 
     )
   }
 
-  const store = new memory.JsonlMemoryStore({ baseDir: root })
-  const { entries, skipped } = await store.readAllDetailed()
+  const store = memoryStore(root, params, ctx)
+  const detailed = store instanceof memory.JsonlMemoryStore
+    ? await store.readAllDetailed()
+    : { entries: await store.all(), skipped: 0 }
+  const { entries, skipped } = detailed
   if (skipped > 0) {
     ctx.log(`memory: ${skipped} unreadable line(s) were skipped and are not shown`)
   }
@@ -757,7 +797,7 @@ async function memorySearch(params: Record<string, unknown>, ctx: MethodContext)
   )
 
   const result = await memory.retrieveMemory({
-    store: memoryStore(root),
+    store: memoryStore(root, params, ctx),
     query,
     includeSuperseded,
     events,
@@ -810,7 +850,7 @@ async function memoryRemember(params: Record<string, unknown>, ctx: MethodContex
   )
 
   const result = await memory.remember({
-    store: memoryStore(root),
+    store: memoryStore(root, params, ctx),
     events,
     entry: {
       kind,
@@ -869,7 +909,7 @@ async function memorySupersede(
     throw new InvalidParamsError(`params.replacementKind is not a memory kind: ${replacementKind}`)
   }
 
-  const store = memoryStore(root)
+  const store = memoryStore(root, params, ctx)
   const existing = await store.get(id)
   const result = await memory.supersedeEntry({
     store,
@@ -1067,14 +1107,18 @@ async function verify(params: Record<string, unknown>, ctx: MethodContext): Prom
  */
 async function mcpCatalog(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
   const env = ctx.env
-  const servers = MCP_CATALOG.map((entry) => {
+  const catalog = ctx.extensions?.mcp
+  const entries = catalog?.list() ?? MCP_CATALOG
+  const servers = entries.map((entry) => {
     const missing = missingEnv(entry, env)
     return {
       id: entry.id,
       title: entry.title,
       summary: entry.summary,
       requires: entry.requires,
-      // The pinned argv, so a user can see exactly what would run.
+      // Keep the argv structured as well as rendering the legacy command string. Joining
+      // is display-only and cannot preserve arguments containing spaces.
+      launch: { command: entry.launch.command, args: [...entry.launch.args] },
       command: [entry.launch.command, ...entry.launch.args].join(' '),
       requiresEnv: entry.requiresEnv ?? [],
       missingEnv: missing,
@@ -1144,6 +1188,26 @@ async function strategyCatalog(
     }
   })
 
+  const customAgents = (ctx.extensions?.agents.list() ?? []).map((definition) => {
+    const signal = definition.signal
+    const available = signal.kind !== 'verify-stage' || stages.includes(signal.stage)
+    return {
+      id: definition.id,
+      version: definition.version,
+      title: definition.title,
+      instruction: definition.instruction,
+      signal: describeSignal(signal),
+      signalKind: signal.kind,
+      ...(signal.kind === 'verify-stage' ? { stage: signal.stage } : {}),
+      capabilities: definition.capabilities,
+      edits: definition.edits,
+      blocking: definition.blocking,
+      available,
+      reason: available ? null : `this project configures no "${signal.kind === 'verify-stage' ? signal.stage : ''}" stage`,
+    }
+  })
+  const workflows = (ctx.extensions?.workflows.list() ?? []).map(({ descriptor }) => descriptor)
+
   // No measurement exists on disk yet, and pretending otherwise is the thing Requirement
   // 24.8 was written to prevent. Two empty reports compare as "nothing to compare", which
   // under a strict `>` can never enable a swarm.
@@ -1159,6 +1223,8 @@ async function strategyCatalog(
     defaultStrategy: DEFAULT_STRATEGY,
     swarmOrder: SWARM_ORDER,
     roles,
+    customAgents,
+    workflows,
     configuredStages: stages,
     policySource: resolved.source,
     verifiableRoles: roles.filter((role) => role.available).length,
@@ -1426,11 +1492,11 @@ function settingsPath(params: Record<string, unknown>): string | undefined {
 }
 
 /** The full matrix from the registry, plus whatever is configured on disk. */
-async function providerCatalog(params: Record<string, unknown>): Promise<unknown> {
+async function providerCatalog(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
   const path = settingsPath(params)
   const loaded = await loadProviderSettings(path)
   return {
-    catalog: providerMatrix(),
+    catalog: ctx.extensions?.providers.catalog() ?? providerMatrix(),
     settings: loaded.settings,
     path: loaded.path,
     ...(loaded.diagnostic !== undefined ? { diagnostic: loaded.diagnostic } : {}),

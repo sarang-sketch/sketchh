@@ -19,22 +19,25 @@ Phase 3 and had gone four phases stale.
 
 ## IMMEDIATE NEXT ACTION
 
-**Tasks 12.1–12.5 remain evidence-gated. Run the native package matrix first. Then run
+**Tasks 12.1–12.4 remain evidence-gated. Run the native package matrix first. Then run
 the no-fallback Ollama preflight and retained installed-app clean-machine procedure against those
 exact installer bytes. For 12.3, push a package-version-matching semantic tag only after the matrix
 is green, retain every release asset/hash/attestation verification result, and do not call GitHub
-provenance Authenticode or Apple Developer ID signing/notarization. For 12.4, the production flywheel
-is now proved with a local community-format fixture; retain a genuine third-party community skill's
-source and license provenance and run it through the same gate before completing the task. Source
-tests, workflow configuration, and local fixtures alone complete none of these evidence-gated claims.**
+provenance Authenticode or Apple Developer ID signing/notarization. For 12.4, retain a genuine
+third-party community skill's source and license provenance and run it through the existing gate.
+Source tests, workflow configuration, and local fixtures alone complete none of those claims.**
 
-**78 of 96 tasks complete.** Phases 1 through 11 are done and gated; 12.1 through 12.4 are in progress.
+**79 of 96 tasks complete.** Phases 1 through 11 and task 12.5 are done; 12.1 through 12.4 are in progress.
 
-Current source verification: build and typecheck pass; **core 1,029 tests / 52 files, desktop 498
-tests / 52 files**. The native Windows sidecar is 87 MiB and its protocol smoke test passes. The
-first Tauri package attempt fixed an invalid v2 window `name` field, then reached Rust compilation
-but was blocked by this host's Application Control policy (OS error 4551) and missing `dlltool.exe`.
-No Windows installer was produced; macOS and Linux were not run on this host.
+Current source verification: build and typecheck pass; **core 1,034 tests / 53 files, desktop 502
+tests / 53 files** with `SKETCH_FAKE_PROVIDER` both unset and set to `1`. One unset core attempt hit
+the documented `verify-live` port-release timing flake and passed on immediate focused and full
+reruns. One fake-enabled core attempt timed out in the event-store property test under parallel
+load; that file and the complete suite passed on rerun. No assertion was weakened. The native
+Windows sidecar is 87 MiB and its protocol smoke test passes. The first Tauri package attempt fixed
+an invalid v2 window `name` field, then reached Rust compilation but was blocked by this host's
+Application Control policy (OS error 4551) and missing `dlltool.exe`. No Windows installer was
+produced; macOS and Linux were not run on this host.
 
 Task 12.1 now has native Windows/NSIS, macOS/DMG, and Ubuntu 22.04/AppImage jobs. Each rebuilds and
 smoke-tests its own host-native sidecar, packages with Tauri, enforces a strict `<100,000,000-byte`
@@ -59,13 +62,14 @@ body, and requires “Use trained version” before activation over either trans
 `fetch` and starts no Sketch HTTP/stdio server. This remains preparation, not completion: no retained
 third-party community skill, source provenance, or license evidence has been exercised.
 
-Task 12.5 now has an honest nine-category audit in `EXTENSIBILITY.md`. It documents the production
-procedures for custom compatible provider/model configuration, filesystem-discovered skills,
-`MemoryStore` composition, and reviewed source-curated MCP entries. It also records the blockers:
-the canonical provider path and tool admission are partial, while agents, workflows, themes, and
-languages are closed. Test runners, loader doubles, and editing a fixed table are not relabelled as
-plugins. Requirement 26.5 therefore remains open until production registries/loaders and behavioral
-gates exist for those categories.
+Task 12.5 is complete. `EXTENSIBILITY.md` maps all nine categories to production-consumed
+configuration, filesystem-discovery, or host code-registration contracts. Core host registries cover
+canonical providers, validated MCP catalog entries, memory stores, registered agents, and explicit
+versioned workflows through both transports. Desktop production consumes theme, extension mapping,
+new-language, and declarative Monarch tokenizer registrations. The behavioral gate and required
+mutations pass. These are host code-registration contracts, not a plugin store or arbitrary
+executable package loader. The local MCP script proves the contract path, not actual third-party
+server execution or audit evidence.
 
 The Phase 11 gate proof is `packages/core/test/phase11-gate.test.ts`. The internal suite has two
 content-pinned repair cases, fresh workspaces per attempt, mandatory `verify-pass`, the canonical
@@ -164,7 +168,9 @@ Seven guards were mutation-verified at this gate — see the Phase 5 gate result
 ## Git state
 
 ```
-(Phase 12.5 audit commit containing this file)                                  <- HEAD
+(Current Phase 12.5 completion commit containing this file)                       <- HEAD
+87a5889  sketch: phase 12 task 12.5 - add editor extension registries
+64f626a  sketch: phase 12 task 12.5 - audit production extensibility honestly
 c9947b7  sketch: phase 12 task 12.4 - persist grants and prove local skill flywheel
 6df4756  sketch: phase 12 task 12.3 - assemble and attest release provenance
 18ede90  sketch: phase 12 task 12.2 - forward provider and add Ollama preflight
@@ -205,9 +211,9 @@ because there was nothing to bisect.
 | 9 — Versioned memory with hygiene (9.1–9.5) | **DONE**, gate green cold |
 | 10 — Eval-gated multi-agent (10.1–10.5) | **DONE**, gate green. `swarm` ships **off**: no measured strategy lift |
 | 11 — Honest benchmarks (11.1–11.6) | **DONE**, gate green cold. CI result is synthetic only; real-provider public matrix unperformed |
-| 12 — Packaging and open flywheel | **IN PROGRESS** — 12.1 native artifacts required; 12.2 forwarding/preflight built with installed-app clean-machine evidence required; 12.3 deterministic release/provenance path built with real tag-release evidence and native signing identities absent; 12.4 production flywheel proved with a local community-format fixture, with genuine third-party source/license evidence absent; 12.5 nine-category audit documented, with canonical provider/tool gaps and closed agent/workflow/theme/language extension paths |
+| 12 — Packaging and open flywheel | **IN PROGRESS** — 12.1 native artifacts required; 12.2 forwarding/preflight built with installed-app clean-machine evidence required; 12.3 deterministic release/provenance path built with real tag-release evidence and native signing identities absent; 12.4 production flywheel proved with a local community-format fixture, with genuine third-party source/license evidence absent; **12.5 DONE** with production-consumed contracts for all nine categories and behavioral/mutation evidence |
 
-Task counts: 96 total, **78 complete**.
+Task counts: 96 total, **79 complete**.
 
 ---
 

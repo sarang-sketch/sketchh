@@ -36,6 +36,7 @@ export type { ProviderErrorFacts } from './redact.js'
 // No `registry` singleton: a process-global adapter cache is a process-global key
 // cache. Construct a `ProviderRegistry`, or call `resolveAdapter` directly.
 export {
+  CanonicalProviderRegistry,
   ProviderRegistry,
   resolveAdapter,
   describeProvider,
@@ -44,7 +45,7 @@ export {
   PROVIDER_CATALOG,
   FAKE_PROVIDER_ENV_VAR,
 } from './registry.js'
-export type { ProviderDescriptor, ProviderEnv } from './registry.js'
+export type { ProviderDescriptor, ProviderEnv, ProviderFactory, ProviderRegistration } from './registry.js'
 // The offline provider: SKETCH_FAKE_PROVIDER=1 routes every resolution here.
 export {
   FakeChatAdapter,

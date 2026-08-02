@@ -34,7 +34,7 @@ export {
 } from './client.js'
 export type { McpCallResult, McpServerSpec, UnavailableReason } from './client.js'
 
-export { MCP_CATALOG, catalogIds, findCatalogEntry, missingEnv } from './catalog.js'
+export { MCP_CATALOG, McpCatalogRegistry, catalogIds, findCatalogEntry, missingEnv } from './catalog.js'
 export type { McpCatalogEntry, McpLaunch } from './catalog.js'
 
 export { McpHost } from './host.js'

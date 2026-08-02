@@ -43,7 +43,7 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
-import type { Frame } from '@sketch/core'
+import type { ExtensionBundle, Frame } from '@sketch/core'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 import type { Plugin, ViteDevServer } from 'vite'
@@ -66,6 +66,8 @@ export interface SketchBridgeOptions {
   cwd?: () => string
   /** Override for tests that do not want to wait on the real interval. */
   keepAliveMs?: number
+  /** Optional host-owned production extensions, shared with stdio's ServerIO contract. */
+  extensions?: ExtensionBundle
 }
 
 type Next = (err?: unknown) => void
@@ -308,6 +310,7 @@ export function createSketchBridge(options: SketchBridgeOptions = {}): BridgeMid
       env,
       cwd,
       secrets,
+      ...(options.extensions !== undefined ? { extensions: options.extensions } : {}),
     })
 
     try {

@@ -33,7 +33,7 @@
 
 import type { EventInput } from '../events/store.js'
 import type { ToolDescriptor, ToolOutcome } from '../capabilities/index.js'
-import { findCatalogEntry, missingEnv, type McpCatalogEntry } from './catalog.js'
+import { McpCatalogRegistry, missingEnv, type McpCatalogEntry } from './catalog.js'
 import { McpServer, framePayload, type McpServerSpec } from './client.js'
 
 export interface McpHostOptions {
@@ -54,6 +54,15 @@ export interface McpHostOptions {
    * an override cannot make the Docker server cost less than `proc:spawn`.
    */
   launchOverrides?: Record<string, McpServerSpec>
+  /** Curated defaults plus validated externally supplied entries. */
+  catalog?: McpCatalogRegistry | readonly McpCatalogEntry[]
+  /**
+   * Host launch allowlist, computed by the caller at its grant boundary. This is not
+   * tool authorization: descriptors still declare costs and ToolDispatcher remains the
+   * one authorization point. RPC supplies this defensively so a later call cannot bypass
+   * its pre-launch grant check.
+   */
+  allowedLaunches?: ReadonlySet<string>
 }
 
 /** What happened when a server was asked to start. */
@@ -77,8 +86,13 @@ export interface McpOpenResult {
 export class McpHost {
   readonly #servers = new Map<string, McpServer>()
   readonly #entries = new Map<string, McpCatalogEntry>()
+  readonly #catalog: McpCatalogRegistry
 
-  constructor(private readonly options: McpHostOptions) {}
+  constructor(private readonly options: McpHostOptions) {
+    this.#catalog = options.catalog instanceof McpCatalogRegistry
+      ? options.catalog
+      : new McpCatalogRegistry(options.catalog)
+  }
 
   /** Server ids currently open, sorted. */
   get openIds(): string[] {
@@ -103,13 +117,23 @@ export class McpHost {
       }
     }
 
-    const entry = findCatalogEntry(id)
+    const entry = this.#catalog.find(id)
     if (entry === null) {
       // Curated: an id not in the table is not startable, full stop.
       return {
         ok: false,
         id,
         detail: `no MCP server named "${id}" in the curated catalog`,
+        tools: [],
+        missingEnv: [],
+      }
+    }
+
+    if (this.options.allowedLaunches !== undefined && !this.options.allowedLaunches.has(id)) {
+      return {
+        ok: false,
+        id,
+        detail: `${entry.title} was not approved for launch by this host`,
         tools: [],
         missingEnv: [],
       }

@@ -1,7 +1,7 @@
 # NEED TO DO — Sketch, from here to done
 
 **Audience:** the developer who is going to write this code.
-**Status date:** task 12.5 extensibility audit documented; provider/tool and agent/workflow/theme/language production gaps remain, alongside third-party, native, release, and clean-machine evidence.
+**Status date:** task 12.5 complete with production-consumed host registries and behavioral/mutation evidence; third-party, native, release, and clean-machine evidence remain open.
 **Authority:** `.kiro/specs/sketch-engineering-os/{requirements,design,tasks}.md` are the contract.
 This file is the working plan on top of them. Where this file and the spec disagree, the spec wins
 and you should fix this file.
@@ -85,8 +85,8 @@ writes down what happened. Do not describe a wired interface as a working featur
 
 ## 1. Where the project actually stands
 
-**Status date: Phase 11 gated; tasks 12.1 through 12.5 in progress. 78 of 96 tasks complete.** Core
-1,029 tests / 52 files, desktop 498 tests / 52 files, build and typecheck green. The native sidecar build
+**Status date: Phase 11 gated; tasks 12.1 through 12.4 in progress and task 12.5 complete. 79 of 96 tasks complete.** Core
+1,034 tests / 53 files, desktop 502 tests / 53 files, build and typecheck green. The native sidecar build
 and protocol smoke check pass. Cross-platform package jobs and the strict `<100,000,000-byte` size
 gate are implemented, but 12.1 remains open until native Windows, macOS, and Linux workflow jobs
 produce uploaded installers and passing size manifests.
@@ -1065,13 +1065,15 @@ because it demos well. The plan forbids that.
   cannot replace it silently. **Still open:** retain a genuine third-party community skill with
   source/license provenance and run those bytes through the same gate; the local fixture is format
   and integration evidence, not community provenance.
-- **12.5 Extensibility audit** _(26.5)_ — `EXTENSIBILITY.md` now maps all nine categories to
-  production code and documents the extension procedures that genuinely exist. Skills are
-  filesystem-discovered; model ids/custom compatible endpoints are runtime configuration; memory
-  is a code-level interface; MCP additions are reviewed source catalog entries. **Still open:** the
-  canonical provider path and tool admission are only partial, while agents, workflows, themes,
-  and languages are closed. Test-only DI, loader doubles, and source-table edits do not satisfy
-  “pluggable”; production registries/loaders and behavioral gates are required before completion.
+- **12.5 Extensibility audit** _(26.5)_ — **complete.** `EXTENSIBILITY.md` maps all nine
+  categories to production-consumed contracts. Skills are filesystem-discovered and model ids are
+  runtime configuration. Core accepts host-scoped canonical provider, validated MCP catalog,
+  memory-store, registered-agent, and explicit versioned-workflow registrations through both
+  production transports. Desktop production consumes theme, extension mapping, new-language, and
+  declarative Monarch tokenizer registrations. The behavioral gate and guard mutations pass.
+  These are host code-registration contracts, not a plugin store or arbitrary executable package
+  loader; memory lifetime belongs to the host factory, built-in `single` remains the default, and
+  the local MCP script is not evidence for an actual third-party server.
 - **12.6 Canonical end-to-end acceptance** _(24.7, 6.4, 4.7, 20.4)_ — the "build an Airbnb clone" flow
   runs end to end with the plan gate, verification contract, consensus, and cost guard **all
   observable in the Timeline**, completing with every check green.
