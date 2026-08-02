@@ -5,6 +5,7 @@
 
 export {
   runEval,
+  runEvalDetailed,
   runEvalSet,
   meanScore,
   evaluateCheck,
@@ -21,5 +22,5 @@ export {
   FALLBACK_PROMPT,
 } from './capture.js'
 export type { CaptureOptions, EvalCaseLoadResult } from './capture.js'
-export type { EvalDeps, CheckOutcome } from './runner.js'
+export type { EvalDeps, CheckOutcome, DetailedEvalResult } from './runner.js'
 

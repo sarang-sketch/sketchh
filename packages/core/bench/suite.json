@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "id": "sketch-internal-v1",
+  "cases": [
+    {
+      "id": "repair-addition",
+      "title": "Repair a small arithmetic defect",
+      "fixture": "math-fix",
+      "fixtureDigest": "sha256:076723ea00b9a6717b1a3d221ad34ec87ee50386aca593da414d6b53db35f7b4",
+      "eval": {
+        "id": "repair-addition",
+        "task": {
+          "id": "repair-addition",
+          "prompt": "Fix add so the existing unit test passes. Keep the public function name unchanged.",
+          "verify": [
+            { "name": "unit", "cmd": "node", "args": ["test.mjs"] }
+          ]
+        },
+        "checks": [{ "kind": "verify-pass" }]
+      }
+    },
+    {
+      "id": "repair-greeting",
+      "title": "Repair exact output formatting",
+      "fixture": "greeting-fix",
+      "fixtureDigest": "sha256:373e4ce696c9d30aea7efd978a5ac9becea831e0603c62d1e2502d4b0f92f853",
+      "eval": {
+        "id": "repair-greeting",
+        "task": {
+          "id": "repair-greeting",
+          "prompt": "Fix greet so the existing unit test passes. Preserve the exported function signature.",
+          "verify": [
+            { "name": "unit", "cmd": "node", "args": ["test.mjs"] }
+          ]
+        },
+        "checks": [{ "kind": "verify-pass" }]
+      }
+    }
+  ]
+}

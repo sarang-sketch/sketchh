@@ -1,0 +1,4 @@
+{
+  "build": [{ "name": "syntax", "cmd": "node", "args": ["--check", "src/math.mjs"] }],
+  "unit": [{ "name": "unit", "cmd": "node", "args": ["test.mjs"] }]
+}

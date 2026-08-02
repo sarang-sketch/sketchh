@@ -400,7 +400,23 @@ async function resolveScope(deps: EvalDeps): Promise<Scope> {
  * throws is recorded as score 0 carrying the error message (Requirement 7.6).
  * Emits exactly one `eval_scored` (Requirement 7.3).
  */
-export async function runEval(evalCase: EvalCase, deps: EvalDeps): Promise<EvalResult> {
+export interface DetailedEvalResult {
+  result: EvalResult
+  /** Null when the case was rejected before a task ran, or task setup threw. */
+  run: RunResult | null
+}
+
+/**
+ * Run and score one case while retaining the associated run for benchmark projections.
+ *
+ * This is deliberately additive: {@link runEval} remains the stable result-only API used
+ * by trainers and existing callers. Both paths emit exactly one `eval_scored` event because
+ * `runEval` is only a wrapper around this function.
+ */
+export async function runEvalDetailed(
+  evalCase: EvalCase,
+  deps: EvalDeps,
+): Promise<DetailedEvalResult> {
   const checks = evalCase.checks ?? []
 
   if (checks.length === 0) {
@@ -413,20 +429,21 @@ export async function runEval(evalCase: EvalCase, deps: EvalDeps): Promise<EvalR
       detail: EMPTY_CHECKS_DETAIL,
     }
     await emitScore(deps.events, mintRunId(deps), result, false)
-    return result
+    return { result, run: null }
   }
 
   let result: EvalResult
+  let run: RunResult | null = null
   let runId: string | undefined
   let owned: string | undefined
 
   try {
     const scope = await resolveScope(deps)
     owned = scope.temp
-    const run = await runTask(evalCase.task, scope.deps)
+    run = await runTask(evalCase.task, scope.deps)
     runId = run.runId
 
-    const outcomes = checks.map((check) => evaluateCheck(check, run))
+    const outcomes = checks.map((check) => evaluateCheck(check, run!))
     const passedChecks = outcomes.filter((o) => o.ok).length
     result = {
       caseId: evalCase.id,
@@ -458,7 +475,12 @@ export async function runEval(evalCase: EvalCase, deps: EvalDeps): Promise<EvalR
 
   // Emitted outside the try/catch so one case can never log two scores.
   await emitScore(deps.events, runId ?? mintRunId(deps), result, runId !== undefined)
-  return result
+  return { result, run }
+}
+
+/** Stable result-only facade retained for all pre-benchmark callers. */
+export async function runEval(evalCase: EvalCase, deps: EvalDeps): Promise<EvalResult> {
+  return (await runEvalDetailed(evalCase, deps)).result
 }
 
 /**

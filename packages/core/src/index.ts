@@ -88,6 +88,10 @@ export * as evals from './evals/index.js'
 // That function has no override parameter on purpose.
 export * as strategy from './strategy/index.js'
 
+// Honest benchmark reports: fixed budgets, explicit unknowns, versioned harness identity,
+// strict comparability, and validated artifacts under `.sketch/bench/`.
+export * as bench from './bench/index.js'
+
 // RPC method handlers plus the transport seams a second transport needs.
 //
 // The Vite dev bridge (packages/desktop/vite.config.ts) is a real transport for
