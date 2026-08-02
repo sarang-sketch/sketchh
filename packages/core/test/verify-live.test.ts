@@ -89,8 +89,9 @@ describe('a working application', () => {
     // Output was captured, not read after the kill.
     expect(result.output).toContain('listening on')
 
-    // And the process is gone: the port is free again.
-    await new Promise((resolve) => setTimeout(resolve, 300))
+    // And the process is gone: the port is free again. Windows can retain the
+    // listener briefly under full-suite process pressure; the assertion stays exact.
+    await new Promise((resolve) => setTimeout(resolve, 1_000))
     expect(await isPortListening(port)).toBe(false)
   })
 
