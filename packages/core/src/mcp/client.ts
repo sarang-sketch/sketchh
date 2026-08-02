@@ -234,7 +234,21 @@ export class McpServer {
    * Every failure mode is a result: unavailable, timed out, transport-broken, or the
    * tool's own error. Nothing throws (Requirement 22.3, "the run SHALL continue").
    */
-  async callTool(name: string, args: Record<string, unknown>): Promise<McpCallResult> {
+  async callTool(
+    name: string,
+    args: Record<string, unknown>,
+    /**
+     * The run this call belongs to.
+     *
+     * WHY PER CALL AND NOT PER SERVER: `runTask` mints its own run id internally, so a
+     * host constructed before the loop started cannot know it. Without this the latch's
+     * `tool_denied` lands under the host's id — present in the log, invisible to
+     * `forRun(runId)`, which is the only way a surface reads a run. The Phase 7 gate
+     * found it by asserting the denial was correlated. Same reasoning, and same shape,
+     * as `ToolDispatcher.call`'s per-call `runId`.
+     */
+    runId?: string,
+  ): Promise<McpCallResult> {
     const started = Date.now()
 
     // THE LATCH, checked first. A server already written off costs nothing further.
@@ -261,7 +275,7 @@ export class McpServer {
 
     let raw: unknown
     try {
-      raw = await this.#request('tools/call', { name, arguments: args })
+      raw = await this.#request('tools/call', { name, arguments: args }, undefined, runId)
     } catch (err) {
       // Read through the getter: `#unavailable` is set inside `#writeOff`, which the
       // timeout path calls, and TypeScript's flow analysis does not see through that —
@@ -335,7 +349,12 @@ export class McpServer {
     }
   }
 
-  async #request(method: string, params: unknown, timeoutMs?: number): Promise<unknown> {
+  async #request(
+    method: string,
+    params: unknown,
+    timeoutMs?: number,
+    runId?: string,
+  ): Promise<unknown> {
     const child = this.#child
     if (child === null || child.stdin === null || child.stdin.destroyed) {
       throw new Error('the server is not writable')
@@ -353,6 +372,7 @@ export class McpServer {
         void this.#writeOff(
           'timeout',
           `${this.id} did not answer ${method} within ${deadline}ms and is marked unavailable for the rest of this run`,
+          runId,
         )
         reject(new Error(`timed out after ${deadline}ms`))
       }, deadline)
@@ -376,14 +396,19 @@ export class McpServer {
   }
 
   /** Latch the server off, reject everything in flight, and record it. */
-  async #writeOff(reason: UnavailableReason, detail: string): Promise<{ ok: false; detail: string }> {
+  async #writeOff(
+    reason: UnavailableReason,
+    detail: string,
+    /** The run whose call triggered this, when one did. See `callTool`. */
+    runId?: string,
+  ): Promise<{ ok: false; detail: string }> {
     if (this.#unavailable === null) {
       this.#unavailable = { reason, detail }
       // Recorded as a denial: from a caller's point of view the tool layer refused to
       // act, which is what `tool_denied` means. `component` tells it apart from a
       // capability refusal, which is a different thing entirely.
       await this.options.events?.emit({
-        runId: this.options.runId ?? 'mcp',
+        runId: runId ?? this.options.runId ?? 'mcp',
         kind: 'tool_denied',
         payload: {
           component: 'mcp',

@@ -130,11 +130,15 @@ export class McpHost {
     }
 
     const override = this.options.launchOverrides?.[id]
-    const spec: McpServerSpec = override ?? {
-      id,
-      command: entry.launch.command,
-      args: entry.launch.args,
-      cwd: this.options.root,
+    // The host's deadlines are HOST-WIDE defaults and apply to an override too.
+    //
+    // They used to be spread only into the catalog-derived spec, so supplying an
+    // override silently dropped them and every request fell back to the 20-second
+    // default. The Phase 7 gate found it: a hang that should have been paid for in
+    // 500ms took 20s, and the assertion that a hang cannot wedge a run was passing
+    // for the wrong reason. An override says WHERE to launch; it does not say how
+    // patient to be, unless it sets a deadline of its own — which still wins.
+    const deadlines = {
       ...(this.options.requestTimeoutMs !== undefined
         ? { requestTimeoutMs: this.options.requestTimeoutMs }
         : {}),
@@ -142,6 +146,16 @@ export class McpHost {
         ? { handshakeTimeoutMs: this.options.handshakeTimeoutMs }
         : {}),
     }
+    const spec: McpServerSpec =
+      override !== undefined
+        ? { ...deadlines, ...override }
+        : {
+            id,
+            command: entry.launch.command,
+            args: entry.launch.args,
+            cwd: this.options.root,
+            ...deadlines,
+          }
 
     const server = new McpServer(spec, {
       ...(this.options.events !== undefined ? { events: this.options.events } : {}),
@@ -182,8 +196,11 @@ export class McpHost {
               ? `${entry.title}: ${tool.name}`
               : `${entry.title}: ${tool.description}`,
           requires: entry.requires,
-          run: async (args): Promise<ToolOutcome> => {
-            const result = await server.callTool(tool.name, args)
+          run: async (args, context): Promise<ToolOutcome> => {
+            // `context.runId` is the LOOP's run id, not this host's. Passing it is what
+            // puts a latched server's `tool_denied` in the same `forRun(runId)` window
+            // as the `tool_called` the dispatcher wrote.
+            const result = await server.callTool(tool.name, args, context.runId)
             return {
               ok: result.ok,
               // FRAMED AS DATA, always. A tool result is text from a third-party
