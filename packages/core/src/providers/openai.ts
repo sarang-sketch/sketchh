@@ -7,7 +7,6 @@ import type {
   CompletionResponse,
   CompletionChunk,
   Model,
-  TokenUsage,
 } from './types.js'
 
 interface OAIMessage { role: string; content: string }
@@ -17,13 +16,8 @@ interface OAIResponse {
 }
 interface OAIModelsResponse { data: Array<{ id: string; context_window?: number }> }
 
-// Per-model cost in USD per 1M tokens [input, output]
-const COSTS: Record<string, [number, number]> = {
-  'gpt-4o':              [2.50,  10.00],
-  'gpt-4o-mini':         [0.15,   0.60],
-  'gpt-4-turbo':         [10.00, 30.00],
-  'gpt-3.5-turbo':       [0.50,   1.50],
-}
+// Prices used to live here. They are now in `cost/pricing.ts` with the date they were
+// true, and `BaseAdapter.estimateCost` is the one implementation — see the note there.
 
 export class OpenAIAdapter extends BaseAdapter {
   readonly id: string = 'openai'
@@ -102,12 +96,6 @@ export class OpenAIAdapter extends BaseAdapter {
       name: m.id,
       contextWindow: m.context_window ?? 128000,
     }))
-  }
-
-  estimateCost(usage: TokenUsage, modelId: string): number {
-    const [inCost, outCost] = COSTS[modelId] ?? [0, 0]
-    return (usage.inputTokens / 1_000_000) * inCost +
-           (usage.outputTokens / 1_000_000) * outCost
   }
 
   private headers() {

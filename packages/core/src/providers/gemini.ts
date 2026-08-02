@@ -7,7 +7,6 @@ import type {
   CompletionResponse,
   CompletionChunk,
   Model,
-  TokenUsage,
 } from './types.js'
 
 interface GeminiContent { role: string; parts: Array<{ text: string }> }
@@ -22,12 +21,8 @@ const MODELS: Model[] = [
   { id: 'gemini-1.5-flash',   name: 'Gemini 1.5 Flash',   contextWindow: 1048576 },
 ]
 
-// Cost per 1M tokens [input, output] — update from https://ai.google.dev/pricing
-const COSTS: Record<string, [number, number]> = {
-  'gemini-2.0-flash': [0.075, 0.30],
-  'gemini-2.0-pro':   [1.25,  5.00],
-  'gemini-1.5-flash': [0.075, 0.30],
-}
+// Prices used to live here. They are now in `cost/pricing.ts` with the date they were
+// true, and `BaseAdapter.estimateCost` is the one implementation — see the note there.
 
 export class GeminiAdapter extends BaseAdapter {
   readonly id = 'gemini'
@@ -107,12 +102,6 @@ export class GeminiAdapter extends BaseAdapter {
   }
 
   async listModels(): Promise<Model[]> { return MODELS }
-
-  estimateCost(usage: TokenUsage, modelId: string): number {
-    const [inCost, outCost] = COSTS[modelId] ?? [0, 0]
-    return (usage.inputTokens / 1_000_000) * inCost +
-           (usage.outputTokens / 1_000_000) * outCost
-  }
 
   private toGemini(messages: Message[]): GeminiContent[] {
     return messages

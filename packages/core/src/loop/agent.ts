@@ -537,6 +537,11 @@ export async function runTask(task: Task, deps: RunTaskDeps): Promise<RunResult>
       await emit('llm_request', {
         iteration: iterations,
         adapter: deps.adapter.id,
+        // The MODEL, not just the provider. One provider serves models whose prices
+        // differ by a factor of sixteen, so `adapter` alone cannot attribute cost
+        // (Requirement 20.1). An adapter that does not report one produces an event the
+        // ledger has to call unpriced, which is the honest reading.
+        ...(deps.adapter.model !== undefined ? { model: deps.adapter.model } : {}),
         messages: messages.length,
       })
 
@@ -560,11 +565,17 @@ export async function runTask(task: Task, deps: RunTaskDeps): Promise<RunResult>
         })
       }
 
-      // Usage is always present so Phase 8's cost accounting can sum without
-      // guarding for undefined; an adapter that cannot count reports zeros.
+      // Usage is always present so the cost accounting can sum without guarding for
+      // undefined; an adapter that cannot count reports zeros. `adapter` and `model`
+      // are on the RESPONSE as well as the request, because `ledgerFor` reads
+      // `llm_response` alone — pairing each response back to its request to find out
+      // what it cost would make the ledger depend on event ORDER, and a log is an
+      // append-only sequence that a caller may legitimately filter.
       await emit('llm_response', {
         iteration: iterations,
         text,
+        adapter: deps.adapter.id,
+        ...(deps.adapter.model !== undefined ? { model: deps.adapter.model } : {}),
         usage: { in: usage?.in ?? 0, out: usage?.out ?? 0 },
       })
 

@@ -17,6 +17,7 @@ import type {
   Usage,
 } from '../types.js'
 import { redact } from './redact.js'
+import { costFor } from '../cost/pricing.js'
 
 export abstract class BaseAdapter implements ProviderAdapter, ChatAdapter {
   abstract readonly id: string
@@ -85,7 +86,28 @@ export abstract class BaseAdapter implements ProviderAdapter, ChatAdapter {
   abstract complete(messages: Message[], options: CompletionOptions): Promise<CompletionResponse>
   abstract stream(messages: Message[], options: CompletionOptions): AsyncIterable<CompletionChunk>
   abstract listModels(): Promise<Model[]>
-  abstract estimateCost(usage: TokenUsage, modelId: string): number
+
+  /**
+   * Estimated USD for one call. ONE implementation, delegating to the one price table.
+   *
+   * This replaced nine: three private `COSTS` tables (OpenAI, Anthropic, Gemini) and six
+   * subclasses whose whole body was `return 0` — which meant a real run on Groq or
+   * OpenRouter reported free. Now every adapter prices any model in
+   * `cost/pricing.ts`, and the local runtimes get a real zero through the provider
+   * fallback rather than a hardcoded one.
+   *
+   * ── THE `0` FOR AN UNKNOWN MODEL IS A LEGACY QUIRK, NOT THE PRODUCT'S ANSWER ──
+   *
+   * This signature returns `number`, so it cannot say "unknown", and no production code
+   * calls it — it is part of the older `ProviderAdapter` surface and only tests reach
+   * it. The path that actually reports money to a user is `cost/ledger.ts`, which
+   * reports an unpriced call as `null` and counts it, because showing unknown as $0.00
+   * is how a user finds out from an invoice.
+   */
+  estimateCost(usage: TokenUsage, modelId: string): number {
+    const answer = costFor({ in: usage.inputTokens, out: usage.outputTokens }, modelId, this.id)
+    return answer.usd ?? 0
+  }
 
   protected assertApiKey(): void {
     if (!this.apiKey) {

@@ -28,6 +28,15 @@ export interface Message { role: "system" | "user" | "assistant" | "tool"; conte
 export interface Usage { in: number; out: number; }
 export interface ChatAdapter {
   readonly id: string;
+  /**
+   * The model this adapter will actually call.
+   *
+   * OPTIONAL, so every existing test double still satisfies the seam. But cost cannot
+   * be attributed without it — `id` is the provider, and one provider serves models
+   * whose prices differ by a factor of sixteen — so an adapter that omits it produces
+   * `llm_response` events the ledger has to report as UNPRICED rather than as free.
+   */
+  readonly model?: string;
   chat(m: Message[], o?: { signal?: AbortSignal }): Promise<{ text: string; usage?: Usage }>;
 }
 export type ProviderKind = "openai-compatible" | "anthropic-messages";

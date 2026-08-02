@@ -50,6 +50,8 @@ export const FAKE_DEFAULT_SCRIPT: readonly string[] = [
 export interface FakeChatAdapterOptions {
   /** Adapter id. Defaults to `'fake'` — obviously not a real provider. */
   id?: string
+  /** Reported model. Defaults to `'fake'`, which prices at a real zero. */
+  model?: string
   /**
    * Responses to return, in order. Injecting a script is how the eval harness and
    * the trainer drive an arbitrary action sequence. Defaults to
@@ -71,6 +73,14 @@ function estimateTokens(text: string): number {
  */
 export class FakeChatAdapter implements ChatAdapter {
   readonly id: string
+  /**
+   * The model this adapter reports.
+   *
+   * Defaults to `fake`, which the pricing table lists at zero and marks `local`. So an
+   * offline run's ledger reads `$0.00 (local models only)` — a PRICED zero — rather
+   * than "cost unknown", which is what an unnamed model would honestly have to say.
+   */
+  readonly model: string
 
   /** The scripted responses, in order. */
   readonly script: readonly string[]
@@ -79,6 +89,7 @@ export class FakeChatAdapter implements ChatAdapter {
 
   constructor(options: FakeChatAdapterOptions = {}) {
     this.id = options.id ?? 'fake'
+    this.model = options.model ?? 'fake'
     this.script =
       options.script && options.script.length > 0 ? [...options.script] : [...FAKE_DEFAULT_SCRIPT]
   }

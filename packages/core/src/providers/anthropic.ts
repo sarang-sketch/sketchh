@@ -8,7 +8,6 @@ import type {
   CompletionResponse,
   CompletionChunk,
   Model,
-  TokenUsage,
 } from './types.js'
 
 interface AnthropicResponse {
@@ -23,12 +22,8 @@ export const ANTHROPIC_MODELS: Model[] = [
   { id: 'claude-haiku-latest',  name: 'Claude Haiku (latest)',  contextWindow: 200000 },
 ]
 
-// Cost per 1M tokens [input, output] — update from https://www.anthropic.com/pricing
-const COSTS: Record<string, [number, number]> = {
-  'claude-opus-latest':   [15.00, 75.00],
-  'claude-sonnet-latest': [3.00,  15.00],
-  'claude-haiku-latest':  [0.80,  4.00],
-}
+// Prices used to live here. They are now in `cost/pricing.ts` with the date they were
+// true, and `BaseAdapter.estimateCost` is the one implementation — see the note there.
 
 export class AnthropicAdapter extends BaseAdapter {
   readonly id = 'anthropic'
@@ -105,12 +100,6 @@ export class AnthropicAdapter extends BaseAdapter {
   }
 
   async listModels(): Promise<Model[]> { return ANTHROPIC_MODELS }
-
-  estimateCost(usage: TokenUsage, modelId: string): number {
-    const [inCost, outCost] = COSTS[modelId] ?? [0, 0]
-    return (usage.inputTokens / 1_000_000) * inCost +
-           (usage.outputTokens / 1_000_000) * outCost
-  }
 
   private headers() {
     return {

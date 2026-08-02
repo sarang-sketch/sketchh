@@ -64,6 +64,13 @@ export * as loop from './loop/index.js'
 // rather than wedging it. Produces `ToolDescriptor`s; never authorises them.
 export * as mcp from './mcp/index.js'
 
+// Cost: the ONE price table with the date it was true (`cost.PRICED_AT`), and a ledger
+// that is a pure function of the event log. There is no counter kept alongside the log,
+// because two sources of a money number agree right up until they do not. An unpriced
+// model reports `null` and is counted — never `$0.00`, which is how a user finds out
+// what a run cost from an invoice.
+export * as cost from './cost/index.js'
+
 // Tools the engine drives on the machine: `tools.GitTool`, `tools.parseStatus`.
 // The Git panel reaches these through the RPC methods below, not by importing them
 // — the desktop bundle takes no runtime dependency on this package.

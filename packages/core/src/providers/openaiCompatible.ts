@@ -19,6 +19,8 @@ interface ChatCompletionsResponse {
 /** Chat over `POST {baseUrl}/chat/completions`. Works for any OpenAI-shaped endpoint. */
 export class OpenAICompatibleAdapter implements ChatAdapter {
   readonly id: string
+  /** The model on the wire. Reported so the ledger can price the call (Req 20.1). */
+  readonly model: string
 
   private readonly config: ProviderConfig
   private readonly secrets: string[]
@@ -26,6 +28,7 @@ export class OpenAICompatibleAdapter implements ChatAdapter {
   constructor(config: ProviderConfig) {
     this.config = config
     this.id = config.id
+    this.model = config.model
     this.secrets = collectSecrets(config)
   }
 
