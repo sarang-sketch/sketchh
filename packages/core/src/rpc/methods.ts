@@ -25,6 +25,7 @@ import { dirname, join, resolve } from 'node:path'
 
 import { ToolDispatcher, capabilitiesForSkill } from '../capabilities/index.js'
 import { describeLedger, ledgerFor, ledgerForRun } from '../cost/index.js'
+import * as memory from '../memory/index.js'
 import type { Capability, CapabilitySet } from '../capabilities/index.js'
 import { MCP_CATALOG, McpHost, catalogIds, findCatalogEntry, missingEnv } from '../mcp/index.js'
 import {
@@ -586,6 +587,240 @@ async function openToolLayerFor(
       `reachable with ${granted.length === 0 ? 'no capabilities' : granted.join(', ')}`,
   )
   return { host, dispatcher }
+}
+
+// ── memory ───────────────────────────────────────────────────────────────────
+//
+// Same seam reasoning as git, skills and cost: versioned rows, supersede-with-a-reason,
+// the lint pass and the retriever all live in `packages/core/src/memory/` and reach the
+// panel over the client seam, so there is one implementation and it works under the dev
+// bridge as well as in the app.
+//
+// READING IS FREE; WRITING AND SUPERSEDING ARE EXPLICIT. `memory-list` and `memory-search`
+// are reads. `memory-remember` and `memory-supersede` are user actions, and the second
+// requires a reason on the wire — there is no way to close an entry silently, because
+// "superseded, no reason given" is indistinguishable from a bug months later.
+
+/** The store for a project. One per call; it holds no state between them. */
+function memoryStore(root: string): memory.MemoryStore {
+  return new memory.JsonlMemoryStore({ baseDir: root })
+}
+
+/**
+ * Every entry, newest first, with its validity window and what superseded it.
+ *
+ * Returns SUPERSEDED entries too, unlike retrieval. The panel's whole job is letting a
+ * user see and correct what the project remembers, and a history you cannot see is a
+ * history you cannot correct — so the closed rows are here, flagged `current: false`,
+ * rather than filtered out.
+ */
+async function memoryList(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
+  const root = resolve(optionalString(params, 'root', 'params.root') ?? ctx.cwd())
+  const kind = optionalString(params, 'kind', 'params.kind')
+  if (kind !== undefined && !memory.isMemoryKind(kind)) {
+    throw new InvalidParamsError(
+      `params.kind must be one of ${memory.MEMORY_KINDS.join(', ')}, got ${kind}`,
+    )
+  }
+
+  const store = new memory.JsonlMemoryStore({ baseDir: root })
+  const { entries, skipped } = await store.readAllDetailed()
+  if (skipped > 0) {
+    ctx.log(`memory: ${skipped} unreadable line(s) were skipped and are not shown`)
+  }
+
+  const now = Date.now()
+  const filtered = kind === undefined ? entries : entries.filter((entry) => entry.kind === kind)
+  const rows = filtered
+    .map((entry) => ({
+      ...entry,
+      current: memory.isCurrent(entry, now),
+      window: memory.describeWindow(entry, now),
+    }))
+    // Newest first. A panel opens on what the project believes now.
+    .sort((a, b) => b.validFrom - a.validFrom)
+
+  const findings = await memory.lintMemory({ store, now })
+
+  return {
+    root,
+    /** Lines that could not be parsed. Reported, never absorbed. */
+    skipped,
+    kinds: memory.MEMORY_KINDS.map((value) => ({
+      kind: value,
+      description: memory.MEMORY_KIND_DESCRIPTIONS[value],
+      total: entries.filter((entry) => entry.kind === value).length,
+      current: entries.filter((entry) => entry.kind === value && memory.isCurrent(entry, now)).length,
+    })),
+    total: entries.length,
+    current: entries.filter((entry) => memory.isCurrent(entry, now)).length,
+    entries: rows,
+    /** Suspected problems. Reported only — the lint pass supersedes nothing. */
+    findings: findings.map((finding) => ({
+      kind: finding.kind,
+      confidence: finding.confidence,
+      detail: finding.detail,
+      suggestion: finding.suggestion,
+      ids: finding.entries.map((entry) => entry.id),
+    })),
+  }
+}
+
+/** Retrieve for a query, with the recency prior. Emits `memory_retrieved`. */
+async function memorySearch(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
+  const root = resolve(optionalString(params, 'root', 'params.root') ?? ctx.cwd())
+  const query = readString(params, 'query', 'params.query')
+  const topK = optionalNumber(params, 'topK', 'params.topK')
+  const includeSuperseded =
+    optionalBoolean(params, 'includeSuperseded', 'params.includeSuperseded') ?? false
+
+  const events = new StreamingEventStore(
+    new JsonlEventStore({ baseDir: root, secrets: () => ctx.secrets() }),
+    (event) => ctx.emitEvent(event),
+  )
+
+  const result = await memory.retrieveMemory({
+    store: memoryStore(root),
+    query,
+    includeSuperseded,
+    events,
+    ...(topK !== undefined ? { topK: Math.floor(topK) } : {}),
+  })
+
+  return {
+    root,
+    query,
+    terms: result.terms,
+    candidates: result.candidates,
+    supersededExcluded: result.supersededExcluded,
+    channels: result.channels,
+    hits: result.hits.map((hit) => ({
+      entry: hit.entry,
+      score: hit.score,
+      relevance: hit.relevance,
+      recency: hit.recency,
+      termsMatched: hit.termsMatched,
+      channels: hit.channels,
+      current: hit.current,
+      window: memory.describeWindow(hit.entry),
+    })),
+  }
+}
+
+/**
+ * Record something. Supersedes a same-key predecessor and emits `memory_superseded`.
+ *
+ * `source` defaults to `user`, not `run`: this method exists for the panel, and an entry
+ * a person typed must never be auto-expired later by a heuristic.
+ */
+async function memoryRemember(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
+  const root = resolve(optionalString(params, 'root', 'params.root') ?? ctx.cwd())
+  const kind = readString(params, 'kind', 'params.kind')
+  if (!memory.isMemoryKind(kind)) {
+    throw new InvalidParamsError(
+      `params.kind must be one of ${memory.MEMORY_KINDS.join(', ')}, got ${kind}`,
+    )
+  }
+  const text = readString(params, 'text', 'params.text')
+  const source = optionalString(params, 'source', 'params.source') ?? 'user'
+  if (!memory.isMemorySource(source)) {
+    throw new InvalidParamsError(`params.source must be user, run, or imported, got ${source}`)
+  }
+
+  const events = new StreamingEventStore(
+    new JsonlEventStore({ baseDir: root, secrets: () => ctx.secrets() }),
+    (event) => ctx.emitEvent(event),
+  )
+
+  const result = await memory.remember({
+    store: memoryStore(root),
+    events,
+    entry: {
+      kind,
+      text,
+      source,
+      ...(optionalString(params, 'key', 'params.key') !== undefined
+        ? { key: optionalString(params, 'key', 'params.key')! }
+        : {}),
+      ...(optionalString(params, 'subject', 'params.subject') !== undefined
+        ? { subject: optionalString(params, 'subject', 'params.subject')! }
+        : {}),
+      ...(optionalStringArray(params['tags'], 'params.tags') !== undefined
+        ? { tags: optionalStringArray(params['tags'], 'params.tags')! }
+        : {}),
+    },
+    ...(optionalString(params, 'reason', 'params.reason') !== undefined
+      ? { reason: optionalString(params, 'reason', 'params.reason')! }
+      : {}),
+  })
+
+  return {
+    root,
+    entry: result.entry,
+    superseded: result.superseded,
+  }
+}
+
+/**
+ * Close an entry's window.
+ *
+ * `reason` is REQUIRED on the wire, not optional. Requirement 21.3 asks for a recorded
+ * reason and this is the method a user reaches it through; an optional reason would mean
+ * the panel could close an entry silently, which is the state the requirement exists to
+ * prevent.
+ *
+ * Note what this is NOT: a delete. The row stays, its window closes, and the history
+ * remains readable — which is the difference between a memory a user can correct and one
+ * they can only destroy.
+ */
+async function memorySupersede(
+  params: Record<string, unknown>,
+  ctx: MethodContext,
+): Promise<unknown> {
+  const root = resolve(optionalString(params, 'root', 'params.root') ?? ctx.cwd())
+  const id = readString(params, 'id', 'params.id')
+  const reason = readString(params, 'reason', 'params.reason')
+
+  const events = new StreamingEventStore(
+    new JsonlEventStore({ baseDir: root, secrets: () => ctx.secrets() }),
+    (event) => ctx.emitEvent(event),
+  )
+
+  const replacementText = optionalString(params, 'replacementText', 'params.replacementText')
+  const replacementKind = optionalString(params, 'replacementKind', 'params.replacementKind')
+  if (replacementKind !== undefined && !memory.isMemoryKind(replacementKind)) {
+    throw new InvalidParamsError(`params.replacementKind is not a memory kind: ${replacementKind}`)
+  }
+
+  const store = memoryStore(root)
+  const existing = await store.get(id)
+  const result = await memory.supersedeEntry({
+    store,
+    events,
+    id,
+    reason,
+    ...(replacementText !== undefined
+      ? {
+          replacement: {
+            // The replacement inherits the closed entry's kind and key unless told
+            // otherwise, because a replacement for a different key is not a replacement.
+            kind: (replacementKind ?? existing?.kind ?? 'decision') as memory.MemoryKind,
+            text: replacementText,
+            source: 'user' as const,
+            ...(existing?.key !== undefined ? { key: existing.key } : {}),
+            ...(existing?.subject !== undefined ? { subject: existing.subject } : {}),
+          },
+        }
+      : {}),
+  })
+
+  return {
+    root,
+    ok: result.ok,
+    closed: result.closed,
+    replacement: result.replacement,
+    reason: result.reason,
+  }
 }
 
 /**
@@ -1489,6 +1724,13 @@ export const METHODS: Readonly<Record<string, MethodHandler>> = {
   // Task 8.4's Cost Dashboard. Reads the log and sums it. No running total anywhere,
   // because two sources of a money number agree right up until they do not.
   cost,
+  // Task 9.4's Memory panel. Reading is free; remembering and superseding are user
+  // actions, and `memory-supersede` requires a reason on the wire — an entry cannot be
+  // closed silently (Requirement 21.3).
+  'memory-list': memoryList,
+  'memory-search': memorySearch,
+  'memory-remember': memoryRemember,
+  'memory-supersede': memorySupersede,
 }
 
 /** The five the protocol contract names. Every build answers at least these. */

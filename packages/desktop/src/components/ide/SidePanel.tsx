@@ -15,6 +15,7 @@ import { ProviderSettings } from '../../panels/ProviderSettings';
 import { McpTools } from '../../panels/McpTools';
 import { TestResults } from '../../panels/TestResults';
 import { CostDashboard } from '../../panels/CostDashboard';
+import { MemoryPanel } from '../../panels/MemoryPanel';
 
 export default function SidePanel() {
   const { ideActivePanel } = useAppState();
@@ -83,6 +84,12 @@ export default function SidePanel() {
       // Task 8.4: the total, summed from the event log. The one cost source.
       title = 'Cost';
       content = <CostDashboard />;
+      break;
+    case 'memory':
+      // Task 9.4: what the project remembers, with validity windows. Retracted rows are
+      // shown, not hidden — a history you cannot see is a history you cannot correct.
+      title = 'Memory';
+      content = <MemoryPanel />;
       break;
     default:
       return null;

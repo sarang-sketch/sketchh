@@ -321,6 +321,30 @@ export class MockSketchClient implements SketchClient {
     return this.noEngine('cost')
   }
 
+  // ── memory ────────────────────────────────────────────────────────────────
+  //
+  // A fabricated memory is the most damaging fixture of all: the panel's whole purpose is
+  // letting a user see and correct what the project believes, and invented decisions with
+  // invented validity windows would be teaching them to trust a fiction about their own
+  // codebase. Worse, `memorySupersede` returning a fake success would tell them they had
+  // corrected something they had not.
+
+  async memoryList(): Promise<never> {
+    return this.noEngine('memory-list')
+  }
+
+  async memorySearch(): Promise<never> {
+    return this.noEngine('memory-search')
+  }
+
+  async memoryRemember(): Promise<never> {
+    return this.noEngine('memory-remember')
+  }
+
+  async memorySupersede(): Promise<never> {
+    return this.noEngine('memory-supersede')
+  }
+
   private nextRunId(): string {
     // Time-prefixed so ids sort chronologically, matching the engine's scheme.
     this.runCounter += 1

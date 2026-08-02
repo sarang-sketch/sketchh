@@ -12,6 +12,10 @@ import type {
   VerifyContractResult,
   McpCatalogResult,
   CostReport,
+  MemoryListResult,
+  MemorySearchResult,
+  MemoryRememberResult,
+  MemorySupersedeResult,
   ProviderCatalogResult,
   ProviderTestRequest,
 } from './client'
@@ -263,6 +267,65 @@ export class HttpSketchClient implements SketchClient {
     return this.callMethod<CostReport>('cost', {
       root: params.root,
       ...(params.runId !== undefined ? { runId: params.runId } : {}),
+    })
+  }
+
+  // ── memory ────────────────────────────────────────────────────────────────
+
+  async memoryList(params: { root: string; kind?: string }): Promise<MemoryListResult> {
+    return this.callMethod<MemoryListResult>('memory-list', {
+      root: params.root,
+      ...(params.kind !== undefined ? { kind: params.kind } : {}),
+    })
+  }
+
+  async memorySearch(params: {
+    root: string
+    query: string
+    topK?: number
+    includeSuperseded?: boolean
+  }): Promise<MemorySearchResult> {
+    return this.callMethod<MemorySearchResult>('memory-search', {
+      root: params.root,
+      query: params.query,
+      ...(params.topK !== undefined ? { topK: params.topK } : {}),
+      ...(params.includeSuperseded === true ? { includeSuperseded: true } : {}),
+    })
+  }
+
+  async memoryRemember(params: {
+    root: string
+    kind: string
+    text: string
+    key?: string
+    subject?: string
+    tags?: string[]
+    reason?: string
+    source?: string
+  }): Promise<MemoryRememberResult> {
+    return this.callMethod<MemoryRememberResult>('memory-remember', {
+      root: params.root,
+      kind: params.kind,
+      text: params.text,
+      ...(params.key !== undefined ? { key: params.key } : {}),
+      ...(params.subject !== undefined ? { subject: params.subject } : {}),
+      ...(params.tags !== undefined ? { tags: params.tags } : {}),
+      ...(params.reason !== undefined ? { reason: params.reason } : {}),
+      ...(params.source !== undefined ? { source: params.source } : {}),
+    })
+  }
+
+  async memorySupersede(params: {
+    root: string
+    id: string
+    reason: string
+    replacementText?: string
+  }): Promise<MemorySupersedeResult> {
+    return this.callMethod<MemorySupersedeResult>('memory-supersede', {
+      root: params.root,
+      id: params.id,
+      reason: params.reason,
+      ...(params.replacementText !== undefined ? { replacementText: params.replacementText } : {}),
     })
   }
 

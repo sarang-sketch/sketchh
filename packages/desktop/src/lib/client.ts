@@ -347,6 +347,114 @@ export interface CostReport {
   entries: CostEntry[]
 }
 
+// ── memory, as a surface sees it ────────────────────────────────────────────
+
+/** The nine kinds Requirement 21.1 names. */
+export type MemoryKindName =
+  | 'decision'
+  | 'architecture'
+  | 'conversation'
+  | 'standard'
+  | 'preference'
+  | 'style'
+  | 'bug'
+  | 'performance'
+  | 'test'
+
+/** One remembered row, with the window in which it was true. */
+export interface MemoryEntryRow {
+  id: string
+  kind: MemoryKindName
+  text: string
+  key?: string
+  subject?: string
+  tags?: string[]
+  /** Epoch ms. When this became true. */
+  validFrom: number
+  /** When it stopped being true, or null while it still is. */
+  validTo: number | null
+  supersededBy?: string
+  supersedes?: string
+  /** Why it was closed. Always present on a closed row (Requirement 21.3). */
+  reason?: string
+  runId?: string
+  source: 'user' | 'run' | 'imported'
+  data?: Record<string, unknown>
+  /** Whether the window is still open. Computed by the engine, not the panel. */
+  current: boolean
+  /** The window in words, so the panel does not format dates a second way. */
+  window: string
+}
+
+/** A suspected problem. REPORTED ONLY — the lint pass supersedes nothing. */
+export interface MemoryFinding {
+  kind: 'contradiction' | 'duplicate' | 'orphan' | 'unreasoned'
+  /** How strong the signal is. Never a verdict. */
+  confidence: 'certain' | 'likely' | 'possible'
+  detail: string
+  suggestion: string
+  ids: string[]
+}
+
+export interface MemoryKindSummary {
+  kind: MemoryKindName
+  description: string
+  total: number
+  current: number
+}
+
+export interface MemoryListResult {
+  root: string
+  /** Lines that could not be parsed. Shown, never absorbed. */
+  skipped: number
+  kinds: MemoryKindSummary[]
+  total: number
+  current: number
+  /** Newest first, INCLUDING closed rows — a history you cannot see you cannot correct. */
+  entries: MemoryEntryRow[]
+  findings: MemoryFinding[]
+}
+
+export interface MemorySearchHit {
+  entry: MemoryEntryRow
+  score: number
+  relevance: number
+  /** The recency multiplier applied. A bounded prior, not a sort. */
+  recency: number
+  termsMatched: number
+  channels: Array<'text' | 'metadata'>
+  current: boolean
+  window: string
+}
+
+export interface MemorySearchResult {
+  root: string
+  query: string
+  /** What the query was reduced to, so a surface can explain a miss. */
+  terms: string[]
+  candidates: number
+  /** Retracted entries left out. Excluded by default (Requirement 21.6). */
+  supersededExcluded: number
+  channels: Array<{ channel: 'text' | 'metadata'; ran: boolean; hits: number; reason: string | null }>
+  hits: MemorySearchHit[]
+}
+
+export interface MemoryRememberResult {
+  root: string
+  entry: MemoryEntryRow
+  /** The predecessor that was closed, when one was. */
+  superseded: MemoryEntryRow | null
+}
+
+export interface MemorySupersedeResult {
+  root: string
+  ok: boolean
+  closed: MemoryEntryRow | null
+  replacement: MemoryEntryRow | null
+  /** Why it refused, when it did. */
+  reason: string | null
+}
+
 export interface RunOptions {
   /** Project root for this run. Required by the desktop to match the open folder. */
   root?: string
@@ -541,6 +649,48 @@ export interface SketchClient {
 
   /** What this project's runs have cost, derived from the durable log. */
   cost?(params: { root: string; runId?: string }): Promise<CostReport>
+
+  // ── memory ────────────────────────────────────────────────────────────────
+  //
+  // Versioned rows, supersede-with-a-reason, the lint pass and the retriever all live in
+  // the engine. Same seam reasoning as git, skills and cost.
+  //
+  // READING IS FREE; WRITING IS A USER ACTION. And `memorySupersede` REQUIRES a reason:
+  // Requirement 21.3 asks that superseding record why, and an optional reason would mean
+  // the panel could close an entry silently — which is the state the requirement exists
+  // to prevent. Note it is not a delete: the row stays and its window closes, so the
+  // history a user is correcting remains readable.
+
+  /** Every entry with its validity window, plus the lint pass's findings. */
+  memoryList?(params: { root: string; kind?: string }): Promise<MemoryListResult>
+
+  /** Retrieve for a query, with the recency prior. */
+  memorySearch?(params: {
+    root: string
+    query: string
+    topK?: number
+    includeSuperseded?: boolean
+  }): Promise<MemorySearchResult>
+
+  /** Record something. Supersedes a same-key predecessor. */
+  memoryRemember?(params: {
+    root: string
+    kind: string
+    text: string
+    key?: string
+    subject?: string
+    tags?: string[]
+    reason?: string
+    source?: string
+  }): Promise<MemoryRememberResult>
+
+  /** Close an entry's window. `reason` is required. */
+  memorySupersede?(params: {
+    root: string
+    id: string
+    reason: string
+    replacementText?: string
+  }): Promise<MemorySupersedeResult>
 
   /**
    * Attach a handler to the engine's event stream. Called for every event from

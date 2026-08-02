@@ -17,7 +17,7 @@
 // Validates: Requirements 27.1, 27.4, 27.5
 
 import styles from './ActivityBar.module.css';
-import { Files, Search, GitBranch, GitPullRequest, Layers, Play, Puzzle, Settings, Server, Activity, MessageSquare, Check, Zap } from '../Icons';
+import { Files, Search, GitBranch, GitPullRequest, Layers, Play, Puzzle, Settings, Server, Activity, MessageSquare, Check, Zap, Database } from '../Icons';
 import { useAppState, useAppDispatch, type AppState } from '../../state/AppState';
 
 type PanelId = NonNullable<AppState['ideActivePanel']>;
@@ -52,6 +52,7 @@ export default function ActivityBar() {
     { id: 'run', icon: Play, label: 'Run & Debug' },
     { id: 'tests', icon: Check, label: 'Test Results' },
     { id: 'cost', icon: Zap, label: 'Cost' },
+    { id: 'memory', icon: Database, label: 'Memory' },
     { id: 'skills', icon: Puzzle, label: 'Extensions & Skills' },
     { id: 'mcp', icon: Server, label: 'MCP Tools' }
   ];
