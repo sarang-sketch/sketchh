@@ -17,7 +17,7 @@
 // Validates: Requirements 27.1, 27.4, 27.5
 
 import styles from './ActivityBar.module.css';
-import { Files, Search, GitBranch, GitPullRequest, Layers, Play, Puzzle, Settings, Server, Activity, MessageSquare, Check, Zap, Database } from '../Icons';
+import { Files, Search, GitBranch, GitPullRequest, Layers, Play, Puzzle, Settings, Server, Activity, MessageSquare, Check, Zap, Database, Users } from '../Icons';
 import { useAppState, useAppDispatch, type AppState } from '../../state/AppState';
 
 type PanelId = NonNullable<AppState['ideActivePanel']>;
@@ -53,6 +53,10 @@ export default function ActivityBar() {
     { id: 'tests', icon: Check, label: 'Test Results' },
     { id: 'cost', icon: Zap, label: 'Cost' },
     { id: 'memory', icon: Database, label: 'Memory' },
+    // Task 10.4. `'agents'` has been in the `ideActivePanel` union and handled in
+    // `SidePanel` since the first commit, but nothing dispatched it — the AI Team panel was
+    // unreachable, which is why nobody noticed it was four fixtures.
+    { id: 'agents', icon: Users, label: 'AI Team' },
     { id: 'skills', icon: Puzzle, label: 'Extensions & Skills' },
     { id: 'mcp', icon: Server, label: 'MCP Tools' }
   ];

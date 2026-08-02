@@ -110,11 +110,12 @@ export interface ChatMessage {
   timestamp: number;
 }
 
-export interface TaskEntry {
-  id: string;
-  description: string;
-  status: 'pending' | 'in-progress' | 'completed' | 'failed';
-}
+// `TaskEntry` and `AppState.tasks` are deliberately GONE (task 10.4). The array was never
+// populated and never read, and its `status: 'pending' | 'in-progress' | 'completed' |
+// 'failed'` was a fourth status vocabulary alongside `TaskLog`'s own. A task IS a run, and a
+// run's whole story is already on the append-only event log — prompt, adapter, iterations,
+// verify rows, and a terminal reason. `TaskLog.projectRuns` derives the rows from there, so
+// task state has one home for the same reason cost does (Requirement 14.6).
 
 export interface Conversation {
   id: string;
@@ -123,13 +124,10 @@ export interface Conversation {
   createdAt: number;
 }
 
-export interface Agent {
-  id: string;
-  name: string;
-  role: string;
-  status: 'idle' | 'busy' | 'offline';
-  icon: string;
-}
+// `Agent` was declared here with a `status: 'idle' | 'busy' | 'offline'` field and an
+// `icon: string` naming a component by string. Deleted with `agentTeam` (task 10.4): the
+// status vocabulary described a state that does not exist, because a role exists only inside
+// a dispatch, and `RoleStatus` in `lib/client.ts` is the shape the engine actually reports.
 
 // `Skill` was declared here with `author`, `icon`, `enabled` and `category` — four
 // fields the engine's own `Skill` does not have, invented to make a fixture render.
@@ -197,7 +195,7 @@ export interface AppState {
   activeConversationId: string | null;
   isThinking: boolean;
   thinkingStage: string;
-  agentTeam: Agent[];
+  // No `agentTeam`. See the note where its twelve entries used to be initialised.
   chatMessages: ChatMessage[]; // Keep existing for backwards compatibility if needed
   
   // IDE Mode State
@@ -273,7 +271,7 @@ export interface AppState {
   rightPanelCollapsed: boolean;
   bottomPanelOpen: boolean;
   bottomPanelHeight: number;
-  tasks: TaskEntry[];
+  // No `tasks`. See the note where `TaskEntry` used to be declared.
   // `totalCost` is deliberately GONE. It held `12.45`, was never read by anything, and
   // was the third copy of a cost figure alongside two hardcoded `$1.4025` strings.
   // Requirement 20.2 says the session total is the sum over the event log with NO
@@ -379,21 +377,15 @@ const initialState: AppState = {
   thinkingStage: '',
   chatMessages: [],
   
-  agentTeam: [
-    { id: 'a1', name: 'CEO Agent', role: 'Orchestrator', status: 'idle', icon: 'Bot' },
-    { id: 'a2', name: 'Planner', role: 'Task Breakdown', status: 'idle', icon: 'Brain' },
-    { id: 'a3', name: 'Research', role: 'Documentation & Search', status: 'idle', icon: 'Search' },
-    { id: 'a4', name: 'Architect', role: 'System Design', status: 'idle', icon: 'Layers' },
-    { id: 'a5', name: 'Backend', role: 'Server Code', status: 'busy', icon: 'Server' },
-    { id: 'a6', name: 'Frontend', role: 'UI Implementation', status: 'idle', icon: 'Layout' },
-    { id: 'a7', name: 'Database', role: 'Schema Design', status: 'idle', icon: 'Database' },
-    { id: 'a8', name: 'Security', role: 'Auditing', status: 'idle', icon: 'Shield' },
-    { id: 'a9', name: 'Testing', role: 'QA & Coverage', status: 'idle', icon: 'Check' },
-    { id: 'a10', name: 'Reviewer', role: 'Code Review', status: 'idle', icon: 'FileCode' },
-    { id: 'a11', name: 'Performance', role: 'Optimization', status: 'idle', icon: 'Zap' },
-    { id: 'a12', name: 'Docs', role: 'Documentation', status: 'idle', icon: 'FileText' }
-  ],
-  
+  // `agentTeam` is deliberately GONE (task 10.4). It held twelve entries — a status
+  // vocabulary (`idle|busy|offline`) that no component used, one of them asserted `busy`,
+  // Deployment missing, and Requirement 24.4 names thirteen. It was read by nothing, and it
+  // was the second of three disagreeing role lists: `AgentTeamPanel` had four fixtures of
+  // its own with a THIRD status vocabulary. Roles now have one home — the engine's role
+  // table, reached by `AgentTeamPanel` through `strategy-catalog`, which also answers the
+  // only question that matters and a fixture cannot: whether THIS project configures a
+  // verification stage that could grade each role (Requirements 24.6, 14.6).
+
   ideActivePanel: 'explorer',
   terminalOpen: false,
   // Nothing has been run yet, and the panel says exactly that. The two lines that
@@ -433,9 +425,8 @@ const initialState: AppState = {
   sidebarCollapsed: false,
   rightPanelCollapsed: false,
   bottomPanelOpen: true,
-  bottomPanelHeight: 250,
-  tasks: []
-  // No `totalCost`. See the note on the interface field above.
+  bottomPanelHeight: 250
+  // No `totalCost` and no `tasks`. See the notes on the interface fields above.
 };
 
 /** The starting state. Exported so a test drives the real reducer, not a copy. */

@@ -288,6 +288,57 @@ export interface McpCatalogResult {
   note: string
 }
 
+// ── the strategies and the thirteen roles, as a surface sees it ─────────────
+
+export interface StrategyOption {
+  strategy: string
+  description: string
+  default: boolean
+}
+
+/**
+ * One role, and whether THIS project can check it.
+ *
+ * There is deliberately no `status` field. Roles exist only inside a dispatch, so between
+ * dispatches there is no such thing as a working role — the same reason `McpCatalogResult`
+ * reports `configured` and never `connected`. Live per-role state is read out of the
+ * `strategy_selected` events on the timeline.
+ */
+export interface RoleStatus {
+  role: string
+  title: string
+  instruction: string
+  /** What grades this role's work, in words. */
+  signal: string
+  signalKind: 'verify-stage' | 'plan-artifact' | 'citations'
+  /** The stage, when the signal is one. */
+  stage?: string
+  capabilities: string[]
+  /** True when this role proposes file edits. */
+  edits: boolean
+  /** True when this role's findings can stop a swarm. Security and Reviewer only. */
+  blocking: boolean
+  /** False when this project configures no stage that could grade it. */
+  available: boolean
+  /** Why it would be skipped. Null when it can run. */
+  reason: string | null
+}
+
+export interface StrategyCatalogResult {
+  root: string
+  strategies: StrategyOption[]
+  defaultStrategy: string
+  /** The order roles run in a swarm; blocking roles last. */
+  swarmOrder: string[]
+  roles: RoleStatus[]
+  configuredStages: string[]
+  policySource: string
+  verifiableRoles: number
+  /** Requirement 24.8: off until measured pass@k lift says otherwise. */
+  swarmDefault: { enable: boolean; reason: string }
+  note: string
+}
+
 // ── cost, as a surface sees it ──────────────────────────────────────────────
 
 /** One priced model call. Carries `eventId` so a total can be audited row by row. */
@@ -460,6 +511,21 @@ export interface RunOptions {
   root?: string
   /** Leave emitted patches open for human hunk review instead of auto-applying. */
   reviewEdits?: boolean
+  /**
+   * Which strategy to run under. OMITTED is the single-agent path, unchanged.
+   *
+   * Naming one — including `single` — opts into the dispatcher and its ladder record.
+   * `swarm` is as many runs as there are verifiable roles, so as many bills; it is never
+   * chosen for the user (Requirement 24.1).
+   */
+  strategy?: 'single' | 'plan-then-code' | 'swarm'
+  /**
+   * Allow escalation to a heavier strategy when the lighter one fails WITHIN its budget.
+   *
+   * A budget breach, an abort, or a provider error never escalates: the attempt never got
+   * its budget, and escalating would turn one ceiling into several bills.
+   */
+  escalate?: boolean
 }
 
 export interface SketchClient {
@@ -637,6 +703,16 @@ export interface SketchClient {
 
   /** The curated catalog, with each entry's missing environment named. */
   mcpCatalog?(): Promise<McpCatalogResult>
+
+  // ── strategies and roles ──────────────────────────────────────────────────
+
+  /**
+   * The three strategies, the thirteen roles, and which roles this project can verify.
+   *
+   * Read-only and free: it resolves the verification contract and answers which roles have a
+   * signal it could grade them by. It reports no live status, on purpose.
+   */
+  strategyCatalog?(options?: { root?: string }): Promise<StrategyCatalogResult>
 
   // ── cost ──────────────────────────────────────────────────────────────────
   //

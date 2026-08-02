@@ -38,6 +38,7 @@ import type {
   SkillTrainResult,
   VerifyContractResult,
   McpCatalogResult,
+  StrategyCatalogResult,
   CostReport,
   MemoryListResult,
   MemorySearchResult,
@@ -404,6 +405,11 @@ export class StdioSketchClient implements SketchClient {
       task,
       ...(options.root !== undefined ? { root: options.root } : this.root !== undefined ? { root: this.root } : {}),
       ...(options.reviewEdits !== undefined ? { reviewEdits: options.reviewEdits } : {}),
+      // Omitted means the single-agent path, byte for byte what this transport sent before
+      // Phase 10. Sending `strategy: 'single'` by default would put a dispatcher ladder in
+      // every log for a decision nobody made.
+      ...(options.strategy !== undefined ? { strategy: options.strategy } : {}),
+      ...(options.escalate !== undefined ? { escalate: options.escalate } : {}),
     })
   }
 
@@ -586,6 +592,10 @@ export class StdioSketchClient implements SketchClient {
         : {}),
       ...(params.runId !== undefined ? { runId: params.runId } : {}),
     })
+  }
+
+  async strategyCatalog(options: { root?: string } = {}): Promise<StrategyCatalogResult> {
+    return this.call<StrategyCatalogResult>('strategy-catalog', this.withRoot({ ...options }))
   }
 
   async mcpCatalog(): Promise<McpCatalogResult> {

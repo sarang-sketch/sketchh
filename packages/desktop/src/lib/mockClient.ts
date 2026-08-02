@@ -314,6 +314,15 @@ export class MockSketchClient implements SketchClient {
     return this.noEngine('mcp-catalog')
   }
 
+  // And a sixth time. A fabricated role list is a claim that thirteen agents are standing
+  // by and that this project can verify their work — which is precisely what the four
+  // `AgentTeamPanel` fixtures and the twelve `state.agentTeam` entries claimed. Whether a
+  // role can be graded depends on the verification contract of the open project, so it
+  // cannot be answered without an engine.
+  async strategyCatalog(): Promise<never> {
+    return this.noEngine('strategy-catalog')
+  }
+
   // A fabricated cost report is a fabricated INVOICE. `$1.4025` was on screen in two
   // places before this task and meant nothing; a number a user might act on has to come
   // from the log or not exist.

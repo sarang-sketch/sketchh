@@ -46,7 +46,9 @@ export default function SidePanel() {
       content = <LiveArchitecture />;
       break;
     case 'agents':
-      title = 'Agent Team';
+      // Task 10.4: the three strategies, the thirteen roles, and what grades each one.
+      // Reachable at last — the ActivityBar now dispatches this, which it never did.
+      title = 'AI Team';
       content = <AgentTeamPanel />;
       break;
     case 'skills':

@@ -11,6 +11,7 @@ import type {
   SkillTrainResult,
   VerifyContractResult,
   McpCatalogResult,
+  StrategyCatalogResult,
   CostReport,
   MemoryListResult,
   MemorySearchResult,
@@ -97,6 +98,9 @@ export class HttpSketchClient implements SketchClient {
       task,
       ...(options.root !== undefined ? { root: options.root } : {}),
       ...(options.reviewEdits !== undefined ? { reviewEdits: options.reviewEdits } : {}),
+      // Omitted means the single-agent path, unchanged. See the note on the stdio transport.
+      ...(options.strategy !== undefined ? { strategy: options.strategy } : {}),
+      ...(options.escalate !== undefined ? { escalate: options.escalate } : {}),
     })
   }
 
@@ -257,6 +261,10 @@ export class HttpSketchClient implements SketchClient {
         : {}),
       ...(params.runId !== undefined ? { runId: params.runId } : {}),
     })
+  }
+
+  async strategyCatalog(options: { root?: string } = {}): Promise<StrategyCatalogResult> {
+    return this.callMethod<StrategyCatalogResult>('strategy-catalog', { ...options })
   }
 
   async mcpCatalog(): Promise<McpCatalogResult> {
