@@ -487,7 +487,10 @@ async function attemptSwarm(
       runIds: [],
       runs: [],
       roles,
-      merge: { ok: true, applied: [], conflicts: [], followUps: [] },
+      // The skipped roles' follow-up travels on this path TOO. An earlier version returned an
+      // empty list here, so a swarm that skipped every role left nothing behind at all — the
+      // one case where the follow-up is the entire output. The Phase 10 gate caught it.
+      merge: { ok: true, applied: [], conflicts: [], followUps: skippedFollowUps },
       consensus: consensus('swarm', []),
       verify: null,
     }
