@@ -91,7 +91,7 @@ import {
   shouldDefaultToSwarm,
   type Strategy,
 } from '../strategy/index.js'
-import { GitTool } from '../tools/index.js'
+import { GitTool, gitToolDescriptors } from '../tools/index.js'
 import {
   VERIFY_STAGES,
   parsePolicyJson,
@@ -683,7 +683,11 @@ async function openToolLayerFor(
   }
 
   const dispatcher = new ToolDispatcher({
-    tools: host.descriptors(),
+    // The engine's own git tools sit alongside the MCP servers', behind the same
+    // one authorisation point. They cost `git:read` and `git:write`, so a run whose
+    // skills declared neither still sees zero of them — which is why adding them
+    // here changes nothing for a caller that never asked for git.
+    tools: [...gitToolDescriptors({ events, runId: task.id }), ...host.descriptors()],
     granted,
     root,
     events,

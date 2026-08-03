@@ -21,6 +21,7 @@
 // Validates: Requirements 11.4, 11.5
 
 import { afterEach, describe, expect, it } from 'vitest'
+import { spawnSync } from 'node:child_process'
 import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -43,6 +44,9 @@ import {
 } from '../src/capabilities/index.js'
 import { MemoryEventStore } from '../src/events/index.js'
 import { SECRET_KEY_SHAPES } from '../src/secrets/index.js'
+// The one real, shipped tool behind the gate. Section 6 is the whole reason this
+// import exists: the adversarial suite has to bite on something that ships.
+import { GIT_TOOL_NAMES, gitToolDescriptors } from '../src/tools/index.js'
 
 const tmpDirs: string[] = []
 
@@ -672,5 +676,191 @@ describe('the agent loop and the gate (Requirements 11.5, 5.9)', () => {
     expect(denied).toHaveLength(1)
     expect(denied[0]!.payload.reason).toBe(TOOL_UNAVAILABLE_REASON)
     void PLAN
+  })
+})
+
+// ── 6. the gate against a REAL SHIPPED TOOL ─────────────────────────────────
+//
+// Everything above section 5 proves the gate against descriptors defined in this
+// file. That is worth having — it is how the six escalations are exercised without
+// actually spawning curl — but it leaves one honest criticism standing: five of
+// the six paths are synthetic, and only `fs:write:home` leaves evidence on disk.
+//
+// These two tests close that. They drive `tools/gitToolDescriptors()` — the same
+// `GitTool` the Source Control panel and the `git-*` RPC methods use — against a
+// REAL repository built by `git init`, and they assert on the REPOSITORY, not on
+// the event log:
+//
+//   * without `git:write`, the commit count is unchanged and porcelain is
+//     byte-identical afterwards. A `tool_denied` event proves a decision was
+//     recorded; an unchanged `git log` proves nothing happened.
+//   * with `git:write`, the same call really commits. Without that control the
+//     first test would pass against a gate that denies everything, or against a
+//     tool too broken to commit in the first place.
+//
+// Mutation evidence: change `git-commit`'s `requires` from `git:write` to
+// `git:read` and the first test fails with a commit in the log that must not
+// exist.
+//
+// Validates: Requirements 11.4, 11.5, 14.6
+
+function gitVersion(): string | null {
+  try {
+    const probe = spawnSync('git', ['--version'], { encoding: 'utf8', shell: false })
+    return probe.status === 0 ? probe.stdout.trim() : null
+  } catch {
+    return null
+  }
+}
+
+const GIT = gitVersion()
+const describeGit = GIT ? describe : describe.skip
+const GIT_NOTE = GIT
+  ? ` [git present: ${GIT}]`
+  : ' [SKIPPED: git is not on PATH, so the real-repository gate tests cannot run]'
+
+/** git for test SETUP and OBSERVATION only. The tool under test never uses this. */
+function git(cwd: string, ...args: string[]): string {
+  const result = spawnSync('git', args, { cwd, encoding: 'utf8', shell: false })
+  if (result.status !== 0) {
+    throw new Error(`test setup: git ${args.join(' ')} failed: ${result.stderr || result.stdout}`)
+  }
+  return result.stdout
+}
+
+/** A repository with one commit and one modified tracked file. */
+async function repoWithDirtyFile(): Promise<string> {
+  const dir = await makeProject()
+  git(dir, 'init', '--quiet')
+  git(dir, 'config', 'user.email', 'test@sketch.invalid')
+  git(dir, 'config', 'user.name', 'Sketch Test')
+  git(dir, 'checkout', '-q', '-b', 'main')
+  await writeFile(join(dir, 'a.ts'), 'export const a = 1\n', 'utf8')
+  git(dir, 'add', '.')
+  git(dir, 'commit', '--quiet', '-m', 'initial')
+  await writeFile(join(dir, 'a.ts'), 'export const a = 2\n', 'utf8')
+  return dir
+}
+
+/** How many commits exist. The number the denial test is really about. */
+function commitCount(dir: string): number {
+  return git(dir, 'log', '--oneline').split('\n').filter((line) => line.trim() !== '').length
+}
+
+function porcelain(dir: string): string {
+  return git(dir, 'status', '--porcelain', '-b')
+}
+
+const FORBIDDEN_MESSAGE = 'this commit must never exist'
+
+describeGit(`the real git tool behind the gate${GIT_NOTE}`, () => {
+  it('cannot commit without git:write, and the REPOSITORY proves it', async () => {
+    const dir = await repoWithDirtyFile()
+    const events = new MemoryEventStore({ secrets: [] })
+
+    const before = { commits: commitCount(dir), porcelain: porcelain(dir) }
+    expect(before.commits).toBe(1)
+
+    // A read-only grant. This is what `commit-context` declares, and it is the
+    // interesting case: the skill can see the repository and must not change it.
+    const dispatcher = new ToolDispatcher({
+      tools: gitToolDescriptors({ events, runId: 'git-gate-run' }),
+      granted: ['git:read'],
+      root: dir,
+      events,
+      runId: 'git-gate-run',
+      skill: 'commit-context',
+    })
+
+    // The read side is genuinely reachable, so this is not a blanket denial.
+    const status = await dispatcher.call('git-status')
+    expect(status.ok, status.output).toBe(true)
+    expect(status.output).toContain('a.ts')
+
+    // Two real attempts to change the repository.
+    const staged = await dispatcher.call('git-stage', { paths: ['a.ts'] })
+    const committed = await dispatcher.call('git-commit', { message: FORBIDDEN_MESSAGE })
+
+    // ── THE ASSERTIONS THAT MAKE THE GATE BITE ─────────────────────────────
+    // Effect first, deliberately, and before anything about denials or events: a
+    // `tool_denied` record proves a decision was made, an unchanged `git log`
+    // proves nothing happened. If the gate ever lets these through, THIS is the
+    // failure a reader sees — a commit in the log that must not exist.
+    expect(git(dir, 'log', '--oneline')).not.toContain(FORBIDDEN_MESSAGE)
+    expect(commitCount(dir)).toBe(before.commits)
+    expect(porcelain(dir)).toBe(before.porcelain)
+    // Nothing reached the index either: `a.ts` is still only modified on disk.
+    expect(porcelain(dir)).toContain(' M a.ts')
+
+    // And the refusals were capability denials, not unknown tools or tool errors.
+    for (const result of [staged, committed]) {
+      expect(result.denied, result.output).toBe('capability_denied')
+      expect(result.missing).toBe('git:write')
+      // The skill can act on the refusal instead of dying on it.
+      expect(result.output).toContain('git:write')
+    }
+
+    const emitted = await events.readAll()
+    const denied = emitted.filter((event) => event.kind === 'tool_denied')
+    expect(denied).toHaveLength(2)
+    expect(denied.map((event) => event.payload.name)).toEqual(['git-stage', 'git-commit'])
+    expect(denied.every((event) => event.payload.missing === 'git:write')).toBe(true)
+    // And `GitTool`'s own mutation record never fired, because `run` was never
+    // reached — the gate is in front of the tool, not inside it.
+    expect(emitted.some((event) => event.payload.tool === 'git')).toBe(false)
+  })
+
+  it('commits for real when git:write IS granted, so the denial above means something', async () => {
+    const dir = await repoWithDirtyFile()
+    const events = new MemoryEventStore({ secrets: [] })
+    const before = commitCount(dir)
+
+    const dispatcher = new ToolDispatcher({
+      tools: gitToolDescriptors({ events, runId: 'git-write-run' }),
+      granted: ['git:read', 'git:write'],
+      root: dir,
+      events,
+      runId: 'git-write-run',
+      skill: 'trusted',
+    })
+
+    const staged = await dispatcher.call('git-stage', { paths: ['a.ts'] })
+    expect(staged.denied, staged.output).toBeNull()
+    expect(staged.ok).toBe(true)
+
+    const committed = await dispatcher.call('git-commit', { message: 'granted commit' })
+    expect(committed.denied, committed.output).toBeNull()
+    expect(committed.ok).toBe(true)
+
+    expect(commitCount(dir)).toBe(before + 1)
+    expect(git(dir, 'log', '--oneline')).toContain('granted commit')
+    expect(porcelain(dir)).not.toContain('a.ts')
+
+    // Permitted calls, so no denials — and the tool's own mutation record is here
+    // this time, which is what its absence in the previous test was measuring.
+    const emitted = await events.readAll()
+    expect(emitted.some((event) => event.kind === 'tool_denied')).toBe(false)
+    expect(
+      emitted.filter((event) => event.payload.tool === 'git').map((event) => event.payload.action),
+    ).toEqual(['stage', 'commit'])
+  })
+
+  it('offers the read tools to a read-only grant and hides the writing ones', async () => {
+    const dir = await repoWithDirtyFile()
+    const dispatcher = new ToolDispatcher({
+      tools: gitToolDescriptors(),
+      granted: ['git:read'],
+      root: dir,
+    })
+
+    expect(dispatcher.toolNames).toEqual([...GIT_TOOL_NAMES])
+    expect(dispatcher.availableTools.map((tool) => tool.name)).toEqual([
+      'git-branch',
+      'git-diff',
+      'git-status',
+    ])
+    const prompt = describeGrantForPrompt(dispatcher)
+    expect(prompt).toContain('git-status')
+    expect(prompt).not.toContain('git-commit')
   })
 })

@@ -369,19 +369,36 @@ report the gap.
    standalone. Only source-level guards cover it.
 8. **26.3 asks for signed releases.** The deterministic GitHub OIDC provenance path is implemented, but no version-tag workflow has run and no release/attestation verifier output exists. Authenticode and Apple Developer ID/notarization identities are not configured.
 9. Two competing verify directories and two provider surfaces (see above).
-10. **`GitTool` sits outside the capability dispatcher, so the adversarial denial suite bites only on
-    synthetic descriptors.** `packages/core/src/tools/` contains one real tool — `git.ts` — and
-    `GitTool` is not a `ToolDescriptor` with a `requires` field, so it never passes through
-    `ToolDispatcher`'s authorisation. The gate itself is correct and singular (mutation-verified:
-    capability scoping is genuinely enforced), but five of the six adversarial denial paths —
-    network, subprocess, fs read outside the project, and secrets read; all but `fs:write:home` —
-    are proved by "the tool's `run` body was not entered" using descriptors **defined inside the
-    tests**. The only real descriptors behind the gate come from `mcp/host.ts`, and those wrap
-    third-party servers this project has neither audited nor executed. Consequence to state plainly:
-    the gate is verified against synthetic descriptors, and **routing `GitTool` through the
-    dispatcher is the work that would make the adversarial suite bite on a real tool.** Recorded, not
-    fixed: changing `GitTool`'s call path is a behaviour change with no owning task. See
-    `NEED-TO-DO.md` §4.7.
+10. ~~**`GitTool` sits outside the capability dispatcher.**~~ **CLOSED 2026-08-03.**
+    `packages/core/src/tools/gitDescriptors.ts` exposes the same `GitTool` as six real
+    `ToolDescriptor`s behind the one authorisation point: `git-status`, `git-branch` and `git-diff`
+    cost `git:read`; `git-stage`, `git-unstage` and `git-commit` cost `git:write`. They are
+    registered alongside the MCP descriptors in the run dispatcher (`rpc/methods.ts`,
+    `openToolLayerFor`), so there is still exactly one `grants(this.granted, …)` consultation and no
+    second dispatcher.
+
+    **What the adversarial suite now covers.** `capabilities.test.ts` §6 drives a REAL repository
+    built by `git init` and asserts on the repository, not on the log: a run granted only `git:read`
+    calls `git-stage` and `git-commit`, both are refused, and afterwards the commit count is
+    unchanged, `git status --porcelain -b` is byte-identical, and the forbidden message is absent
+    from `git log`. A positive control with `git:write` granted commits for real, so the denial is
+    not a blanket refusal. Mutation-verified: setting `git-stage`/`git-commit` to `requires:
+    'git:read'` fails the effect assertion with `0705832 this commit must never exist` in the log.
+
+    **What is still synthetic.** §3's six escalations (network ×2, subprocess, `fs:read:home`,
+    `fs:write:home`, `secrets:read`) remain descriptors defined inside the test file; only
+    `fs:write:home` leaves evidence on disk there. So the population behind the gate is now: one
+    audited real tool with an effect-level denial proof (git), plus `mcp/host.ts` descriptors that
+    wrap third-party servers this project has neither audited nor executed. The remaining
+    capabilities have no shipped tool behind them because no such tool exists yet.
+
+    **What deliberately did NOT change.** `GitTool`'s public methods stay ungated, and the `git-*`
+    RPC methods, `GitPanel`, `phase3-gate` and `phase12-acceptance-gate` were not touched — the
+    Source Control panel is a human pressing Stage, and a capability grant describes what a *skill*
+    was permitted to do autonomously. Two doors, one implementation, a lock only on the agent's.
+    `DEFAULT_CAPABILITIES` was NOT widened to include `git:read`: four existing assertions pin it to
+    exactly `['fs:read:project']`, so `git:read` is granted the way it always was — by a skill
+    declaring it (`commit-context` does).
 
 ---
 

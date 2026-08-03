@@ -1581,30 +1581,45 @@ Every remaining fixture panel is untested, which means replacing a fixture with 
 safety net. The `GitPanel.test.tsx` pattern — real repo in a temp dir, real git, plus a source-level
 assertion that the fixture is gone — is the pattern to copy. Apply it to every panel you convert.
 
-### 4.7 `GitTool` sits outside the capability dispatcher
+### 4.7 `GitTool` sits outside the capability dispatcher — **CLOSED 2026-08-03**
 
-**Recorded, deliberately not fixed.** `packages/core/src/tools/` contains exactly one real tool,
-`git.ts`, and `GitTool` is **not** a `ToolDescriptor` with a `requires` field. It is a class the Git
-panel calls through the client seam, so it never passes through `ToolDispatcher`'s authorisation.
+**Done.** `packages/core/src/tools/gitDescriptors.ts` exposes the same `GitTool` as six real
+`ToolDescriptor`s, from the vocabulary that already existed (`git:read` and `git:write` were both
+already in `CAPABILITIES`, both already described, and `commit-context` already declares `git:read` —
+nothing was invented):
 
-The gate is not the problem. Capability scoping is singular and mutation-verified: authorisation
-happens in one place (`capabilities/guard.ts`), `mcp/` produces descriptors and explicitly never
-authorises them, and breaking the check fails tests. The problem is the **population of real tools
-behind the gate**:
+| Tool | `requires` |
+|---|---|
+| `git-status`, `git-branch`, `git-diff` | `git:read` |
+| `git-stage`, `git-unstage`, `git-commit` | `git:write` |
 
-- Five of the six adversarial denial paths — network, subprocess, fs read outside the project, and
-  secrets read; every one except `fs:write:home` — are proved by "the tool's `run` body was not
-  entered", using `ToolDescriptor`s **defined inside the tests**.
-- The only production descriptors are minted by `mcp/host.ts` for catalogued third-party servers,
-  which this project has neither audited nor executed.
-- So the consequence, stated plainly: **the gate is verified against synthetic descriptors.** Routing
-  `GitTool` through the dispatcher — a `git:read` descriptor for status/diff and a distinct one for
-  stage/unstage/commit — is the work that would make the adversarial suite bite on a real tool.
+They are registered alongside the MCP descriptors in the run dispatcher (`rpc/methods.ts`,
+`openToolLayerFor`). There is **no second dispatcher and no second grant check**: nothing in
+`gitDescriptors.ts` reads `context.granted`, and `guard.ts` still contains exactly one
+`grants(this.granted, …)` call, which its own test pins.
 
-**Do not change `GitTool` on a whim.** Moving it behind the dispatcher changes the Git panel's call
-path and its failure modes, which is a behaviour change with no owning task. Propose the task, decide
-which capabilities a read versus a mutation costs, then do it — and expect the adversarial tests to
-be rewritten against the real descriptor rather than a test-local one.
+**The adversarial suite now bites on a shipped tool.** `capabilities.test.ts` §6 builds a real
+repository with `git init`, grants only `git:read`, calls `git-stage` and `git-commit`, and asserts on
+the REPOSITORY: commit count unchanged, `git status --porcelain -b` byte-identical, forbidden message
+absent from `git log`, `a.ts` still only modified on disk. A positive control granted `git:write`
+commits for real, so the denial is not a blanket refusal. Mutation evidence: with
+`git-stage`/`git-commit` set to `requires: 'git:read'`, the effect assertion fails with
+`0705832 this commit must never exist` in the log.
+
+**What is still synthetic, stated plainly.** §3's six escalations (network ×2, subprocess,
+`fs:read:home`, `fs:write:home`, `secrets:read`) are still `ToolDescriptor`s defined inside the test
+file, and only `fs:write:home` leaves evidence on disk there. The population behind the gate is now
+one audited real tool with an effect-level denial proof, plus `mcp/host.ts` descriptors wrapping
+third-party servers this project has neither audited nor executed. Those capabilities have no shipped
+tool behind them because no such tool exists yet — `browser`, `terminal` and the rest are later
+phases.
+
+**What was deliberately left alone.** `GitTool`'s public methods are unchanged and ungated, so the
+`git-*` RPC methods, `GitPanel`, `phase3-gate` and `phase12-acceptance-gate` needed no change at all:
+the Source Control panel is a human pressing Stage, and a capability grant describes what a *skill*
+was permitted to do autonomously. Two doors, one implementation, a lock only on the agent's.
+`DEFAULT_CAPABILITIES` was **not** widened to include `git:read` — four existing assertions pin it to
+exactly `['fs:read:project']`, and widening it would have meant editing tests to make new code pass.
 
 ---
 

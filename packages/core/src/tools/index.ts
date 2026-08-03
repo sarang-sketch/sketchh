@@ -20,3 +20,9 @@ export type {
   GitStatusResult,
   GitToolOptions,
 } from './git.js'
+
+// The same tool, as descriptors an agent's grant is checked against. `GitTool`'s
+// methods stay public for the Source Control panel, which is a human pressing a
+// button; these are the agent-facing door, and it has a lock.
+export { GIT_TOOL_NAMES, gitToolDescriptors } from './gitDescriptors.js'
+export type { GitToolDescriptorOptions, GitToolName } from './gitDescriptors.js'
