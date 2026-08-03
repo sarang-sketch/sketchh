@@ -1,7 +1,7 @@
 # NEED TO DO — Sketch, from here to done
 
 **Audience:** the developer who is going to write this code.
-**Status date:** task 12.4 complete at `ff99c43`; the living log distinguishes historical snapshots from current phase truth, covers every spec decision, and reports reproducible actionable-leaf progress. **79 of 82 actionable leaves are complete; only evidence-gated 12.1–12.3 remain open.**
+**Status date:** current checkpoint `03a1ab3`; task 12.4 completed at `ff99c43`. The living log distinguishes historical snapshots from current phase truth, covers every spec decision, and reports reproducible actionable-leaf progress. **79 of 82 actionable leaves are complete; only evidence-gated 12.1–12.3 remain open.**
 **Authority:** `.kiro/specs/sketch-engineering-os/{requirements,design,tasks}.md` are the contract.
 This file is the working plan on top of them. Where this file and the spec disagree, the spec wins
 and you should fix this file.
@@ -76,7 +76,7 @@ whole suite order-dependent.
 | The symlink containment test skips on Windows without Developer Mode | It prints `SKIPPED …` and returns. It does not pass vacuously. Do not read a skip as a pass. |
 | PowerShell swallows interleaved `Write-Output` when piped through `Select-String` | Run each check as its own invocation. Read each exit code. Do not trust a combined transcript. |
 | PowerShell: `&&` is not a command separator, and `` `n `` inside **single** quotes is a literal backtick-n | Use `;`. For inserted newlines use a double-quoted string or `fs` tooling — a literal `` `n `` written into `packages/core/package.json` during a Phase 5 mutation run made it unparseable, and the failure surfaced as "Failed to load PostCSS config", which points nowhere near the cause. |
-| `packages/core/test/cli.test.ts` uses `describe.skip` when `dist/cli.js` is absent | 20 tests vanish silently if you test without building. **Always `npm run build` before `npm test`.** |
+| Missing `packages/core/dist/cli.js` at CLI test startup | Since `03a1ab3`, the suite throws `CLI BUILD PRECONDITION FAILED: ... real-pipe protocol coverage must not be skipped.` instead of silently removing 20 real-pipe tests. **Still always run `npm run build` before `npm test`**: the tests intentionally exercise the generated CLI artifact. |
 | Sub-agent dispatch fails on large prompts | Keep briefs compact. After any failed dispatch, run `git status` — partial work has landed twice. |
 
 ### 0.4 Talk about the work accurately
@@ -98,13 +98,14 @@ the allowlist.** A test that needs a remote host is a finding to report.
 
 ## 1. Where the project actually stands
 
-**Status date: task 12.4 complete at `ff99c43`; only evidence-gated tasks 12.1–12.3 remain open.
-79 of 82 actionable leaves are complete.** `tasks.md` has 96 raw checkbox rows: 83 leaves and 13
-phase summaries. Superseded leaf 4.3 is excluded, leaving 82 actionable leaves; the normalized raw
-state is 91 complete, three evidence-gated leaves, one superseded row, and one open Phase 12 summary.
-Current independent validation is build 0, typecheck 0, core 1,059 tests / 55 files, and desktop 508
-tests / 54 files, with both suites passing with `SKETCH_FAKE_PROVIDER` unset and set to `1`. The
-Windows symlink branch printed `SKIPPED` and is not claimed. Task 13.5 remains the documentation-only
+**Status date: current checkpoint `03a1ab3`; task 12.4 completed at `ff99c43`; only
+evidence-gated tasks 12.1–12.3 remain open. 79 of 82 actionable leaves are complete.** `tasks.md` has
+96 raw checkbox rows: 83 leaves and 13 phase summaries. Superseded leaf 4.3 is excluded, leaving 82
+actionable leaves; the normalized raw state is 91 complete, three evidence-gated leaves, one
+superseded row, and one open Phase 12 summary. Current independent validation is build 0, typecheck
+0, core 1,059 tests / 55 files, and desktop 508 tests / 54 files, with both suites passing with
+`SKETCH_FAKE_PROVIDER` unset and set to `1`. The Windows symlink branch printed `SKIPPED` and is not
+claimed. Task 13.5 remains the documentation-only
 historical reconciliation checkpoint; task 12.4 subsequently supplied genuine licensed third-party
 Git blob bytes and completed Requirement 26.4 without claiming organic skill quality or real-provider
 evidence. Task 12.6 remains scripted offline harness evidence, not real-provider capability evidence.
@@ -152,9 +153,9 @@ d759311  phase 4 complete — self-hosted fonts, README zero-dollar recipe, gate
 
 **Historical cold-gate checkpoint:** an earlier cold reinstall recorded core 1,028 tests / 51
 files and desktop 481 tests / 48 files, with build, typecheck, and `bench:check` green in both
-provider environments. Later documentation-task validation records the current 1,036 / 54 core and
-503 / 54 desktop counts above. The cold install's cache/network conditions were not instrumented, so
-neither checkpoint is proof of an offline install.
+provider environments. The current `03a1ab3` validation records 1,059 / 55 core and 508 / 54 desktop
+as stated above. The cold install's cache/network conditions were not instrumented, so neither
+checkpoint is proof of an offline install.
 
 **Previously recurring Windows timing issue, now stabilized:** `verify-live.test.ts` binds a real
 port. Commit `012e109` increased only the post-kill settle allowance from 300 ms to 1,000 ms; the
@@ -1985,7 +1986,7 @@ Every one of these has already happened here, or is one commit away. Read it bef
 | T1 | A cancelled or failed agent leaves partial work | A guard call gets deleted and nobody notices. **This happened**: `sanitizePayload` vanished from `emit` and keys hit disk. | `git status` after every interruption. Commit at every green point. |
 | T2 | Warm `dist` hides a broken build | Tests pass against a stale artifact. **This happened** at the Phase 1 gate, and **again at `6eced6d`**: the `EventKind` mutation (reverting the repo-graph emitter to `context_loaded`) *passed* the desktop consumer-side gate, because desktop resolves `@sketch/core` through `dist/`. A stale artifact shows you a green gate over a broken contract. | Cold rebuild at every phase gate. Build before **every** desktop run, not just at gates — for that suite `npm run build` is load-bearing, not a formality. |
 | T3 | A test asserts against ambient environment it never set | Suite becomes order-dependent and passes for the wrong reason. **This happened** to four provider tests. | Every test sets the env it depends on. Run with `SKETCH_FAKE_PROVIDER` set **and** unset. |
-| T4 | `describe.skip` when a precondition is missing | 20 CLI tests vanish silently if you forget to build. | Always build before test. Consider failing loudly instead of skipping. |
+| T4 | ~~`describe.skip` when a precondition is missing~~ **CLOSED at `03a1ab3`** | Deleting generated `packages/core/dist` now fails the focused CLI suite before collection: 1 suite failed / 0 tests with `CLI BUILD PRECONDITION FAILED: ... real-pipe protocol coverage must not be skipped.` Rebuilding restores 38/38. | Always build before test. The loud failure prevents false green coverage; it does not make the generated artifact optional. |
 | T5 | A second cache for file content | Two sources of truth for what a file contains diverge, and the user loses work. | `AppState.files[path].content` is the only owner. Two functions cross the Monaco boundary. Do not add a third. |
 | T6 | Containment logic copied to a second place | One copy gets fixed, the other stays vulnerable. | One `resolve_within` in `command_policy.rs`. A test asserts exactly one `is_within` and one `has_parent_escape`. |
 | T7 | A caller-supplied path becomes a CLI flag | `git diff --output=/tmp/pwned` writes anywhere; a `file` starting with `-` becomes an option. **This was a real finding.** | Contain the path, then `--` to terminate option parsing. Both. |
@@ -2005,12 +2006,12 @@ Every one of these has already happened here, or is one commit away. Read it bef
 | T21 | A guard written against a documented signature the runtime does not use | `net.connect` and `http`'s agent call `Socket.prototype.connect` with a single array `[options, listener]`, so a signature-correct egress guard passes every `node:http` request and Node's `fetch`. **This happened** — closed by `7ce5a58`. | Prove the guard by breaking it against the real call path, not by reading the docs. A convention is not an enforcement. |
 | T22 | Cross-platform EOL conversion changes signed or vendored digests | A Windows CRLF checkout changed retained third-party bytes and produced a digest that would not reproduce from the canonical Git blobs. **This happened** during task 12.4 and was fixed before `ff99c43`. | Retain and hash canonical raw Git blob bytes; use only narrow `eol=lf` attributes for signed/vendor text; assert exact byte lengths and mutate a retained byte to prove the gate fails. |
 
-**Which of these are actually proven.** Twenty guards have been broken, watched to fail, restored,
-and watched to pass, and every one of them asserts on an effect. The ledger — the per-guard failing
-test counts, the exact failure signatures, the three holes closed (`7ce5a58`, `17608ce`, `02ee9c4`),
-the caveats, and the explicit not-verified list — lives in
+**Which of these are actually proven.** Twenty-one guards have been broken, watched to fail,
+restored, and watched to pass, and every one of them asserts on an effect. The ledger — the
+per-guard failing test counts, the exact failure signatures, the three holes closed (`7ce5a58`,
+`17608ce`, `02ee9c4`), the caveats, and the explicit not-verified list — lives in
 `.kiro/specs/sketch-engineering-os/HANDOFF.md` § "Mutation ledger — proven vs. assumed", current as of
-`ff99c43`. Anything absent from that table is assumed, not proven.
+`03a1ab3`. Anything absent from that table is assumed, not proven.
 
 ---
 
@@ -2055,7 +2056,7 @@ the caveats, and the explicit not-verified list — lives in
 ## 9. Start here
 
 ```powershell
-# 1. Confirm the committed task-12.4 checkpoint at ff99c43 and inspect the docs-only tree.
+# 1. Confirm the current checkpoint at 03a1ab3 and inspect the docs-only tree.
 git status --short
 git log --oneline -3
 

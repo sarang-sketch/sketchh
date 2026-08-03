@@ -34,12 +34,18 @@ interface exists and no real implementation does.
 - **Phase gate sections are immutable checkpoint evidence.** A seam or test count in “Real vs seam
   after Phase N” describes that gate, even when a later phase implemented the seam.
 - **Current progress counts actionable leaves only.** `tasks.md` has 96 checkbox rows: 83 leaves and
-  13 phase-summary rows. Superseded leaf 4.3 is excluded, leaving 82 actionable leaves. After task
-  12.4 completed at `ff99c43`, 79 are complete and three—12.1 through 12.3—remain evidence-gated.
-  The normalized raw row state is 91 complete, 3 evidence-gated, 1 superseded, and 1 open Phase 12
-  summary.
+  13 phase-summary rows. Superseded leaf 4.3 is excluded, leaving 82 actionable leaves. At the
+  current `03a1ab3` checkpoint, 79 are complete and three—12.1 through 12.3—remain evidence-gated;
+  task 12.4 completed earlier at `ff99c43`. The normalized raw row state is 91 complete, 3
+  evidence-gated, 1 superseded, and 1 open Phase 12 summary.
 - Historical `/96` counters below are retained as legacy checkpoint text; they were manually
   maintained and are not the current counting convention.
+
+### Current maintenance log
+
+| Date | Commit | Result |
+|---|---|---|
+| 2026-08-03 | `03a1ab3` | `cli.test.ts` no longer silently skips 20 real-pipe tests when `packages/core/dist/cli.js` is absent. Deleting generated `packages/core/dist` made the focused CLI suite fail nonzero before collection (1 suite / 0 tests) with `CLI BUILD PRECONDITION FAILED: ... real-pipe protocol coverage must not be skipped.`; rebuilding restored 38/38. Full validation: build/typecheck exit 0; core 1,059/55 and desktop 508/54 pass with `SKETCH_FAKE_PROVIDER` unset and `1`. The Windows symlink branch printed `SKIPPED` and is not claimed. Build before test remains required. Mutation ledger guard 21 records the missing-artifact process effect. |
 
 ---
 

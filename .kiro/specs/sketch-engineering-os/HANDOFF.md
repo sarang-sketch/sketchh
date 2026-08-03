@@ -35,11 +35,12 @@ Phases 1–11 and 13 are complete; Phase 12 remains open only for 12.1–12.3.
 Task 13.5 reconciled the living ledger at its historical checkpoint: Milestones 1–5 are labelled
 historical snapshots, phase-gate sections remain immutable checkpoint evidence, all ten design
 conflicts and all five design-authority decisions are represented in the Decision Log, and old
-`/96` figures are explicitly legacy counters. Task 12.4 subsequently completed at `ff99c43`. Current
-independent source verification is **build 0, typecheck 0, core 1,059 tests / 55 files, and desktop
-508 tests / 54 files**, with both suites passing with `SKETCH_FAKE_PROVIDER` unset and set to `1`.
-Tasks 12.1–12.3 remain blocked on native artifacts, installed-app no-egress/Ollama evidence, and a
-verified real tag release respectively.
+`/96` figures are explicitly legacy counters. Task 12.4 subsequently completed at `ff99c43`; the
+current checkpoint is `03a1ab3`. Current independent source verification is **build 0, typecheck 0,
+core 1,059 tests / 55 files, and desktop 508 tests / 54 files**, with both suites passing with
+`SKETCH_FAKE_PROVIDER` unset and set to `1`. The Windows symlink branch printed `SKIPPED` and is not
+claimed. Tasks 12.1–12.3 remain blocked on native artifacts, installed-app no-egress/Ollama evidence,
+and a verified real tag release respectively.
 
 Task 12.1 now has native Windows/NSIS, macOS/DMG, and Ubuntu 22.04/AppImage jobs. Each rebuilds and
 smoke-tests its own host-native sidecar, packages with Tauri, enforces a strict `<100,000,000-byte`
@@ -193,7 +194,8 @@ Seven guards were mutation-verified at this gate — see the Phase 5 gate result
 ## Git state
 
 ```
-ff99c43  sketch: phase 12 task 12.4 - prove third-party skill flywheel          <- HEAD
+03a1ab3  test: fail loudly when CLI build artifact is missing                 <- HEAD
+ff99c43  sketch: phase 12 task 12.4 - prove third-party skill flywheel
 437d004  sketch: phase 13 task 13.4 - reconcile product metrics
 8d45899  sketch: phase 13 task 13.3 - reconcile architecture contracts
 27f1e2f  sketch: phase 13 task 13.2 - reconcile marketplace scope
@@ -388,8 +390,12 @@ matching fails nothing on its own (`packages/desktop/src/eventKinds-gate.test.ts
    fails the build if source starts using that latitude, but the policy itself would not stop it.
 5. **Sidecar is 91 MB** (gitignored, rebuilt by `npm run build:sidecar`); `prd.md` targets a <100 MB
    installer.
-6. **`cli.test.ts` uses `describe.skip`** when `dist/cli.js` is absent, so 20 tests vanish silently
-   if someone tests without building.
+6. ~~**`cli.test.ts` uses `describe.skip` when `dist/cli.js` is absent, so 20 tests vanish
+   silently.**~~ **CLOSED at `03a1ab3`.** Missing `dist/cli.js` now aborts the suite with
+   `CLI BUILD PRECONDITION FAILED: ... real-pipe protocol coverage must not be skipped.` The
+   precondition mutation (delete generated `packages/core/dist`) failed the focused CLI run as
+   1 suite / 0 tests with that named cause; rebuilding restored 38/38. Build before test remains a
+   requirement because these are real-pipe tests over the generated CLI, not source-only tests.
 7. **`os_credentials.rs` unit tests are unverified on this machine** — the module cannot be compiled
    standalone. Only source-level guards cover it.
 8. **26.3 asks for signed releases.** The deterministic GitHub OIDC provenance path is implemented, but no version-tag workflow has run and no release/attestation verifier output exists. Authenticode and Apple Developer ID/notarization identities are not configured.
@@ -496,10 +502,10 @@ and record both. Run the `sanitizePayload` mutation at **every** gate — that i
 actually happened.
 ---
 
-## Mutation ledger — proven vs. assumed (current as of `ff99c43`)
+## Mutation ledger — proven vs. assumed (current as of `03a1ab3`)
 
 This is the running record of every guard that has been broken, watched to fail, restored, and
-watched to pass green — **twenty** of them. It says which guards are **mutation-proven** and which
+watched to pass green — **twenty-one** of them. It says which guards are **mutation-proven** and which
 of those assert on an **EFFECT** (state on disk, a call count, a computed boolean, a process outcome,
 rendered DOM) rather than on a **STRING** (a status label, a log message). Anything not in the table
 has not been mutation-tested; treat it as assumed. Read with `NEED-TO-DO.md` §7 (traps) and the
@@ -509,10 +515,10 @@ verification ritual above.
 ones — the numbers are cited from `NEED-TO-DO.md` §7 and from in-test comments. If a commit widens an
 existing guard rather than adding one, extend that row instead of adding a duplicate. Then move the
 hash in this heading, the tree line below, and the count in the paragraph above. Rows 1–16 come from
-the dedicated verification session that ended at `f2e2fd4`; rows 17–20 landed with the commits named
+the dedicated verification session that ended at `f2e2fd4`; rows 17–21 landed with the commits named
 in their rows.
 
-Tree at the time: `ff99c43`, clean — build and typecheck exit 0; core 1,059 tests / 55 files and
+Tree at the time: `03a1ab3`, clean — build and typecheck exit 0; core 1,059 tests / 55 files and
 desktop 508 / 54 pass with `SKETCH_FAKE_PROVIDER` unset and set to `1`. The Windows symlink branch
 printed `SKIPPED` and is not claimed as passing coverage.
 
@@ -540,6 +546,7 @@ printed `SKIPPED` and is not claimed as passing coverage.
 | 18 | One lexical match dialect, two callers (`e4e8b34`, converging the two search implementations) | shift `matchSpans`'s span offset by one | 4 tests in **both packages at once** — 3 in `packages/core/test/project-search.test.ts`, 1 in `packages/desktop/src/panels/ide/SearchPanel.test.tsx` | **EFFECT** (rendered highlight offsets and ranked hits) |
 | 19 | Consumer-side rendering of every `EventKind` (`6eced6d`, six explicit kinds) | revert the repo-graph emitter to `context_loaded` | `packages/desktop/src/eventKinds-gate.test.tsx`: `Unable to find an element with the text: repo_indexed` | **EFFECT** (rendered DOM) |
 | 20 | Exact retained third-party Git blob bytes and complete MIT license (`ff99c43`) | append ` MUTATION` to the retained LICENSE copyright | focused third-party flywheel gate failed: `LICENSE: expected 1076 to be 1067`; restore passed 1/1 | **EFFECT** (retained vendor/license bytes) |
+| 21 | Real-pipe CLI coverage requires the generated CLI artifact (`03a1ab3`) | delete generated `packages/core/dist` before the focused CLI suite | focused suite exited nonzero before collection: 1 suite failed / 0 tests, caused by `CLI BUILD PRECONDITION FAILED: ... real-pipe protocol coverage must not be skipped.`; rebuild restored 38/38 | **EFFECT** (suite exit nonzero / missing artifact) |
 
 Guard 5's subtleties, both load-bearing: the *coarse* mutation fails 12 tests, but the subtler one
 (an empty grant treated as unrestricted) fails only **2**, and the structural "exactly one
