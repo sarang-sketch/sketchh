@@ -193,8 +193,12 @@ Seven guards were mutation-verified at this gate — see the Phase 5 gate result
 
 ## Git state
 
+The list below starts at the latest validated implementation checkpoint. Later documentation-only
+ledger commits are intentionally omitted so this handoff does not embed a self-invalidating `HEAD`
+claim.
+
 ```
-03a1ab3  test: fail loudly when CLI build artifact is missing                 <- HEAD
+03a1ab3  test: fail loudly when CLI build artifact is missing
 ff99c43  sketch: phase 12 task 12.4 - prove third-party skill flywheel
 437d004  sketch: phase 13 task 13.4 - reconcile product metrics
 8d45899  sketch: phase 13 task 13.3 - reconcile architecture contracts
