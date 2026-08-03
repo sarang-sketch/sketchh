@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "name": "dispatching-parallel-agents",
+  "upstream": {
+    "repository": "https://github.com/dotcomjack/parallel-agents-skill.git",
+    "immutableUrl": "https://github.com/dotcomjack/parallel-agents-skill/tree/f26435da141df656eaed219dc23da776f46d9320",
+    "commit": "f26435da141df656eaed219dc23da776f46d9320",
+    "commitDate": "2026-05-22T17:14:02-04:00",
+    "retainedBytes": "Exact Git blob bytes from the pinned commit",
+    "lineEndings": "LF enforced by root .gitattributes"
+  },
+  "acquisitionDate": "2026-08-03",
+  "directoryDigest": "sha256:af752a5b04e93791b1635d04fd3ab4272facc2d2ae5aea1fe84411ce9331fb3e",
+  "files": [
+    {
+      "path": "LICENSE",
+      "gitBlob": "4392767adbc5c1aa4d445f2ac00475b583605db7",
+      "sha256": "sha256:b4b18bd693274d10c45410cd5d0fc970c1c95270d5d35ddde118d9a768daaf2c",
+      "bytes": 1067
+    },
+    {
+      "path": "README.md",
+      "gitBlob": "19e749f9cf3c14037bfad54ac16d88ac1ac9a0a1",
+      "sha256": "sha256:c53dff251e717332d368841771974cf2275596301682e88ba76f306de5af6894",
+      "bytes": 3175
+    },
+    {
+      "path": "SKILL.md",
+      "gitBlob": "d9b4977027203df15c62f5fbceb6289e4dc77d82",
+      "sha256": "sha256:88f1e1fe1c2bdbf752b42f8adbbbf2df619b28b7adbada75d3aeab5397d2baab",
+      "bytes": 6505
+    }
+  ],
+  "license": {
+    "spdx": "MIT",
+    "file": "LICENSE",
+    "identity": "MIT License; Copyright (c) 2026 dotcomjack"
+  },
+  "review": {
+    "date": "2026-08-03",
+    "decision": "approved",
+    "rationale": "The retained repository tree is instruction-only: two Markdown documents and MIT license text. It contains no executable files, installable dependencies, network client code, embedded secrets, tool implementation, or declared Sketch capabilities. README command examples are documentation only and were not executed during acquisition or review.",
+    "classification": "instruction-only",
+    "executables": false,
+    "network": false,
+    "secrets": false,
+    "capabilities": []
+  }
+}

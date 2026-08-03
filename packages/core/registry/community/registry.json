@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "registry": "sketch-community-reviewed",
+  "distribution": "open",
+  "entries": [
+    {
+      "name": "dispatching-parallel-agents",
+      "version": "1.0.0+f26435d",
+      "pack": "engineering",
+      "summary": "Third-party guidance for dispatching independent agent work concurrently and verifying the resulting diffs.",
+      "path": "skills/dispatching-parallel-agents",
+      "digest": "sha256:af752a5b04e93791b1635d04fd3ab4272facc2d2ae5aea1fe84411ce9331fb3e",
+      "capabilities": [],
+      "source": "https://github.com/dotcomjack/parallel-agents-skill/tree/f26435da141df656eaed219dc23da776f46d9320",
+      "license": "MIT",
+      "review": {
+        "by": "Sketch third-party skill review",
+        "date": "2026-08-03",
+        "decision": "approved",
+        "notes": "Reviewed at the pinned commit: instruction-only Markdown and MIT license text; no executables, network access, secrets, or requested capabilities.",
+        "digest": "sha256:af752a5b04e93791b1635d04fd3ab4272facc2d2ae5aea1fe84411ce9331fb3e"
+      },
+      "files": [
+        {
+          "path": "LICENSE",
+          "digest": "sha256:b4b18bd693274d10c45410cd5d0fc970c1c95270d5d35ddde118d9a768daaf2c",
+          "bytes": 1067
+        },
+        {
+          "path": "README.md",
+          "digest": "sha256:c53dff251e717332d368841771974cf2275596301682e88ba76f306de5af6894",
+          "bytes": 3175
+        },
+        {
+          "path": "SKILL.md",
+          "digest": "sha256:88f1e1fe1c2bdbf752b42f8adbbbf2df619b28b7adbada75d3aeab5397d2baab",
+          "bytes": 6505
+        }
+      ]
+    }
+  ]
+}
