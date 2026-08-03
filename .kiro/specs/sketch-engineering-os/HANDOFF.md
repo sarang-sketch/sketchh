@@ -488,17 +488,24 @@ and record both. Run the `sanitizePayload` mutation at **every** gate — that i
 actually happened.
 ---
 
-## Mutation ledger — proven vs. assumed (verification session ending at `f2e2fd4`)
+## Mutation ledger — proven vs. assumed (current as of `6eced6d`)
 
-This is the record of a dedicated verification session: sixteen guards were each broken, watched to
-fail, restored, and watched to pass green. It says which guards are **mutation-proven** and which of
-those assert on an **EFFECT** (state on disk, a call count, a computed boolean, a process outcome)
-rather than on a **STRING** (a status label, a log message). Anything not in the table has not been
-mutation-tested; treat it as assumed. Read with `NEED-TO-DO.md` §7 (traps) and the verification
-ritual above.
+This is the running record of every guard that has been broken, watched to fail, restored, and
+watched to pass green — **nineteen** of them. It says which guards are **mutation-proven** and which
+of those assert on an **EFFECT** (state on disk, a call count, a computed boolean, a process outcome,
+rendered DOM) rather than on a **STRING** (a status label, a log message). Anything not in the table
+has not been mutation-tested; treat it as assumed. Read with `NEED-TO-DO.md` §7 (traps) and the
+verification ritual above.
 
-Tree at the time: `f2e2fd4`, clean, cold-verified — core 1,055 tests / 55 files, desktop 503 / 54,
-typecheck and build clean.
+**How to keep this current.** Append new guards as new numbered rows and never renumber existing
+ones — the numbers are cited from `NEED-TO-DO.md` §7 and from in-test comments. If a commit widens an
+existing guard rather than adding one, extend that row instead of adding a duplicate. Then move the
+hash in this heading, the tree line below, and the count in the paragraph above. Rows 1–16 come from
+the dedicated verification session that ended at `f2e2fd4`; rows 17–19 landed with the commits named
+in their rows.
+
+Tree at the time: `6eced6d`, clean — core 1,058 tests / 54 files, desktop 508 / 54, typecheck and
+build clean.
 
 ### Mutation-proven guards
 
@@ -519,14 +526,46 @@ typecheck and build clean.
 | 13 | MCP hang-and-continue | remove the request deadline | 6 tests, driven by **real child processes that genuinely never answer** | **EFFECT** — see caveat |
 | 14 | Live environment feedback | `ok: false` → `ok: true` | 4 tests / 2 files against **real HTTP servers on real ports** | **EFFECT** — see caveat, the `status` strings are not the guard |
 | 15 | Response cache makes no second call | disable the cache hit | 8 tests / 2 files asserting the **adapter call count** (`expected 3 to be 1`); `phase8-gate` additionally uses an adapter whose `chat` throws if reached | **EFFECT** (call count) |
-| 16 | `GitTool` behind the capability gate | `git-stage`/`git-commit` → `requires: 'git:read'` | 2 tests; a commit that must not exist appears in `git log` | **EFFECT** (real repository state) |
+| 16 | `GitTool` behind the capability gate, **and the widened `DEFAULT_CAPABILITIES`** (`f2e2fd4`, extended by `e355bff`) | (a) `git-stage`/`git-commit` → `requires: 'git:read'`; (b) add `git:write` to `DEFAULT_CAPABILITIES` | (a) 2 tests; (b) the §6 default-path test. Both fail with a commit that must not exist in `git log` — `0705832 …` for (a), `8ca4562 …` for (b) | **EFFECT** (real repository state) |
+| 17 | No `shell: true` anywhere under `packages/core/src`, and every `shell` spawn option spelled literally `false` (`e122bea`, deleting the legacy `verifier/`) | a **NEW** file `src/mutation-probe.ts` containing `spawn(cmd, { shell: true })` | `test/verify-runner.test.ts`: `… Offending sites: mutation-probe.ts: shell: true` | **EFFECT** (source text of the shipped package) |
+| 18 | One lexical match dialect, two callers (`e4e8b34`, converging the two search implementations) | shift `matchSpans`'s span offset by one | 4 tests in **both packages at once** — 3 in `packages/core/test/project-search.test.ts`, 1 in `packages/desktop/src/panels/ide/SearchPanel.test.tsx` | **EFFECT** (rendered highlight offsets and ranked hits) |
+| 19 | Consumer-side rendering of every `EventKind` (`6eced6d`, six explicit kinds) | revert the repo-graph emitter to `context_loaded` | `packages/desktop/src/eventKinds-gate.test.tsx`: `Unable to find an element with the text: repo_indexed` | **EFFECT** (rendered DOM) |
 
 Guard 5's subtleties, both load-bearing: the *coarse* mutation fails 12 tests, but the subtler one
 (an empty grant treated as unrestricted) fails only **2**, and the structural "exactly one
 enforcement point" test does **not** catch a semantic weakening that keeps the call shape intact.
 Do not read that structural test as protection against a weakened check.
 
-### Three holes found and closed this session
+Guard 16's second half proves the *default*, not a hand-written grant: the §6 test takes its grant
+from `capabilitiesForSkill(undefined)`, so it exercises the real default path. A skill declaring
+nothing reads a real `git init` repository and is still refused `git-stage`/`git-commit`, with commit
+count unchanged and `git status --porcelain -b` byte-identical afterwards. The rationale for widening
+the default, and the five (not four) assertions it moved — `mcp.test.ts` held two copies of the
+log-shape assertion — are in open risk 10 above.
+
+Guard 17 is worded as "every `shell` option is `false`", not "never `true`", because a computed value
+is how `true` gets back in without the word appearing. The guard strips comments first so prose about
+the invariant does not self-trip. The mutation is deliberately a **new** file: a guard that only
+watched the known spawn sites would have missed it.
+
+Guard 18 has a second mutation, kept because it proves the *ranking* reads the same dialect and not
+just the panel: breaking the identifier-boundary rule fails the retrieval ranking test. Also record
+what `e4e8b34` **removed**: regex search is gone as a user-facing feature. Matching is literal per
+term with the engine's smart case, and the Search panel has no regex mode, because a second match
+dialect was the defect that commit closed.
+
+Guard 19 exists because nothing else would have caught it. `AgentTimeline`'s `summarize` ends in
+`default: return ''`, so a kind nobody teaches it renders a **blank cell** and no test fails — that is
+how a UI silently stops matching. The gate drives the real core emitters into a real store, renders
+the real Timeline, and asserts each kind's summary text.
+
+**A live trap, not a footnote.** The guard-19 mutation initially **PASSED**, because desktop resolves
+`@sketch/core` through `dist/`. Build before test is load-bearing for the desktop suite, not a
+formality — a stale artifact will show you a green consumer-side gate over a broken contract. This is
+trap **T2** (warm artifact hides breakage) resurfacing in a new place; it is cross-referenced there in
+`NEED-TO-DO.md` §7.
+
+### Three holes found and closed in the `f2e2fd4` session
 
 - **`7ce5a58`** — "nothing has ever run against a real provider" was **conventional**, not enforced.
   It is now a core-suite egress tripwire (`test/setup/noEgress.ts`; see the architecture-decisions
@@ -554,6 +593,10 @@ Do not read that structural test as protection against a weakened check.
   design. An MCP child's own network behaviour is outside it.
 
 ### Not verified — state plainly
+
+**Re-checked at `6eced6d`: nothing on this list changed.** None of `e355bff`, `e122bea`, `e4e8b34` or
+`6eced6d` touched a provider, an installer, a signing identity, the Rust toolchain, the Monaco double
+or the Tauri IPC boundary. The list below stands as written, item for item.
 
 - **No run has ever touched a real hosted provider.** Every `.sketch/bench` artifact carries
   `provider: "synthetic-offline"`, and the tripwire now fails the suite if one does not.

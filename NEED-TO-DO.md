@@ -1979,7 +1979,7 @@ Every one of these has already happened here, or is one commit away. Read it bef
 | # | Trap | How it bites | Defence |
 |---|---|---|---|
 | T1 | A cancelled or failed agent leaves partial work | A guard call gets deleted and nobody notices. **This happened**: `sanitizePayload` vanished from `emit` and keys hit disk. | `git status` after every interruption. Commit at every green point. |
-| T2 | Warm `dist` hides a broken build | Tests pass against a stale artifact. **This happened** at the Phase 1 gate. | Cold rebuild at every phase gate. |
+| T2 | Warm `dist` hides a broken build | Tests pass against a stale artifact. **This happened** at the Phase 1 gate, and **again at `6eced6d`**: the `EventKind` mutation (reverting the repo-graph emitter to `context_loaded`) *passed* the desktop consumer-side gate, because desktop resolves `@sketch/core` through `dist/`. A stale artifact shows you a green gate over a broken contract. | Cold rebuild at every phase gate. Build before **every** desktop run, not just at gates — for that suite `npm run build` is load-bearing, not a formality. |
 | T3 | A test asserts against ambient environment it never set | Suite becomes order-dependent and passes for the wrong reason. **This happened** to four provider tests. | Every test sets the env it depends on. Run with `SKETCH_FAKE_PROVIDER` set **and** unset. |
 | T4 | `describe.skip` when a precondition is missing | 20 CLI tests vanish silently if you forget to build. | Always build before test. Consider failing loudly instead of skipping. |
 | T5 | A second cache for file content | Two sources of truth for what a file contains diverge, and the user loses work. | `AppState.files[path].content` is the only owner. Two functions cross the Monaco boundary. Do not add a third. |
@@ -2000,12 +2000,12 @@ Every one of these has already happened here, or is one commit away. Read it bef
 | T20 | A guard that asserts on a string, not an effect | The mutation changes behaviour while the status label stays identical. Live-feedback's `expect(result.status).toBe('runtime-error')` survives the `ok: false → true` mutation; only the `ok` line catches it. | Assert on effects — bytes on disk, call counts, computed booleans, process outcomes. Treat the effect assertions as load-bearing; never delete them as "redundant" next to a string check. |
 | T21 | A guard written against a documented signature the runtime does not use | `net.connect` and `http`'s agent call `Socket.prototype.connect` with a single array `[options, listener]`, so a signature-correct egress guard passes every `node:http` request and Node's `fetch`. **This happened** — closed by `7ce5a58`. | Prove the guard by breaking it against the real call path, not by reading the docs. A convention is not an enforcement. |
 
-**Which of these are actually proven.** Sixteen guards have been broken, watched to fail, restored,
+**Which of these are actually proven.** Nineteen guards have been broken, watched to fail, restored,
 and watched to pass, and every one of them asserts on an effect. The ledger — the per-guard failing
 test counts, the exact failure signatures, the three holes closed (`7ce5a58`, `17608ce`, `02ee9c4`),
 the caveats, and the explicit not-verified list — lives in
-`.kiro/specs/sketch-engineering-os/HANDOFF.md` § "Mutation ledger — proven vs. assumed". Anything
-absent from that table is assumed, not proven.
+`.kiro/specs/sketch-engineering-os/HANDOFF.md` § "Mutation ledger — proven vs. assumed", current as of
+`6eced6d`. Anything absent from that table is assumed, not proven.
 
 ---
 
