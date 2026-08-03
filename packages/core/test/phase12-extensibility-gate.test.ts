@@ -264,7 +264,15 @@ describe('Phase 12.5 provider and MCP registrations', () => {
       task: { id: 'host-mcp-run', prompt: 'Do not launch an ungranted server.', verify: [] },
     }, ctx)
     expect(logs.some((line) => line.includes(`not starting ${externalMcp.title}`))).toBe(true)
-    expect(logs).toContain('mcp: 0 server(s) open, 0 tool(s) reachable with fs:read:project')
+    // WHY THIS EXPECTED VALUE CHANGED (2026-08-03): the shape was
+    // `0 tool(s) reachable with fs:read:project`. Reading a repository is now
+    // part of the default grant BY EXPLICIT DECISION, so a run with no skills
+    // reaches the engine's three read-only git descriptors. The claim under test
+    // is unchanged: the external server costs `proc:spawn`, was never started,
+    // and `0 server(s) open` still holds.
+    expect(logs).toContain(
+      'mcp: 0 server(s) open, 3 tool(s) reachable with fs:read:project, git:read',
+    )
   })
 
   it('rejects malformed external production registrations before they enter a host', () => {

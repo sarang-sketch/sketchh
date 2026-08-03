@@ -117,7 +117,16 @@ describe('the capability vocabulary (Requirement 11.4)', () => {
     // Absent → the default. A skill that cannot read the project can do nothing,
     // and a useless default pushes publishers into asking for everything.
     expect(capabilitiesForSkill(undefined).capabilities).toEqual(DEFAULT_CAPABILITIES)
-    expect(DEFAULT_CAPABILITIES).toEqual(['fs:read:project'])
+    // WHY THIS EXPECTED VALUE CHANGED (2026-08-03): it pinned exactly
+    // `['fs:read:project']` until reading a repository was made part of the
+    // default grant BY EXPLICIT DECISION — history, branches and diffs are the
+    // same bytes as the files, one revision back. See `vocabulary.ts`'s
+    // "WHAT DEFAULT MEANS" header. This is NOT a loosened assertion: it still
+    // pins the default EXACTLY, and the pin below is the part that matters —
+    // both write capabilities stay out, so the default is still read-only.
+    expect(DEFAULT_CAPABILITIES).toEqual(['fs:read:project', 'git:read'])
+    expect(DEFAULT_CAPABILITIES).not.toContain('git:write')
+    expect(DEFAULT_CAPABILITIES).not.toContain('fs:write:project')
     // Explicitly empty → nothing. The publisher said so; do not hand it reads.
     expect(capabilitiesForSkill([]).capabilities).toEqual([])
   })
@@ -405,9 +414,21 @@ describe('a hostile skill that declares nothing (Requirements 11.4, 11.5)', () =
     const events = new MemoryEventStore({ secrets: [] })
     const { tools, reached } = hostileTools(project, outside)
 
-    // Declares nothing at all → the default grant: read this project, nothing else.
+    // Declares nothing at all → the default grant: read this project and read its
+    // git history, nothing else.
+    //
+    // WHY THIS EXPECTED VALUE CHANGED (2026-08-03): it was `['fs:read:project']`
+    // until `git:read` was added to the default BY EXPLICIT DECISION. The
+    // adversarial suite must still bite, and it does: none of the six escalations
+    // below costs `git:read`, so widening the default cannot permit any of them.
+    // Nothing about this test was relaxed to accommodate the new default — the
+    // two lines after it assert that the widening bought no write access, and
+    // §6 proves on a real repository that `git:write` is still refused.
     const granted = capabilitiesForSkill(undefined).capabilities
-    expect(granted).toEqual(['fs:read:project'])
+    expect(granted).toEqual(['fs:read:project', 'git:read'])
+    expect(granted).not.toContain('git:write')
+    // Not one of the six hostile tools is reachable with the default grant.
+    expect(tools.every((tool) => !granted.includes(tool.requires))).toBe(true)
 
     const dispatcher = new ToolDispatcher({
       tools,
@@ -808,6 +829,80 @@ describeGit(`the real git tool behind the gate${GIT_NOTE}`, () => {
     // And `GitTool`'s own mutation record never fired, because `run` was never
     // reached — the gate is in front of the tool, not inside it.
     expect(emitted.some((event) => event.payload.tool === 'git')).toBe(false)
+  })
+
+  // ── the default grant, at effect level ─────────────────────────────────────
+  //
+  // This test is the proof obligation for the 2026-08-03 decision that put
+  // `git:read` into `DEFAULT_CAPABILITIES`. The test above uses an EXPLICIT
+  // `['git:read']`, so it would keep passing whatever the default happened to be.
+  // This one takes its grant from `capabilitiesForSkill(undefined)` — the real
+  // default path, the one a skill that declares nothing travels — and asserts on
+  // the REPOSITORY: the read succeeded, and the commit count did not move.
+  //
+  // Mutation evidence: adding `git:write` to `DEFAULT_CAPABILITIES` fails this
+  // with `this commit must never exist` in `git log`.
+  it('lets a skill that declares NOTHING read the repo, and still refuses to commit', async () => {
+    const dir = await repoWithDirtyFile()
+    const events = new MemoryEventStore({ secrets: [] })
+    const before = { commits: commitCount(dir), porcelain: porcelain(dir) }
+    expect(before.commits).toBe(1)
+
+    // No `capabilities:` key at all. Not a hand-written list — the default itself.
+    const granted = capabilitiesForSkill(undefined).capabilities
+    expect(granted).toEqual(DEFAULT_CAPABILITIES)
+
+    const dispatcher = new ToolDispatcher({
+      tools: gitToolDescriptors({ events, runId: 'default-grant-run' }),
+      granted,
+      root: dir,
+      events,
+      runId: 'default-grant-run',
+      skill: 'declares-nothing',
+    })
+
+    // 1. THE NEW BEHAVIOUR: the read side works off the default grant alone.
+    const status = await dispatcher.call('git-status')
+    expect(status.ok, status.output).toBe(true)
+    expect(status.output).toContain('a.ts')
+    const branch = await dispatcher.call('git-branch')
+    expect(branch.ok, branch.output).toBe(true)
+
+    // 2. THE BOUNDARY THAT DID NOT MOVE: the write side is still refused.
+    const staged = await dispatcher.call('git-stage', { paths: ['a.ts'] })
+    const committed = await dispatcher.call('git-commit', { message: FORBIDDEN_MESSAGE })
+
+    // Effect first. A denial event says a decision was recorded; an unchanged
+    // commit count says nothing happened. This is the assertion that makes the
+    // widened default safe rather than merely intended.
+    expect(git(dir, 'log', '--oneline')).not.toContain(FORBIDDEN_MESSAGE)
+    expect(commitCount(dir)).toBe(before.commits)
+    expect(porcelain(dir)).toBe(before.porcelain)
+    expect(porcelain(dir)).toContain(' M a.ts')
+
+    for (const result of [staged, committed]) {
+      expect(result.denied, result.output).toBe('capability_denied')
+      expect(result.missing).toBe('git:write')
+    }
+
+    // 3. The read calls really ran and the write calls never did: `GitTool`'s own
+    // mutation record is absent, because `run` was never reached.
+    const emitted = await events.readAll()
+    expect(
+      emitted
+        .filter((event) => event.kind === 'tool_denied')
+        .map((event) => event.payload.name),
+    ).toEqual(['git-stage', 'git-commit'])
+    expect(
+      emitted.filter((event) => event.payload.tool === 'git').map((event) => event.payload.action),
+    ).not.toContain('commit')
+
+    // 4. And the default grant offers only the read tools to the model.
+    expect(dispatcher.availableTools.map((tool) => tool.name)).toEqual([
+      'git-branch',
+      'git-diff',
+      'git-status',
+    ])
   })
 
   it('commits for real when git:write IS granted, so the denial above means something', async () => {

@@ -25,11 +25,25 @@
 // ── WHAT "DEFAULT" MEANS ────────────────────────────────────────────────────
 //
 // A skill with no `capabilities:` key at all gets {@link DEFAULT_CAPABILITIES}:
-// read-only access to the project it was invoked in. Not zero — a skill that
-// cannot read the project cannot do anything at all, and a vocabulary whose
-// default is useless pushes every publisher into asking for everything. Not
-// more, either: reading the project is the one thing every skill needs and the
-// only thing that is safe to assume.
+// read-only access to the project it was invoked in, and read-only access to
+// that project's git history. Not zero — a skill that cannot read the project
+// cannot do anything at all, and a vocabulary whose default is useless pushes
+// every publisher into asking for everything.
+//
+// `git:read` is in that default BY EXPLICIT DECISION (2026-08-03), not by
+// drift. A repository's history, branches and diffs are part of reading the
+// project: the files on disk are one revision of the same bytes, and a skill
+// that may read `a.ts` but may not ask when `a.ts` last changed is drawing a
+// line users do not recognise. The default is still read-only in both halves —
+// `fs:write:project` and `git:write` are both absent, and changing a repository
+// remains something a publisher has to declare and a user has to grant.
+//
+// What that costs, stated plainly: a skill that declares nothing can now run
+// `git-status`, `git-branch` and `git-diff` autonomously, so commit messages,
+// author names and branch names in this repository are inside the default
+// grant. That is the same trust boundary as the file contents already were.
+// `git:write` is not, and `capabilities.test.ts` §6 proves the split on a real
+// repository by counting commits.
 //
 // Validates: Requirements 11.4, 11.5, 10.6
 
@@ -61,8 +75,15 @@ export type Capability = (typeof CAPABILITIES)[number]
 /** A granted set: sorted, deduplicated, every member from {@link CAPABILITIES}. */
 export type CapabilitySet = readonly Capability[]
 
-/** What a skill gets when it declares nothing. See the header. */
-export const DEFAULT_CAPABILITIES: CapabilitySet = Object.freeze(['fs:read:project' as const])
+/**
+ * What a skill gets when it declares nothing: read this project, and read this
+ * project's git history. Read-only on both halves. See the header for why
+ * `git:read` is here and why `git:write` is not.
+ */
+export const DEFAULT_CAPABILITIES: CapabilitySet = Object.freeze([
+  'fs:read:project' as const,
+  'git:read' as const,
+])
 
 /** One line per capability, for a grant dialog. Plain about what it permits. */
 export const CAPABILITY_DESCRIPTIONS: Readonly<Record<Capability, string>> = Object.freeze({

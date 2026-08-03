@@ -1618,8 +1618,26 @@ phases.
 `git-*` RPC methods, `GitPanel`, `phase3-gate` and `phase12-acceptance-gate` needed no change at all:
 the Source Control panel is a human pressing Stage, and a capability grant describes what a *skill*
 was permitted to do autonomously. Two doors, one implementation, a lock only on the agent's.
-`DEFAULT_CAPABILITIES` was **not** widened to include `git:read` — four existing assertions pin it to
-exactly `['fs:read:project']`, and widening it would have meant editing tests to make new code pass.
+
+**`DEFAULT_CAPABILITIES` now includes `git:read` — decided 2026-08-03, one commit later.** The
+closing note above said it had *not* been widened, because five assertions pinned the default to
+exactly `['fs:read:project']` and moving them to make new code pass would have been the wrong reason
+to touch a test. That reason is gone: the user asked for the widening on its own merits, so it is a
+product decision with its own change, not a side effect of the descriptor work. `git:read` sits in
+the default because a repository's history is the same bytes as the files, one revision back, and a
+skill permitted to read `a.ts` but not to ask when `a.ts` last changed is drawing a line users do not
+recognise. The default stays read-only in both halves: `fs:write:project` and `git:write` are both
+still absent.
+
+What it costs, stated plainly: a skill declaring nothing can now run `git-status`, `git-branch` and
+`git-diff` autonomously, so commit messages, author names and branch names are inside the default
+grant. The five updated assertions each carry an in-test comment saying why the expected value moved,
+so a future reader cannot mistake them for tests loosened to accommodate code. The adversarial suite
+still bites: none of §3's six escalations costs `git:read`, so all six are still denied, and a new §6
+test takes its grant from `capabilitiesForSkill(undefined)` — the real default path — reads the
+repository successfully and is still refused `git-stage` and `git-commit`, with the commit count and
+`git status --porcelain -b` unchanged afterwards. Mutation evidence: adding `git:write` to the
+default fails that test with `8ca4562 this commit must never exist` in `git log`.
 
 ---
 
@@ -1765,6 +1783,12 @@ can actually read a grant dialog:
 
 `fs:read:project` · `fs:write:project` · `fs:read:home` · `fs:write:home` · `net:http` ·
 `net:localhost` · `proc:spawn` · `secrets:read` · `git:read` · `git:write`
+
+**As built, the default grant is `fs:read:project` + `git:read`** — what a skill gets when its
+frontmatter has no `capabilities:` key at all. Read-only on both halves; `fs:write:project` and
+`git:write` are never in the default. `capabilities: []`, written deliberately, still means *nothing*.
+`git:read` was added to the default on 2026-08-03 by explicit decision (see §4.7 and the decision-log
+row in `tasks-executed.md`); before that the default was `fs:read:project` alone.
 
 For each community skill, write down the set it *actually* needs by reading its code, and compare
 that to what its frontmatter *claims*. Where they differ, that discrepancy is your best test case —

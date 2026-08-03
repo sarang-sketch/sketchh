@@ -890,9 +890,16 @@ describe('the run method’s tool layer', () => {
     expect(refusal).toContain('curated catalog')
     // The refusal names what IS available, so a caller can correct itself.
     expect(refusal).toContain('filesystem')
-    // And nothing was opened.
+    // And nothing was opened. The three reachable tools are the engine's own
+    // read-only git descriptors, not this server: zero servers are open.
+    //
+    // WHY THIS EXPECTED VALUE CHANGED (2026-08-03): this read
+    // `0 tool(s) reachable with fs:read:project` while the default grant was
+    // exactly that. `git:read` is now part of the default BY EXPLICIT DECISION,
+    // so a run with no skills reaches `git-status`, `git-branch` and `git-diff`.
+    // The assertion this test exists for — `0 server(s) open` — is unchanged.
     expect(logs).toContain(
-      'mcp: 0 server(s) open, 0 tool(s) reachable with fs:read:project',
+      'mcp: 0 server(s) open, 3 tool(s) reachable with fs:read:project, git:read',
     )
   })
 
@@ -900,8 +907,8 @@ describe('the run method’s tool layer', () => {
     const root = await makeRoot()
     const { ctx, logs } = runCtx(root)
 
-    // No skills loaded → the documented default grant: read this project, nothing
-    // else. `terminal` costs proc:spawn and `docker` costs proc:spawn.
+    // No skills loaded → the documented default grant: read this project and read
+    // its git history, nothing else. `terminal` and `docker` both cost proc:spawn.
     await METHODS['run']!(
       { task: TRIVIAL_TASK, root, mcpServers: ['terminal', 'docker'] },
       ctx,
@@ -915,7 +922,16 @@ describe('the run method’s tool layer', () => {
     }
     // THE POINT: not "opened and then refused". Never launched. A process that was
     // never started cannot read a token, open a socket, or install a browser.
-    expect(logs).toContain('mcp: 0 server(s) open, 0 tool(s) reachable with fs:read:project')
+    //
+    // WHY THIS EXPECTED VALUE CHANGED (2026-08-03): the tool count was 0 and the
+    // grant was `fs:read:project` alone. Reading a repository is now part of the
+    // default grant BY EXPLICIT DECISION, so the three read-only git descriptors
+    // are reachable. `0 server(s) open` — the thing this test measures — did not
+    // move, and neither `terminal` nor `docker` became launchable: both still
+    // cost `proc:spawn`, which the default does not grant.
+    expect(logs).toContain(
+      'mcp: 0 server(s) open, 3 tool(s) reachable with fs:read:project, git:read',
+    )
   })
 
   it('takes its grant from the SKILLS, and nothing on the wire can widen it', async () => {

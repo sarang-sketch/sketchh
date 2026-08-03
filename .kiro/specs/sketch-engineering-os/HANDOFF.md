@@ -396,9 +396,32 @@ report the gap.
     RPC methods, `GitPanel`, `phase3-gate` and `phase12-acceptance-gate` were not touched — the
     Source Control panel is a human pressing Stage, and a capability grant describes what a *skill*
     was permitted to do autonomously. Two doors, one implementation, a lock only on the agent's.
-    `DEFAULT_CAPABILITIES` was NOT widened to include `git:read`: four existing assertions pin it to
-    exactly `['fs:read:project']`, so `git:read` is granted the way it always was — by a skill
-    declaring it (`commit-context` does).
+
+    **`DEFAULT_CAPABILITIES` DOES include `git:read` — decided 2026-08-03.** The earlier note here
+    said it did not, and that was accurate at the time: five assertions pinned the default to exactly
+    `['fs:read:project']`, and moving them so the descriptor commit could pass would have been editing
+    tests to make code green. The user then asked for the widening on its own merits, so it landed as
+    its own change with its own rationale. `DEFAULT_CAPABILITIES` is now
+    `['fs:read:project', 'git:read']`. Reading a repository is part of reading a project — the files
+    are one revision of the same bytes. The default remains read-only in both halves:
+    `fs:write:project` and `git:write` are absent, and `capabilities: []` still means nothing.
+
+    **The adversarial suite still bites.** §3's six escalations cost `net:http` ×2, `proc:spawn`,
+    `fs:read:home`, `fs:write:home` and `secrets:read`; not one costs `git:read`, so widening the
+    default permits none of them and all six remain denied. §6 gained an effect-level proof of the new
+    boundary: a dispatcher whose grant comes from `capabilitiesForSkill(undefined)` — the real default
+    path — reads a real repository (`git-status`, `git-branch` succeed) and is still refused
+    `git-stage` and `git-commit`, with commit count and `git status --porcelain -b` byte-identical
+    afterwards. Mutation-verified: adding `git:write` to the default fails it with
+    `8ca4562 this commit must never exist` in `git log`.
+
+    **The five assertions that moved**, each carrying an in-test comment saying why so nobody reads
+    them as loosened: the `DEFAULT_CAPABILITIES` equality and the hostile-skill default-grant equality
+    in `capabilities.test.ts`, and three copies of the run-dispatcher log line, which went from
+    `mcp: 0 server(s) open, 0 tool(s) reachable with fs:read:project` to
+    `mcp: 0 server(s) open, 3 tool(s) reachable with fs:read:project, git:read` — two in `mcp.test.ts`
+    and one in `phase12-extensibility-gate.test.ts`. The three tools are the engine's own read-only
+    git descriptors; `0 server(s) open`, which is what those tests exist to assert, did not move.
 
 ---
 
