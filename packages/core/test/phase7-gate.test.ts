@@ -106,6 +106,43 @@ const DONE = JSON.stringify({ action: 'done', text: 'All finished, everything pa
 const kinds = (events: readonly SketchEvent[]) => events.map((event) => event.kind)
 
 /**
+ * Bound anything that awaits a hanging MCP server, so a BROKEN DEADLINE FAILS BY NAME.
+ *
+ * Claim 3 rests entirely on `mcp/client.ts` rejecting on its own request timeout. If that
+ * deadline stops firing, the awaited work never settles and the only thing left holding
+ * the run is vitest's `testTimeout` — which reports "Test timed out in 30000ms" and says
+ * nothing about MCP, the timeout, or the write-off latch. The budget is far above the
+ * configured `requestTimeoutMs`, so a working timeout always wins the race, and far below
+ * the per-test timeout, so the named message is what a reader sees.
+ */
+async function boundedByMcpDeadline<T>(
+  work: Promise<T>,
+  what: string,
+  requestTimeoutMs: number,
+  budgetMs: number,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const bound = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => {
+      reject(
+        new Error(
+          `MCP HANG GUARD BROKEN (Requirement 22.3): ${what} was still outstanding after ` +
+            `${budgetMs}ms, against a server configured with requestTimeoutMs=${requestTimeoutMs}. ` +
+            'The MCP request timeout never fired, so the server was never written off and ' +
+            'the run would NOT have continued.',
+        ),
+      )
+    }, budgetMs)
+    timer.unref?.()
+  })
+  try {
+    return await Promise.race([work, bound])
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/**
  * An application that starts, answers once, and then dies.
  *
  * This is the shape Requirement 23.2 is about: it is NOT a failure to start. It binds,
@@ -368,27 +405,32 @@ describe('Phase 7 gate — a hanging tool (Requirement 22.3)', () => {
     })
 
     const started = Date.now()
-    const result = await runTask(
-      { id: 'phase7-hang', prompt: 'Read the config file.', verify: [] },
-      {
-        adapter: new FakeChatAdapter({
-          script: [
-            PLAN,
-            // Three attempts at the dead server. The first pays the timeout; the second
-            // and third must be instant, which is what the LATCH is for.
-            JSON.stringify({ action: 'tool', name: 'filesystem.read_file', args: { path: 'a' } }),
-            JSON.stringify({ action: 'tool', name: 'filesystem.read_file', args: { path: 'b' } }),
-            JSON.stringify({ action: 'tool', name: 'filesystem.read_file', args: { path: 'c' } }),
-            DONE,
-          ],
-        }),
-        events,
-        plan: new PlanWriter({ baseDir: project, events }),
-        files: new DiskFileWriter(),
-        root: project,
-        maxIterations: 7,
-        tools: dispatcher,
-      },
+    const result = await boundedByMcpDeadline(
+      runTask(
+        { id: 'phase7-hang', prompt: 'Read the config file.', verify: [] },
+        {
+          adapter: new FakeChatAdapter({
+            script: [
+              PLAN,
+              // Three attempts at the dead server. The first pays the timeout; the second
+              // and third must be instant, which is what the LATCH is for.
+              JSON.stringify({ action: 'tool', name: 'filesystem.read_file', args: { path: 'a' } }),
+              JSON.stringify({ action: 'tool', name: 'filesystem.read_file', args: { path: 'b' } }),
+              JSON.stringify({ action: 'tool', name: 'filesystem.read_file', args: { path: 'c' } }),
+              DONE,
+            ],
+          }),
+          events,
+          plan: new PlanWriter({ baseDir: project, events }),
+          files: new DiskFileWriter(),
+          root: project,
+          maxIterations: 7,
+          tools: dispatcher,
+        },
+      ),
+      'the run whose only tool is a hanging MCP server',
+      500,
+      6_000,
     )
     const elapsed = Date.now() - started
 
@@ -467,7 +509,12 @@ describe('Phase 7 gate — a hanging tool (Requirement 22.3)', () => {
       root: project,
     })
 
-    const dead = await dispatcher.call('github.read_file', { path: 'a' })
+    const dead = await boundedByMcpDeadline(
+      dispatcher.call('github.read_file', { path: 'a' }),
+      'the call to the hanging `github` server',
+      500,
+      3_000,
+    )
     expect(dead.ok).toBe(false)
 
     const alive = await dispatcher.call('filesystem.read_file', { path: 'a' })

@@ -255,6 +255,44 @@ async function startServer(id: string, source: string, timeoutMs?: number) {
   return { server, started, events, dir, spec }
 }
 
+/**
+ * Bound an awaited call against a hanging server, so a BROKEN DEADLINE FAILS BY NAME.
+ *
+ * Section 2 only means anything because `mcp/client.ts` rejects on its own request
+ * timeout. If that deadline stops firing, `callTool` never settles — and with nothing
+ * but vitest's `testTimeout` underneath, the run reports "Test timed out in 5000ms",
+ * which reads as a slow test rather than as an unbounded tool call. The budget sits
+ * comfortably above the server's configured `requestTimeoutMs`, so a working timeout
+ * always wins this race, and far below vitest's default, so the named message is what a
+ * reader actually sees.
+ */
+async function boundedCall<T>(
+  work: Promise<T>,
+  what: string,
+  requestTimeoutMs: number,
+  budgetMs = 1_500,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const bound = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => {
+      reject(
+        new Error(
+          `MCP HANG GUARD BROKEN (Requirement 22.3): ${what} was still outstanding after ` +
+            `${budgetMs}ms, against a server configured with requestTimeoutMs=${requestTimeoutMs}. ` +
+            'The MCP request timeout never fired, so the server was never written off and ' +
+            'the run would NOT have continued.',
+        ),
+      )
+    }, budgetMs)
+    timer.unref?.()
+  })
+  try {
+    return await Promise.race([work, bound])
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 // ── 1. it works at all ──────────────────────────────────────────────────────
 
 describe('a working MCP server', () => {
@@ -304,7 +342,11 @@ describe('a server that hangs', () => {
     expect(server.tools.map((tool) => tool.name)).toEqual(['slow'])
 
     const first = Date.now()
-    const one = await server.callTool('slow', {})
+    const one = await boundedCall(
+      server.callTool('slow', {}),
+      'the first call to the hanging server',
+      500,
+    )
     const firstMs = Date.now() - first
 
     expect(one.ok).toBe(false)
@@ -318,7 +360,11 @@ describe('a server that hangs', () => {
     expect(server.unavailable?.detail).toContain('unavailable for the rest of this run')
 
     const second = Date.now()
-    const two = await server.callTool('slow', {})
+    const two = await boundedCall(
+      server.callTool('slow', {}),
+      'the second call to the written-off hanging server',
+      500,
+    )
     const secondMs = Date.now() - second
 
     expect(two.ok).toBe(false)
@@ -336,16 +382,29 @@ describe('a server that hangs', () => {
 
   it('lets the RUN CONTINUE: a hang is a result, never a throw', async () => {
     const { server } = await startServer('hanging', HANGING_SERVER, 400)
-    // If this rejected, the run would die here instead of carrying on.
-    await expect(server.callTool('slow', {})).resolves.toMatchObject({ ok: false })
-    await expect(server.callTool('slow', {})).resolves.toMatchObject({ ok: false })
+    // If this rejected, the run would die here instead of carrying on. Bounded, so a
+    // call that never settles at all is named rather than left to vitest's clock.
+    await expect(
+      boundedCall(server.callTool('slow', {}), 'the first call to the hanging server', 400),
+    ).resolves.toMatchObject({ ok: false })
+    await expect(
+      boundedCall(server.callTool('slow', {}), 'the second call to the hanging server', 400),
+    ).resolves.toMatchObject({ ok: false })
   })
 
   it('does not let another server\u2019s hang affect a healthy one', async () => {
     const hanging = await startServer('hanging', HANGING_SERVER, 400)
     const working = await startServer('working', WORKING_SERVER)
 
-    expect((await hanging.server.callTool('slow', {})).ok).toBe(false)
+    expect(
+      (
+        await boundedCall(
+          hanging.server.callTool('slow', {}),
+          'the call to the hanging server',
+          400,
+        )
+      ).ok,
+    ).toBe(false)
     // The latch is per server, not global: one bad server must not disable the rest.
     expect((await working.server.callTool('echo', { text: 'fine' })).ok).toBe(true)
     expect(working.server.unavailable).toBeNull()
@@ -686,7 +745,11 @@ describe('status', () => {
       granted: CAPABILITIES,
       root,
     })
-    await dispatcher.call('terminal.slow', {})
+    await boundedCall(
+      dispatcher.call('terminal.slow', {}),
+      'the dispatched call to the hanging server behind `terminal`',
+      400,
+    )
 
     const status = host.status()
     const filesystem = status.find((entry) => entry.id === 'filesystem')!
