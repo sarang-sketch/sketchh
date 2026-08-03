@@ -33,7 +33,21 @@ console.log(
 console.log('synthetic offline CI measurement; not evidence about any real provider model')
 
 if (process.argv.includes('--check')) {
-  const expected = JSON.parse(await readFile(join(core, 'bench', 'internal-baseline.json'), 'utf8'))
+  // The baseline path is a SEAM, and it exists for exactly one reason: so a test can
+  // prove this gate still FAILS. `phase11-gate.test.ts` runs this script as a child
+  // process against a temp baseline whose threshold the fixed offline fixture provably
+  // cannot meet (pass@k lift is a difference of two rates, so it can never exceed 1)
+  // and asserts a non-zero exit. Without the seam the only way to test the failing
+  // branch would be to mutate the committed baseline in place, and a gate whose
+  // failing branch is untested is decoration — inverting the comparison below used to
+  // leave the whole suite green.
+  //
+  // It does not weaken CI: `npm run bench:check` sets no such variable, so CI reads
+  // the committed baseline, and the identity assertions immediately below still reject
+  // any baseline that is not this synthetic suite, model and k. An override can only
+  // move the threshold, and only for whoever already controls the environment.
+  const baselinePath = process.env.SKETCH_BENCH_BASELINE ?? join(core, 'bench', 'internal-baseline.json')
+  const expected = JSON.parse(await readFile(baselinePath, 'utf8'))
   if (expected.synthetic !== true || expected.suiteDigest !== suite.digest ||
       expected.model !== identity.model || expected.k !== budget.k) {
     throw new Error('internal lift baseline identity does not match this fixed benchmark')
