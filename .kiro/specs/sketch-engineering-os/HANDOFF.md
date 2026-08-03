@@ -19,28 +19,27 @@ Phase 3 and had gone four phases stale.
 
 ## IMMEDIATE NEXT ACTION
 
-**Tasks 12.1–12.4 are the only remaining actionable leaves, and all are external
-evidence gates. Run the native package matrix first. Then run the no-fallback Ollama preflight and
-retained installed-app clean-machine procedure against those exact installer bytes. For 12.3, push
-a package-version-matching semantic tag only after the matrix is green, retain every release
+**Tasks 12.1–12.3 are the only remaining actionable leaves, and all are external evidence gates.
+Run the native package matrix first. Then run the no-fallback Ollama preflight and retained
+installed-app clean-machine procedure against those exact installer bytes. For 12.3, push a
+package-version-matching semantic tag only after the matrix is green, retain every release
 asset/hash/attestation verification result, and do not call GitHub provenance Authenticode or Apple
-Developer ID signing/notarization. For 12.4, retain a genuine third-party community skill's source
-and license provenance and run its exact bytes through the existing gate. Source tests, workflow
-configuration, local fixtures, and documentation complete none of those claims.**
+Developer ID signing/notarization. Source tests, workflow configuration, local fixtures, and
+documentation complete none of those claims.**
 
-**78 of 82 actionable leaves are complete.** `tasks.md` has 96 raw checkbox rows: 83 leaves and 13
+**79 of 82 actionable leaves are complete.** `tasks.md` has 96 raw checkbox rows: 83 leaves and 13
 phase summaries. Excluding superseded leaf 4.3 leaves 82 actionable leaves. The normalized raw state
-is 90 complete, four evidence-gated leaves, one superseded row, and one open Phase 12 summary.
-Phases 1–11 and 13 are complete; Phase 12 remains open only for 12.1–12.4.
+is 91 complete, three evidence-gated leaves, one superseded row, and one open Phase 12 summary.
+Phases 1–11 and 13 are complete; Phase 12 remains open only for 12.1–12.3.
 
-Task 13.5 reconciled the living ledger: Milestones 1–5 are labelled historical snapshots, phase-gate
-sections remain immutable checkpoint evidence, all ten design conflicts and all five design-authority
-decisions are represented in the Decision Log, and old `/96` figures are explicitly legacy counters.
-No production behavior changed. Current source verification remains **core 1,036 tests / 54 files,
-desktop 503 tests / 54 files**, with build and typecheck green and both suites passing with
-`SKETCH_FAKE_PROVIDER` unset and set to `1`. Tasks 12.1–12.4 remain blocked on native artifacts,
-installed-app no-egress/Ollama evidence, a verified real tag release, and genuine third-party skill
-provenance respectively.
+Task 13.5 reconciled the living ledger at its historical checkpoint: Milestones 1–5 are labelled
+historical snapshots, phase-gate sections remain immutable checkpoint evidence, all ten design
+conflicts and all five design-authority decisions are represented in the Decision Log, and old
+`/96` figures are explicitly legacy counters. Task 12.4 subsequently completed at `ff99c43`. Current
+independent source verification is **build 0, typecheck 0, core 1,059 tests / 55 files, and desktop
+508 tests / 54 files**, with both suites passing with `SKETCH_FAKE_PROVIDER` unset and set to `1`.
+Tasks 12.1–12.3 remain blocked on native artifacts, installed-app no-egress/Ollama evidence, and a
+verified real tag release respectively.
 
 Task 12.1 now has native Windows/NSIS, macOS/DMG, and Ubuntu 22.04/AppImage jobs. Each rebuilds and
 smoke-tests its own host-native sidecar, packages with Tauri, enforces a strict `<100,000,000-byte`
@@ -56,14 +55,22 @@ and only then calls `gh release create --verify-tag`. `RELEASES.md` documents ma
 checks. No tag workflow has run, no release exists, and no Authenticode/Developer ID identity exists;
 12.3 therefore stays open.
 
-Task 12.4 now has a production in-process gate over a locally authored community-format `skill.json`
-fixture. Open-registry digest review precedes install; the approved grant is persisted separately and
-bound to active bytes; four successful runs become captured evals; the trainer accepts only a strict
-held-out improvement; and promotion is a separate action that refuses capability changes and updates
-the active digest. The desktop writes only the candidate artifact during training, renders its real
-body, and requires “Use trained version” before activation over either transport. The gate forbids
-`fetch` and starts no Sketch HTTP/stdio server. This remains preparation, not completion: no retained
-third-party community skill, source provenance, or license evidence has been exercised.
+Task 12.4 is complete at `ff99c43`. The retained input is the exact canonical Git blob bytes from
+third-party [`dotcomjack/parallel-agents-skill`](https://github.com/dotcomjack/parallel-agents-skill)
+commit `f26435da141df656eaed219dc23da776f46d9320`, including the complete MIT license. The open review
+binds `sha256:af752a5b04e93791b1635d04fd3ab4272facc2d2ae5aea1fe84411ce9331fb3e` and grants zero
+capabilities. The production path installs and runs those bytes, captures and replays four evals,
+accepts only a strict held-out scripted 0→1 training improvement, refuses a capability-widening
+candidate, requires explicit promotion, and performs the final replay with `fetch=0` and no listening
+Sketch HTTP/stdio server.
+
+Candidate selection was fail-closed: `last30days` was rejected because it required network,
+subprocess, secrets, and home-directory capabilities; the Vercel React skill was rejected because no
+complete retained license text accompanied it. A Windows CRLF checkout initially produced a
+nonportable digest, so the committed proof retains raw Git blobs and uses narrow `eol=lf`
+`.gitattributes` rules. Appending ` MUTATION` to the retained LICENSE copyright made the focused gate
+fail with `LICENSE: expected 1076 to be 1067`; restoring the byte passed 1/1. This is genuine
+third-party-byte flywheel evidence, not evidence of organic skill quality or any real provider.
 
 Task 12.5 is complete. `EXTENSIBILITY.md` maps all nine categories to production-consumed
 configuration, filesystem-discovery, or host code-registration contracts. Core host registries cover
@@ -186,7 +193,7 @@ Seven guards were mutation-verified at this gate — see the Phase 5 gate result
 ## Git state
 
 ```
-(Current task 13.5 completion commit containing this file)                       <- HEAD
+ff99c43  sketch: phase 12 task 12.4 - prove third-party skill flywheel          <- HEAD
 437d004  sketch: phase 13 task 13.4 - reconcile product metrics
 8d45899  sketch: phase 13 task 13.3 - reconcile architecture contracts
 27f1e2f  sketch: phase 13 task 13.2 - reconcile marketplace scope
@@ -236,10 +243,10 @@ because there was nothing to bisect.
 | 9 — Versioned memory with hygiene (9.1–9.5) | **DONE**, gate green cold |
 | 10 — Eval-gated multi-agent (10.1–10.5) | **DONE**, gate green. `swarm` ships **off**: no measured strategy lift |
 | 11 — Honest benchmarks (11.1–11.6) | **DONE**, gate green cold. CI result is synthetic only; real-provider public matrix unperformed |
-| 12 — Packaging and open flywheel | **IN PROGRESS** — 12.1 native artifacts required; 12.2 forwarding/preflight built with installed-app clean-machine evidence required; 12.3 deterministic release/provenance path built with real tag-release evidence and native signing identities absent; 12.4 production flywheel proved with a local community-format fixture, with genuine third-party source/license evidence absent; **12.5 DONE** with production-consumed contracts for all nine categories and behavioral/mutation evidence; **12.6 DONE** with scripted offline canonical acceptance and Timeline evidence, not real-provider capability evidence |
+| 12 — Packaging and open flywheel | **IN PROGRESS** — 12.1 native artifacts required; 12.2 forwarding/preflight built with installed-app clean-machine evidence required; 12.3 deterministic release/provenance path built with real tag-release evidence and native signing identities absent; **12.4 DONE** with exact licensed third-party Git blob bytes, digest-bound zero-capability review, production flywheel, and mutation evidence, not organic-quality or real-provider evidence; **12.5 DONE** with production-consumed contracts for all nine categories and behavioral/mutation evidence; **12.6 DONE** with scripted offline canonical acceptance and Timeline evidence, not real-provider capability evidence |
 | 13 — Documentation reconciliation | **DONE** — 13.1–13.5 reconciled contributor rules, marketplace scope, architecture contracts, product metrics, and the living-log/decision/counting conventions |
 
-Task counts: **78 of 82 actionable leaves complete**. Raw checkbox state: 90 complete, four
+Task counts: **79 of 82 actionable leaves complete**. Raw checkbox state: 91 complete, three
 evidence-gated, one superseded, and one open Phase 12 summary.
 
 ---
@@ -273,8 +280,9 @@ architecture generator and the Live Architecture panel.
 - The legacy `ProviderAdapter`/canonical `ChatAdapter` pair still coexists; convergence has no owning
   task. The legacy `verifier/`/canonical `verify/` pair does NOT — `verifier/` was deleted
   2026-08-03 and a source-level guard now forbids `shell: true` anywhere in `packages/core/src/`.
-- Native installers, installed-app Ollama/no-egress proof, a real verified release tag, and genuine
-  third-party community-skill provenance remain evidence-gated under 12.1–12.4.
+- Native installers, installed-app Ollama/no-egress proof, and a real verified release tag remain
+  evidence-gated under 12.1–12.3. Task 12.4's retained licensed third-party bytes close the community
+  provenance gate, but do not establish organic skill quality or real-provider performance.
 
 **Nothing has ever run against a real provider.** The production local-provider route is now wired,
 but this host has no Ollama installation; every executed adapter test/run still used
@@ -488,10 +496,10 @@ and record both. Run the `sanitizePayload` mutation at **every** gate — that i
 actually happened.
 ---
 
-## Mutation ledger — proven vs. assumed (current as of `6eced6d`)
+## Mutation ledger — proven vs. assumed (current as of `ff99c43`)
 
 This is the running record of every guard that has been broken, watched to fail, restored, and
-watched to pass green — **nineteen** of them. It says which guards are **mutation-proven** and which
+watched to pass green — **twenty** of them. It says which guards are **mutation-proven** and which
 of those assert on an **EFFECT** (state on disk, a call count, a computed boolean, a process outcome,
 rendered DOM) rather than on a **STRING** (a status label, a log message). Anything not in the table
 has not been mutation-tested; treat it as assumed. Read with `NEED-TO-DO.md` §7 (traps) and the
@@ -501,11 +509,12 @@ verification ritual above.
 ones — the numbers are cited from `NEED-TO-DO.md` §7 and from in-test comments. If a commit widens an
 existing guard rather than adding one, extend that row instead of adding a duplicate. Then move the
 hash in this heading, the tree line below, and the count in the paragraph above. Rows 1–16 come from
-the dedicated verification session that ended at `f2e2fd4`; rows 17–19 landed with the commits named
+the dedicated verification session that ended at `f2e2fd4`; rows 17–20 landed with the commits named
 in their rows.
 
-Tree at the time: `6eced6d`, clean — core 1,058 tests / 54 files, desktop 508 / 54, typecheck and
-build clean.
+Tree at the time: `ff99c43`, clean — build and typecheck exit 0; core 1,059 tests / 55 files and
+desktop 508 / 54 pass with `SKETCH_FAKE_PROVIDER` unset and set to `1`. The Windows symlink branch
+printed `SKIPPED` and is not claimed as passing coverage.
 
 ### Mutation-proven guards
 
@@ -530,6 +539,7 @@ build clean.
 | 17 | No `shell: true` anywhere under `packages/core/src`, and every `shell` spawn option spelled literally `false` (`e122bea`, deleting the legacy `verifier/`) | a **NEW** file `src/mutation-probe.ts` containing `spawn(cmd, { shell: true })` | `test/verify-runner.test.ts`: `… Offending sites: mutation-probe.ts: shell: true` | **EFFECT** (source text of the shipped package) |
 | 18 | One lexical match dialect, two callers (`e4e8b34`, converging the two search implementations) | shift `matchSpans`'s span offset by one | 4 tests in **both packages at once** — 3 in `packages/core/test/project-search.test.ts`, 1 in `packages/desktop/src/panels/ide/SearchPanel.test.tsx` | **EFFECT** (rendered highlight offsets and ranked hits) |
 | 19 | Consumer-side rendering of every `EventKind` (`6eced6d`, six explicit kinds) | revert the repo-graph emitter to `context_loaded` | `packages/desktop/src/eventKinds-gate.test.tsx`: `Unable to find an element with the text: repo_indexed` | **EFFECT** (rendered DOM) |
+| 20 | Exact retained third-party Git blob bytes and complete MIT license (`ff99c43`) | append ` MUTATION` to the retained LICENSE copyright | focused third-party flywheel gate failed: `LICENSE: expected 1076 to be 1067`; restore passed 1/1 | **EFFECT** (retained vendor/license bytes) |
 
 Guard 5's subtleties, both load-bearing: the *coarse* mutation fails 12 tests, but the subtler one
 (an empty grant treated as unrestricted) fails only **2**, and the structural "exactly one
@@ -594,15 +604,17 @@ trap **T2** (warm artifact hides breakage) resurfacing in a new place; it is cro
 
 ### Not verified — state plainly
 
-**Re-checked at `6eced6d`: nothing on this list changed.** None of `e355bff`, `e122bea`, `e4e8b34` or
-`6eced6d` touched a provider, an installer, a signing identity, the Rust toolchain, the Monaco double
-or the Tauri IPC boundary. The list below stands as written, item for item.
+**Re-checked at `ff99c43`.** Task 12.4's licensed third-party-byte flywheel evidence is now closed;
+the provider, installer, native-signing, Rust-toolchain, Monaco-double, and Tauri-IPC limitations
+below remain unchanged.
 
 - **No run has ever touched a real hosted provider.** Every `.sketch/bench` artifact carries
   `provider: "synthetic-offline"`, and the tripwire now fails the suite if one does not.
-- **Tasks 12.1–12.4 remain deliberately blocked** (see Phase status): no native installer artifact,
-  no fresh-machine run with process-attributed DNS/socket evidence, no Authenticode or Apple
-  Developer ID signing — **GitHub provenance is not that** — and no real third-party community skill.
+- **Tasks 12.1–12.3 remain deliberately blocked** (see Phase status): no complete native installer
+  matrix, no fresh-machine run with process-attributed DNS/socket evidence, and no verified real tag
+  release or native signing identity. **GitHub provenance is not Authenticode or Apple Developer ID
+  signing/notarization.** Task 12.4's scripted flywheel does not establish organic quality or
+  real-provider performance.
 - **`cargo test` cannot link on this machine**; Rust modules are verified with `rustc --test` only,
   and the macOS keychain path is not compiled here at all.
 - **Monaco is doubled in tests**, and **the Tauri IPC layer is absent from the Phase 3 gate chain**.

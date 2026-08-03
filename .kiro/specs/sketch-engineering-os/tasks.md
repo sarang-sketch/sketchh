@@ -408,9 +408,9 @@ Phase 4 numbering stays intact for anything that references it.
   - `CONTRIBUTING.md` and signed releases; the marketplace retains hash, scope, and review
   - Deterministic three-platform release assembly, tag/package/commit/repository binding, GitHub OIDC build-provenance attestation, verification-before-publication, and maintainer/consumer documentation are implemented. Completion remains blocked until a real version-tag workflow publishes assets from all three native jobs and retained verifier output confirms them. GitHub provenance is not Windows Authenticode or Apple Developer ID signing/notarization; those project-owned identities and native verification evidence remain absent.
   - _Requirements: 26.3_
-- [~] 12.4 Prove the flywheel turns server-less
+- [x] 12.4 Prove the flywheel turns server-less
   - A community skill installs, runs, and trains on captured evals with no Sketch server involved
-  - Production preparation is proved end to end with a locally authored community-format fixture: open-registry digest review, persisted digest-bound grant, production run, four captured/replayed evals, strict held-out improvement, explicit review/promotion, and rerun all occur in process with `fetch` forbidden. Training writes outside the active skill; the desktop shows the candidate and requires a separate promotion click. This is not third-party community-skill evidence. Completion remains blocked until a real community skill is retained with source/license provenance and put through the same gate.
+  - Completed at `ff99c43` with exact canonical Git blob bytes from third-party [`dotcomjack/parallel-agents-skill`](https://github.com/dotcomjack/parallel-agents-skill) commit `f26435da141df656eaed219dc23da776f46d9320`, retaining its complete MIT license. Open review binds `sha256:af752a5b04e93791b1635d04fd3ab4272facc2d2ae5aea1fe84411ce9331fb3e` and grants zero capabilities. The production path installs and runs those bytes, captures/replays four evals, accepts only a strict held-out scripted 0→1 improvement, refuses capability widening, requires explicit promotion, and replays the promoted version with `fetch=0` and no listening Sketch server. This is genuine third-party-byte flywheel evidence, not organic skill-quality or real-provider evidence.
   - _Requirements: 26.4_
 - [x] 12.5 Complete the extensibility audit
   - Confirm and document an extension point for providers, agents, skills, tools, models, memory, workflows, themes, and languages
@@ -446,5 +446,5 @@ Phase 4 numbering stays intact for anything that references it.
   - _Requirements: 28.5_
 - [x] 13.5 Keep `tasks-executed.md` current
   - Update at each phase gate, with a decision-log row for every architectural decision recorded in this spec
-  - Completed: the ledger now labels Milestones 1–5 as historical pre-spec snapshots, preserves phase-gate sections as immutable checkpoint evidence, maps all ten resolved conflicts and all five design-authority decisions into the Decision Log, and uses a reproducible actionable-leaf count. Current state is 78/82 actionable leaves complete; only 12.1–12.4 remain evidence-gated.
+  - Completed: the ledger now labels Milestones 1–5 as historical pre-spec snapshots, preserves phase-gate sections as immutable checkpoint evidence, maps all ten resolved conflicts and all five design-authority decisions into the Decision Log, and uses a reproducible actionable-leaf count. Current state after task 12.4 is 79/82 actionable leaves complete; only 12.1–12.3 remain evidence-gated.
   - _Requirements: 28.6_

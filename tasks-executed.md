@@ -35,8 +35,9 @@ interface exists and no real implementation does.
   after Phase N” describes that gate, even when a later phase implemented the seam.
 - **Current progress counts actionable leaves only.** `tasks.md` has 96 checkbox rows: 83 leaves and
   13 phase-summary rows. Superseded leaf 4.3 is excluded, leaving 82 actionable leaves. After task
-  13.5, 78 are complete and four—12.1 through 12.4—remain evidence-gated. The normalized raw row
-  state is 90 complete, 4 evidence-gated, 1 superseded, and 1 open Phase 12 summary.
+  12.4 completed at `ff99c43`, 79 are complete and three—12.1 through 12.3—remain evidence-gated.
+  The normalized raw row state is 91 complete, 3 evidence-gated, 1 superseded, and 1 open Phase 12
+  summary.
 - Historical `/96` counters below are retained as legacy checkpoint text; they were manually
   maintained and are not the current counting convention.
 
@@ -1020,7 +1021,7 @@ The deterministic gate result is `offline-scripted-v1 + Sketch` versus the same 
 | 12.1 | Cross-platform Tauri builds with a documented size budget | 🔄 evidence-gated | Added native Windows/NSIS, macOS/DMG, and Ubuntu 22.04/AppImage jobs; host-native sidecar build and protocol smoke check; strict `<100,000,000-byte` artifact validator with SHA-256 size manifests; artifact upload; release-size Cargo profile; and `PACKAGING.md`. Corrected two real Tauri packaging defects: the invalid v2 window `name` property and a macOS-conflicting identifier ending in `.app`. Local sidecar is 87 MiB and passes protocol checks. The Windows Tauri build reached Rust compilation, then this host's Application Control blocked Cargo build scripts (OS error 4551) and `dlltool.exe` was missing. macOS/Linux were not run here. The task remains open until all three native workflow jobs produce uploaded installers whose manifests pass the budget. |
 | 12.2 | Clean-machine local-first proof | 🔄 preflight built; evidence pending | Fixed the shipped run path so AgentChat resolves `selectedProvider` against the one key-free AppState provider list and both HTTP/stdin transports forward that exact entry. Added a direct production-sidecar preflight that refuses non-loopback, missing-model, and unavailable endpoints, requires Ollama's identity/model responses, and never starts or substitutes a stub/fake provider; it indexes a fresh fixture, requires plan/edit/verify/completion events, verifies exact bytes, and writes a limitation-labelled artifact. Added `OFFLINE-PROOF.md` for installer, UI review/apply, graph, event, final-byte, process-tree, DNS, socket, and packet evidence. Ollama is absent on this host, so no real-model run occurred and task 12.2 remains open. |
 | 12.3 | Open-source scaffolding and signed-release provenance | 🔄 path built; release evidence pending | Added deterministic three-platform release assembly with strict input shape, re-hashing against size manifests, copy re-verification, version/tag/commit/repository binding, atomic `release-manifest.json`, and `SHA256SUMS`. The tag-only release job depends on the complete native matrix, uses GitHub OIDC build-provenance attestations, verifies every asset before `gh release create --verify-tag`, and scopes write/OIDC permissions to that job. `RELEASES.md`, `CONTRIBUTING.md`, and `PACKAGING.md` distinguish provenance from native code signing and preserve marketplace hash/scope/digest-review controls. No tag workflow has run, no release exists, and no Authenticode or Apple Developer ID identity is configured, so 12.3 remains open. |
-| 12.4 | Serverless community-format skill flywheel | 🔄 production path proved locally; third-party evidence pending | A locally authored `skill.json` community-format fixture now passes open-registry digest review, installs with a persisted digest-bound narrower grant, runs through production RPC, captures and replays four evals, trains under strict held-out improvement, writes a candidate outside the active skill, promotes only after explicit review, and reruns with no HTTP/stdio Sketch server and `fetch` forbidden. The desktop exposes the same explicit candidate review/promotion seam over both transports. This is not a real third-party community skill; retained source/license provenance and execution of one remain required. |
+| 12.4 | Serverless third-party skill flywheel | ✅ complete | At `ff99c43`, exact canonical Git blob bytes from third-party [`dotcomjack/parallel-agents-skill`](https://github.com/dotcomjack/parallel-agents-skill) commit `f26435da141df656eaed219dc23da776f46d9320`, with complete retained MIT license, pass the production flywheel. Open review binds `sha256:af752a5b04e93791b1635d04fd3ab4272facc2d2ae5aea1fe84411ce9331fb3e` and grants zero capabilities; production install/run, four captures/replays, strict held-out scripted 0→1 training, capability-widen refusal, explicit promotion, and final replay run with `fetch=0` and no listening Sketch server. This is genuine third-party-byte evidence, not organic skill-quality or real-provider evidence. |
 | 12.5 | Nine-category extensibility audit and host registries | ✅ complete | `EXTENSIBILITY.md` now maps every required category to a production-consumed contract. Core adds host-scoped canonical provider, validated MCP catalog, memory-store, registered-agent, and explicit versioned-workflow registries carried by both production transports. Desktop production consumes theme, extension mapping, new-language, and declarative Monarch tokenizer registrations. Skills remain filesystem-discovered and model IDs runtime-configured. The behavioral gate and guard mutations pass. These are host code-registration contracts, not a plugin store or arbitrary executable package loader; the local MCP script is not third-party-server evidence. |
 | 12.6 | Canonical end-to-end acceptance | ✅ complete | Scripted offline adapters drive a fresh booking project through the engine plan gate, real child-process verification, deterministic swarm consensus/merge/conflict handling, a deterministic cost stop with no escalation, and final green assembly. Dispatcher outcome events persist bounded consensus/merge/verify summaries and the Timeline reconstructs terminal states and evidence from those events alone. This is harness evidence, not evidence that a real provider can build a booking product. |
 
@@ -1056,7 +1057,7 @@ Mutation evidence, each restored and re-run green:
 
 No production tag or GitHub Release was created; no workflow attestation was issued or independently verified. The repository has no configured Authenticode certificate or Apple Developer ID/notarization identity. GitHub build provenance, native OS code signing, and marketplace trust controls are three separate claims: the workflow implements the first path, does not implement the second, and does not replace the third.
 
-### Task 12.4 preparation validation
+### Task 12.4 historical preparation checkpoint (`c9947b7`)
 
 Canonical order passes: `npm run build`, `npm run typecheck`, core **1,029 tests / 52 files**, and desktop **498 tests / 52 files**. Focused core registry/flywheel tests pass **26 tests / 2 files**; focused desktop panel/transport tests pass **33 tests / 3 files**. Diagnostics report no issues in the changed TypeScript/TSX files.
 
@@ -1073,7 +1074,36 @@ Mutation evidence, each restored and re-run green:
 | Skip the persisted-grant write at install | gate failed opening the missing `.grants/community-reviewer.json` authority file |
 | Keep the old active digest after promotion | gate failed: reloaded promoted authority was stale and `readInstalledSkillGrant().ok` was false |
 
-Task 12.4 remains open. No genuine third-party community skill was downloaded or retained, and no source/license provenance for one was reviewed; the local fixture proves format compatibility and the shipped flywheel, not the community-evidence claim.
+**Historical checkpoint:** task 12.4 remained open at `c9947b7`. No genuine third-party
+community skill had yet been downloaded or retained, and no source/license provenance for one had
+been reviewed; the local fixture proved format compatibility and the shipped flywheel, not the
+community-evidence claim.
+
+### Task 12.4 completion result (`ff99c43`)
+
+Task 12.4 is complete using the exact canonical Git blob bytes from third-party
+[`dotcomjack/parallel-agents-skill`](https://github.com/dotcomjack/parallel-agents-skill) commit
+`f26435da141df656eaed219dc23da776f46d9320`. The retained package includes the complete MIT license.
+The open review binds
+`sha256:af752a5b04e93791b1635d04fd3ab4272facc2d2ae5aea1fe84411ce9331fb3e` and grants zero
+capabilities.
+
+The production path installs and runs those exact bytes, captures and replays four evals, performs
+strict held-out scripted 0→1 training, refuses a candidate that widens capabilities, requires
+explicit promotion, and performs the final replay. `fetch` remained at zero and no Sketch HTTP or
+stdio server listened. This is genuine third-party-byte flywheel evidence; scripted grading does not
+establish organic skill quality, and no real provider was used.
+
+Candidate selection was fail-closed. `last30days` was rejected because it required network,
+subprocess, secrets, and home-directory capabilities. The Vercel React skill was rejected because it
+lacked retained license text. A Windows CRLF checkout initially produced a nonportable digest; before
+commit, the retained files were replaced with raw Git blobs and narrow `eol=lf` `.gitattributes`
+rules. Mutation proof appended ` MUTATION` to the retained LICENSE copyright: the focused gate failed
+`LICENSE: expected 1076 to be 1067`; restoring the byte passed 1/1.
+
+Independent validation at `ff99c43`: build exit 0, typecheck exit 0, core **1,059 tests / 55 files**
+and desktop **508 tests / 54 files**, with both suites passing with `SKETCH_FAKE_PROVIDER` unset and
+set to `1`. The Windows symlink branch printed `SKIPPED` and is not claimed as passing coverage.
 
 ### Task 12.5 completion result
 
@@ -1117,7 +1147,10 @@ Mutation evidence, each restored and re-run green:
 | Stop treating `strategy_selected{phase:"outcome"}` as terminal in the Timeline | desktop gate failed because `timeline-swarm` rendered as `running`; restored focused gate passed |
 | Remove `sanitizePayload` from `JsonlEventStore.emit` | 3 on-disk redaction tests failed; restored store suite passed 24/24 |
 
-Task 12.6 is complete; the legacy task counter recorded **80/96** at that checkpoint. Tasks 12.1–12.4 remain evidence-gated on native artifacts, installed-app clean-machine/Ollama evidence, a real verified tag release, and genuine third-party skill provenance respectively.
+Task 12.6 is complete; the legacy task counter recorded **80/96** at that historical checkpoint.
+At that time, tasks 12.1–12.4 remained evidence-gated on native artifacts, installed-app
+clean-machine/Ollama evidence, a real verified tag release, and genuine third-party skill provenance
+respectively. Task 12.4 later completed at `ff99c43`; this paragraph preserves the earlier checkpoint.
 
 ---
 
@@ -1129,7 +1162,7 @@ Task 12.6 is complete; the legacy task counter recorded **80/96** at that checkp
 | 13.2 | Reconcile `what-not-we-are-building.md` | ✅ complete | The curated pinned/content-hash registry and discovery/install surface are allowed as the v1-family foundation delivered in the v1.5 implementation phase. Open community publishing remains v2-only behind tested integrity and capability scopes, a review queue, exact-digest approvals, and separately persisted digest-bound grants. The document does not claim public-key author signatures. |
 | 13.3 | Reconcile `trd.md` and `architecture.md` | ✅ complete | The documents now match the npm workspace, zero-runtime-dependency core, seam-plus-implementation persistence/vector/credential/MCP boundaries, event-sourced JSONL run log, on-demand `.sketch/` layout, versioned date-sharded memory, and fixed nine-stage verification contract. |
 | 13.4 | Reconcile `prd.md` | ✅ complete | Cowork and Code are now documented as two presentations over one client/event/project substrate. Product optimization is defined by same-model lift, fixed-budget reliability distributions, and strict held-out compounding; adoption counts are not capability evidence. |
-| 13.5 | Audit and reconcile the living log | ✅ complete | Historical snapshots and immutable gate evidence are labelled; all spec conflict/authority decisions are mapped; the task count is reproducible at 78/82 actionable leaves, with only evidence-gated 12.1–12.4 open. |
+| 13.5 | Audit and reconcile the living log | ✅ complete | Historical checkpoint: snapshots and immutable gate evidence were labelled; all spec conflict/authority decisions were mapped; the task count was then reproducible at 78/82 actionable leaves, with evidence-gated 12.1–12.4 open. Task 12.4 subsequently completed at `ff99c43`; current counts are recorded at the top of this file. |
 
 ### Task 13.1 completion result
 
@@ -1175,11 +1208,22 @@ No production code changed. The audit distinguishes historical truth from curren
 
 The Decision Log now covers all ten resolved conflicts and all five decisions the design made on its own authority. Existing rows were expanded for the MCP-SDK seam, always-on planning with optional human approval, and deleted keytar-shaped storage; stale sqlite-vec and blanket no-consensus decisions are explicitly superseded. New rows record eval-gated `swarm`, curated-registry versus open-publishing boundaries, the exact nine-stage verification order, historical-baseline reconciliation, the unrestricted-shell defect pulled forward to Phase 1.5, and collision-resistant time-sortable run ids.
 
-Progress is now mechanical rather than manually inferred. `tasks.md` contains 96 rows: 83 leaves plus 13 phase summaries. Excluding superseded leaf 4.3 yields 82 actionable leaves; **78 are complete and four remain open** (12.1–12.4). Parent rows for completed Phases 1, 4, and 13 are normalized to complete. The raw row state is **90 complete, 4 evidence-gated, 1 superseded, and 1 open Phase 12 summary**. Earlier `/96` numbers remain labelled as legacy checkpoint counters.
+**Historical task-13.5 checkpoint:** progress became mechanical rather than manually inferred.
+`tasks.md` contained 96 rows: 83 leaves plus 13 phase summaries. Excluding superseded leaf 4.3
+yielded 82 actionable leaves; **78 were complete and four remained open** (12.1–12.4). Parent rows
+for completed Phases 1, 4, and 13 were normalized to complete. The raw row state was **90 complete,
+4 evidence-gated, 1 superseded, and 1 open Phase 12 summary**. Earlier `/96` numbers remain labelled
+as legacy checkpoint counters. The current post-`ff99c43` count is maintained at the top of this
+file.
 
 Validation is documentation-focused and canonical source validation remains green at the unchanged `437d004` source tree: `npm run build`, `npm run typecheck`, core **1,036 tests / 54 files**, and desktop **503 tests / 54 files** with `SKETCH_FAKE_PROVIDER` unset and set to `1`. Markdown diagnostics are clean except for the pre-existing `tasks.md` heading/dependency-graph diagnostics; the checkbox/count audit and required-decision scan pass; `git diff --check` passes. No guard or source path changed, so no guard mutation was required.
 
-Task 13.5 completes Requirement 28.6 and the Phase 13 documentation-reconciliation parent. It does not complete any Phase 12 evidence gate. Tasks 12.1–12.4 remain open on native installer artifacts, installed-app clean-machine/Ollama plus process-attributed no-egress evidence, a real independently verified tag release, and genuine third-party skill source/license provenance respectively. Current progress is **78/82 actionable leaves complete**.
+Task 13.5 completes Requirement 28.6 and the Phase 13 documentation-reconciliation parent. At that
+historical checkpoint it did not complete any Phase 12 evidence gate: tasks 12.1–12.4 were open on
+native installer artifacts, installed-app clean-machine/Ollama plus process-attributed no-egress
+evidence, a real independently verified tag release, and genuine third-party skill source/license
+provenance respectively. Task 12.4 subsequently completed at `ff99c43`; current progress is **79/82
+actionable leaves complete**, with only 12.1–12.3 evidence-gated.
 
 ---
 
@@ -1274,14 +1318,15 @@ call path and failure modes, which is a behaviour change with no owning task. Re
 | 2026-08-03 | Milestones 1–5 are historical snapshots; numbered phase sections are current authority | The pre-spec inventory is valuable evidence of what changed but became misleading when its fixture/deferred rows were read as current. Labelling snapshots preserves history while satisfying Rule 9's requirement that the living log identify present truth. |
 | 2026-08-03 | The unrestricted `run_command` shell was a defect pulled forward to Phase 1.5 | A real bridge into `cmd /C`/`sh -c` before capabilities, containment, confirmation, and CSP would have exposed an unsandboxed execution path. Hardening therefore landed before the transport, with one shell-less policy path, rather than waiting for the later MCP phase. |
 | 2026-08-03 | Run ids are random and time-sortable, never a process-local counter | Concurrent CLI, desktop, eval, and dispatcher processes can write the same event directory. Random time-sortable ids avoid cross-process collisions while preserving readable chronology without shared mutable state. |
-| 2026-08-03 | Progress counts actionable leaves, not phase-summary rows | `tasks.md` contains 83 leaves and 13 summaries. Excluding superseded leaf 4.3 yields 82 actionable leaves; this makes 78 complete plus four evidence-gated leaves reproducible, unlike the old manually maintained `/96` counter. |
+| 2026-08-03 | Progress counts actionable leaves, not phase-summary rows | `tasks.md` contains 83 leaves and 13 summaries. Excluding superseded leaf 4.3 yields 82 actionable leaves; after `ff99c43` this makes 79 complete plus three evidence-gated leaves reproducible, unlike the old manually maintained `/96` counter. |
 | 2026-08-03 | Dispatcher completion is a durable `strategy_selected{phase:"outcome"}` event with bounded evidence summaries | Dispatcher slices do not emit `run_completed`. Persisting consensus, merge, and verification summaries makes the event log sufficient for Timeline reconstruction without adding a new EventKind or retaining unbounded model output. |
 | 2026-08-03 | The canonical booking acceptance is **scripted contract evidence**, not model-capability evidence | Real filesystem bytes, child processes, merge/consensus, budgets, and UI reconstruction test the production joins deterministically offline. Scripted turns cannot establish that any real provider can build the product, so `swarm` remains off and the claim stays narrow. |
 | 2026-08-03 | Extension registration is **host-scoped code composition**, not global plugin loading | `createEngineExtensionRegistry` constructs immutable provider/MCP/memory/agent/workflow registries that both production transports carry; the editor host supplies its own theme/language registry to `prepareMonaco`. Importing a package changes no global state, unknown selectors fail closed, custom providers are fresh per call, and workflows are explicit. This satisfies the nine production extension contracts without claiming a plugin store, arbitrary executable package loader, or third-party MCP execution evidence. |
 | 2026-08-03 | Extensibility status follows the **production loading path**, not interface vocabulary | A test runner can be injected and a fixed table can be edited, but neither lets a user or host supply an independently versioned extension. The audit therefore labels custom endpoint/model configuration, skill discovery, `MemoryStore` composition, and reviewed MCP catalog changes precisely, and keeps agents, workflows, themes, and languages closed until production registries/loaders and behavioral gates exist. |
 | 2026-08-03 | Registry-installed skill authority is a **persisted, digest-bound grant**, never the skill's own declaration | A community skill can ask for more than review approved. Installation therefore stores the exact registry grant under `.sketch/skills/.grants`, binds it to reviewed source and active digests, and production runs deny all capabilities if that authority is missing, malformed, or stale. Custom skill directories retain declaration-derived behavior because no registry claimed authority over them. |
 | 2026-08-03 | Training and activation are **two separate actions** | A strict held-out win authorizes presenting a candidate, not silently replacing installed bytes. Training writes `.sketch/training/<name>/best_skill.md`; the desktop renders that real body; promotion requires a separate click, refuses name/capability changes, atomically activates `SKILL.md`, and updates the digest-bound grant. This keeps measurement, review, and activation independently observable. |
-| 2026-08-03 | A local community-format fixture proves integration, **not community provenance** | The fixture exercises `skill.json`, open-registry review, install, run, capture, train, promote, and rerun without a Sketch server or network. Because it was authored in this repository, it cannot satisfy the claim that a genuine third-party community skill with retained source/license provenance works; task 12.4 remains evidence-gated. |
+| 2026-08-03 | A local community-format fixture proves integration, **not community provenance** | Historical decision at `c9947b7`: the fixture exercised `skill.json`, open-registry review, install, run, capture, train, promote, and rerun without a Sketch server or network. Because it was authored in this repository, it could not satisfy genuine third-party provenance; task 12.4 therefore remained evidence-gated until `ff99c43`. |
+| 2026-08-03 | Third-party flywheel evidence binds **canonical bytes, retained license, digest, and zero authority** | Task 12.4 uses raw Git blobs from `dotcomjack/parallel-agents-skill@f26435da141df656eaed219dc23da776f46d9320`, retains the complete MIT license, and binds the reviewed SHA-256 with zero capabilities. Narrow `eol=lf` attributes prevent checkout conversion from changing the signed/vendor bytes. The production flywheel and license-byte mutation prove those exact bytes, but scripted 0→1 grading proves neither organic skill quality nor real-provider performance. |
 | 2026-08-02 | GitHub OIDC build provenance and native OS code signing are **separate release claims** | The workflow can attest that exact bytes came from this repository's tag workflow and bind them to a commit, but it cannot create an Authenticode publisher identity or Apple Developer ID/notarization trust. `RELEASES.md`, `PACKAGING.md`, and the task gate state both boundaries. Task 12.3 remains open until a real tag release is retained and independently verified; native signing remains absent until project-owned identities and platform verifier output exist. |
 | 2026-08-02 | Release publication happens only **after complete native inputs, byte re-validation, attestation, and verification** | `needs: package` prevents a partial matrix from publishing. The assembler accepts exactly one installer and passing size manifest per platform, rejects changed or extra bytes, and emits deterministic metadata atomically. The release job verifies each GitHub attestation before `gh release create --verify-tag`; mutation tests prove the digest, matrix dependency, and verifier steps are live. Marketplace content hashes, fail-closed scopes, and digest-bound review remain independent and were re-tested. |
 | 2026-08-02 | A desktop run forwards the **selected persisted entry**, not a model string or a fallback | Provider configuration already has one authority: the key-free `ProviderSettingsEntry` loaded into AppState. AgentChat resolves `selectedProvider` against that list at send time and both transports carry the exact object. An absent/stale selection stays absent so core gives its existing `params.provider is required` refusal; selecting the first row would silently run a model the user did not choose. The type cannot carry `apiKey`, preserving the persisted-state boundary. |

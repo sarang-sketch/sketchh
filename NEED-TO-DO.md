@@ -1,7 +1,7 @@
 # NEED TO DO — Sketch, from here to done
 
 **Audience:** the developer who is going to write this code.
-**Status date:** task 13.5 complete; the living log now distinguishes historical snapshots from current phase truth, covers every spec decision, and reports reproducible actionable-leaf progress. **78 of 82 actionable leaves are complete; only evidence-gated 12.1–12.4 remain open.**
+**Status date:** task 12.4 complete at `ff99c43`; the living log distinguishes historical snapshots from current phase truth, covers every spec decision, and reports reproducible actionable-leaf progress. **79 of 82 actionable leaves are complete; only evidence-gated 12.1–12.3 remain open.**
 **Authority:** `.kiro/specs/sketch-engineering-os/{requirements,design,tasks}.md` are the contract.
 This file is the working plan on top of them. Where this file and the spec disagree, the spec wins
 and you should fix this file.
@@ -98,20 +98,19 @@ the allowlist.** A test that needs a remote host is a finding to report.
 
 ## 1. Where the project actually stands
 
-**Status date: Phase 13 complete; only evidence-gated tasks 12.1–12.4 remain open. 78 of 82
-actionable leaves are complete.** `tasks.md` has 96 raw checkbox rows: 83 leaves and 13 phase
-summaries. Superseded leaf 4.3 is excluded, leaving 82 actionable leaves; the normalized raw state is
-90 complete, four evidence-gated leaves, one superseded row, and one open Phase 12 summary. Core
-1,036 tests / 54 files and desktop 503 tests / 54 files pass with build and typecheck green and
-`SKETCH_FAKE_PROVIDER` both unset and set to `1`. Task 13.5 is documentation-only: it labels the old
-milestones as historical snapshots, preserves phase-gate text as checkpoint evidence, maps every
-spec conflict and design-authority decision into the living log, and replaces manually maintained
-`/96` progress with the reproducible actionable-leaf count. The recurring Windows `verify-live`
-port-release flake was stabilized separately in `012e109` without weakening the exact closed-port
-assertion. Task 12.6 remains scripted offline harness evidence, not real-provider capability
-evidence. Cross-platform package jobs and the strict `<100,000,000-byte` size gate are implemented,
-but 12.1 remains open until native Windows, macOS, and Linux workflow jobs produce uploaded
-installers and passing size manifests.
+**Status date: task 12.4 complete at `ff99c43`; only evidence-gated tasks 12.1–12.3 remain open.
+79 of 82 actionable leaves are complete.** `tasks.md` has 96 raw checkbox rows: 83 leaves and 13
+phase summaries. Superseded leaf 4.3 is excluded, leaving 82 actionable leaves; the normalized raw
+state is 91 complete, three evidence-gated leaves, one superseded row, and one open Phase 12 summary.
+Current independent validation is build 0, typecheck 0, core 1,059 tests / 55 files, and desktop 508
+tests / 54 files, with both suites passing with `SKETCH_FAKE_PROVIDER` unset and set to `1`. The
+Windows symlink branch printed `SKIPPED` and is not claimed. Task 13.5 remains the documentation-only
+historical reconciliation checkpoint; task 12.4 subsequently supplied genuine licensed third-party
+Git blob bytes and completed Requirement 26.4 without claiming organic skill quality or real-provider
+evidence. Task 12.6 remains scripted offline harness evidence, not real-provider capability evidence.
+Cross-platform package jobs and the strict `<100,000,000-byte` size gate are implemented, but 12.1
+remains open until native Windows, macOS, and Linux workflow jobs produce uploaded installers and
+passing size manifests.
 
 **Packaging evidence is honest.** The local Windows Tauri attempt reached Rust compilation but this
 host's Application Control blocked Cargo build scripts (OS error 4551) and `dlltool.exe` is absent.
@@ -130,7 +129,7 @@ Phase 11's synthetic harness lift does not change that verdict and is not a lice
 
 The detailed task expansions below are retained as historical implementation guidance from earlier
 phase vantage points. They are not a current backlog. Current status comes from this section,
-`tasks.md`, `tasks-executed.md`, and `HANDOFF.md`; only evidence-gated 12.1–12.4 remain open.
+`tasks.md`, `tasks-executed.md`, and `HANDOFF.md`; only evidence-gated 12.1–12.3 remain open.
 
 ```
 c13967d  phase 11 task 11.6 — read-only benchmark report panel
@@ -232,7 +231,8 @@ phantom errors. §0.2's ordering was written before this bit, and this is the co
 | Cost guard | Enforced before calls when configured; no default desktop budget | desktop default open |
 | Retrieval | Graph/search/assembly are real, but desktop does not send `contextBudgetTokens` by default | default wiring open |
 | Versioned memory | Persistence, hygiene, retrieval, and panel are real | automatic live-run ingestion/injection open |
-| Native/release/offline/community evidence | Workflows and deterministic gates exist | evidence-gated 12.1–12.4 |
+| Native/release/offline evidence | Workflows and deterministic gates exist | evidence-gated 12.1–12.3 |
+| Third-party community flywheel | Exact licensed third-party Git blob bytes pass production install/run/capture/train/promote/replay | complete (12.4); scripted-quality and no-real-provider limits remain |
 | Legacy compatibility paths | `ProviderAdapter` coexists with `ChatAdapter` | convergence unowned |
 
 ### 1.3 One deliberate duplication (was two)
@@ -287,7 +287,7 @@ and this project's worst incident was invisible precisely because there was noth
 ## 3. Historical implementation expansion (written from the Phase 3 vantage point)
 
 At this checkpoint, 73 tasks remained. The prose below is retained for rationale and failure traps,
-not as a current backlog. Current progress is 78/82 actionable leaves with only 12.1–12.4 open.
+not as a current backlog. Current progress is 79/82 actionable leaves with only 12.1–12.3 open.
 Requirement IDs in `_italics_` remain useful historical acceptance references.
 
 ### Phase 3 — Code surface (4 tasks left)
@@ -1084,14 +1084,17 @@ because it demos well. The plan forbids that.
   successful real version-tag release and independent verifier output. GitHub provenance is not
   Authenticode or Apple Developer ID signing/notarization; no project-owned native signing identity
   is configured.
-- **12.4 Prove the flywheel turns server-less** _(26.4)_ — the production path is now proved with
-  a locally authored community-format `skill.json` fixture: digest-bound open-registry review,
-  persisted narrower authority, production run, four captured/replayed evals, strict held-out
-  improvement, candidate review, explicit promotion, and rerun all work in process with `fetch`
-  forbidden and no HTTP/stdio Sketch server. Training writes outside the active skill directory and
-  cannot replace it silently. **Still open:** retain a genuine third-party community skill with
-  source/license provenance and run those bytes through the same gate; the local fixture is format
-  and integration evidence, not community provenance.
+- **12.4 Prove the flywheel turns server-less** _(26.4)_ — **complete at `ff99c43`.** The
+  retained input is the exact canonical Git blob bytes from third-party
+  [`dotcomjack/parallel-agents-skill`](https://github.com/dotcomjack/parallel-agents-skill) commit
+  `f26435da141df656eaed219dc23da776f46d9320`, including its complete MIT license. Open review binds
+  `sha256:af752a5b04e93791b1635d04fd3ab4272facc2d2ae5aea1fe84411ce9331fb3e` with zero
+  capabilities. Production install/run, four captures/replays, strict held-out scripted 0→1
+  training, capability-widen refusal, explicit promotion, and final replay pass with `fetch=0` and
+  no listening Sketch server. `last30days` was rejected for requiring network/subprocess/secrets/home
+  capabilities; the Vercel React skill was rejected for lacking retained license text. Raw Git blobs
+  plus narrow `eol=lf` attributes replaced an initial nonportable Windows CRLF digest. This is
+  genuine third-party-byte flywheel evidence, not organic skill-quality or real-provider evidence.
 - **12.5 Extensibility audit** _(26.5)_ — **complete.** `EXTENSIBILITY.md` maps all nine
   categories to production-consumed contracts. Skills are filesystem-discovered and model ids are
   runtime configuration. Core accepts host-scoped canonical provider, validated MCP catalog,
@@ -1140,8 +1143,9 @@ true**, not in a batch at the end — a doc amended before the code is just a di
   external evidence limits stated explicitly.
 - **13.5 `tasks-executed.md`** — **complete.** The ledger labels Milestones 1–5 as historical
   snapshots, preserves phase-gate sections as checkpoint evidence, covers all ten design conflicts
-  and all five design-authority decisions, and reports reproducible 78/82 actionable-leaf progress.
-  Earlier `/96` figures are retained only as explicitly legacy checkpoint counters.
+  and all five design-authority decisions, and uses reproducible actionable-leaf counting. Current
+  post-`ff99c43` progress is 79/82. Earlier `/96` and 78/82 figures are retained only as explicitly
+  historical checkpoint counters.
 
 ---
 
@@ -1999,13 +2003,14 @@ Every one of these has already happened here, or is one commit away. Read it bef
 | T19 | A guard with no executing test | The CI lift gate had none: inverting its `<` to `>` left all 1,050 tests green. **This happened** — closed by `17608ce`. | Every guard has a test that fails when the guard is inverted. Run the script as a child process and assert its exit code. |
 | T20 | A guard that asserts on a string, not an effect | The mutation changes behaviour while the status label stays identical. Live-feedback's `expect(result.status).toBe('runtime-error')` survives the `ok: false → true` mutation; only the `ok` line catches it. | Assert on effects — bytes on disk, call counts, computed booleans, process outcomes. Treat the effect assertions as load-bearing; never delete them as "redundant" next to a string check. |
 | T21 | A guard written against a documented signature the runtime does not use | `net.connect` and `http`'s agent call `Socket.prototype.connect` with a single array `[options, listener]`, so a signature-correct egress guard passes every `node:http` request and Node's `fetch`. **This happened** — closed by `7ce5a58`. | Prove the guard by breaking it against the real call path, not by reading the docs. A convention is not an enforcement. |
+| T22 | Cross-platform EOL conversion changes signed or vendored digests | A Windows CRLF checkout changed retained third-party bytes and produced a digest that would not reproduce from the canonical Git blobs. **This happened** during task 12.4 and was fixed before `ff99c43`. | Retain and hash canonical raw Git blob bytes; use only narrow `eol=lf` attributes for signed/vendor text; assert exact byte lengths and mutate a retained byte to prove the gate fails. |
 
-**Which of these are actually proven.** Nineteen guards have been broken, watched to fail, restored,
+**Which of these are actually proven.** Twenty guards have been broken, watched to fail, restored,
 and watched to pass, and every one of them asserts on an effect. The ledger — the per-guard failing
 test counts, the exact failure signatures, the three holes closed (`7ce5a58`, `17608ce`, `02ee9c4`),
 the caveats, and the explicit not-verified list — lives in
 `.kiro/specs/sketch-engineering-os/HANDOFF.md` § "Mutation ledger — proven vs. assumed", current as of
-`6eced6d`. Anything absent from that table is assumed, not proven.
+`ff99c43`. Anything absent from that table is assumed, not proven.
 
 ---
 
@@ -2029,7 +2034,7 @@ the caveats, and the explicit not-verified list — lives in
 - [ ] Any new debt added to §4 rather than left in someone's head.
 
 ### Whole project
-- [ ] 82 of 82 actionable leaves. Current state: 78 complete; evidence-gated 12.1–12.4 remain.
+- [ ] 82 of 82 actionable leaves. Current state: 79 complete; evidence-gated 12.1–12.3 remain.
 - [x] 12.6 canonical scripted acceptance is green: plan gate, verification contract, consensus, and
       cost guard are observable in the Timeline. This is harness evidence, not real-provider proof.
 - [ ] Native Windows, macOS, and Linux installers retained within the strict
@@ -2040,15 +2045,17 @@ the caveats, and the explicit not-verified list — lives in
       and GitHub attestations; do not conflate provenance with Authenticode or Apple notarization.
 - [x] `PRIVACY.md`, `CONTRIBUTING.md`, the `README.md` $0 recipe, and all five prior-generation
       documents are reconciled.
-- [ ] A genuine third-party community skill with retained source/license provenance installs, runs,
-      captures evals, trains, and promotes with no Sketch server involved.
+- [x] A genuine third-party community skill with retained source/license provenance installs, runs,
+      captures/replays four evals, trains under strict scripted 0→1 held-out improvement, refuses
+      capability widening, and promotes/replays with no Sketch server involved. This proves exact
+      third-party bytes through the flywheel, not organic quality or real-provider performance.
 
 ---
 
 ## 9. Start here
 
 ```powershell
-# 1. Confirm the committed task-13.5 checkpoint and clean tree.
+# 1. Confirm the committed task-12.4 checkpoint at ff99c43 and inspect the docs-only tree.
 git status --short
 git log --oneline -3
 
@@ -2060,8 +2067,8 @@ git log --oneline -3
 
 # 3. The next actionable work is external evidence-gated task 12.1.
 #    Run the native package matrix; do not mark it complete from workflow source alone.
-#    After retaining all three installer artifacts and passing size manifests, proceed to 12.2,
-#    12.3, and 12.4 using those exact bytes and the documented evidence procedures.
+#    After retaining all three installer artifacts and passing size manifests, proceed to 12.2
+#    and 12.3 using those exact bytes and the documented evidence procedures.
 
 # 4. Before recording a green checkpoint, validate in canonical order in both environments.
 npm run build
