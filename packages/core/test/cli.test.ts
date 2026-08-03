@@ -21,9 +21,10 @@
 // in-process `ProtocolServer`, where a failure points at one function instead of
 // at "the child said something odd".
 //
-// `dist/cli.js` is a build artifact: these tests skip with a clear message when it
-// is absent (`npm run build -w @sketch/core` produces it). The audit and pure
-// dispatch tests run either way.
+// `dist/cli.js` is a build artifact and the real-pipe cases cannot exist
+// without it. Missing output is therefore a failed test precondition, not a reason
+// to silently remove twenty protocol tests from the suite. Build first with
+// `npm run build -w @sketch/core`.
 //
 // Validates: Requirements 12.1, 12.2, 12.3, 12.4, 12.5, 12.6, 12.7, 6.5
 
@@ -57,12 +58,15 @@ const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const CLI_PATH = join(packageRoot, 'dist', 'cli.js')
 const CLI_BUILT = existsSync(CLI_PATH)
 
-/** Requires `dist/cli.js`; skipped with this reason in its title when absent. */
-const describeCli = CLI_BUILT
-  ? describe
-  : describe.skip
+if (!CLI_BUILT) {
+  throw new Error(
+    `CLI BUILD PRECONDITION FAILED: ${CLI_PATH} is missing. ` +
+      'Run `npm run build -w @sketch/core` before tests; real-pipe protocol coverage must not be skipped.',
+  )
+}
 
-const CLI_SKIP_NOTE = CLI_BUILT ? '' : ' [SKIPPED: dist/cli.js is missing — run `npm run build -w @sketch/core`]'
+const describeCli = describe
+const CLI_SKIP_NOTE = ''
 
 const tmpDirs: string[] = []
 
