@@ -416,7 +416,7 @@ describe('the per-epoch history is the audit trail', () => {
     expect(result.epochs[2]!.reason).toContain('strictly greater')
   })
 
-  it('narrates training on the event log without inventing an EventKind', async () => {
+  it('narrates training on the event log under skill_trained', async () => {
     const h = harness()
     await trainSkill({
       seed: skill('reviewer', [1, 2, 3]),
@@ -429,14 +429,21 @@ describe('the per-epoch history is the audit trail', () => {
     })
 
     const log = await h.events.readAll()
-    const trainerEvents = log.filter((e) => e.payload.component === 'skillopt')
-    expect(trainerEvents.map((e) => e.kind)).toEqual(['think', 'think', 'think'])
+    // Found BY KIND. This used to be `think` + `component: 'skillopt'`, which
+    // meant a training run could only be located by reading payloads — and shared
+    // a kind with the model's own reasoning.
+    const trainerEvents = log.filter((e) => e.kind === 'skill_trained')
+    expect(trainerEvents).toHaveLength(3)
+    expect(trainerEvents.every((e) => e.payload.component === undefined)).toBe(true)
+    // `phase` stays a payload key: these three are steps within one fact, not
+    // three different facts, so they do not each earn a kind.
     expect(trainerEvents.map((e) => e.payload.phase)).toEqual([
       'training_started',
       'epoch',
       'training_completed',
     ])
-    // Every kind used is in the contract; nothing was added to types.ts.
+    // And the trainer no longer contributes to `think`, which is the model's.
+    expect(log.some((e) => e.kind === 'think')).toBe(false)
     expect(new Set(log.map((e) => e.kind)).has('eval_scored')).toBe(true)
   })
 })

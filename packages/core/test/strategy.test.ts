@@ -679,10 +679,13 @@ describe('the strategy dispatcher (24.1, 24.2, 24.3)', () => {
   })
 
   it('emits under component dispatcher, never the router policy key, in its own slice', async () => {
-    // `strategy_selected` already has two emitters, both the Phase 8 cost router INSIDE a
-    // run, both using `component: 'router'` and a `policy` key. `budget.test.ts` finds them
-    // with a bare `.find(e => e.kind === 'strategy_selected')`, so a dispatcher event in a
-    // sub-run slice would be picked up instead of the router's.
+    // `strategy_selected` used to have two other emitters, both the Phase 8 cost router
+    // INSIDE a run, both using `component: 'router'` and a `policy` key. The `EventKind`
+    // amendment moved those to `model_selected`, so the dispatcher is now the only emitter.
+    // Everything asserted here still holds and is still asserted: `component: 'dispatcher'`
+    // is kept so PRE-AMENDMENT logs (which do carry router events under this kind) are still
+    // read correctly, the `policy` key is still never written, and the ladder still lands in
+    // the dispatch's own slice rather than a sub-run's.
     const { runner, calls } = makeRunner(() => ({ ok: true, reason: 'done' }))
     const deps = await dispatchDeps({ runner })
     const result = await dispatch(task(), deps)

@@ -22,15 +22,20 @@
 // {@link ESCALATABLE_REASONS} is that distinction as data. Getting it wrong is a money bug:
 // a budget breach that escalated to `swarm` would turn one ceiling into thirteen bills.
 //
-// ── `component: 'dispatcher'`, AND NEVER THE ROUTER'S `policy` KEY ──────────
+// ── `component: 'dispatcher'` IS KEPT, THOUGH NOTHING ELSE EMITS THIS KIND ──
 //
-// `strategy_selected` already has two emitters, both the Phase 8 cost router inside
-// `runTask`, both using `component: 'router'` and a `policy` key whose values are `always`
-// and `after-plan`. Those are MODEL-TIER decisions, not strategy decisions, and
-// `budget.test.ts` finds them with a bare `.find(e => e.kind === 'strategy_selected')`. So
-// this file emits `component: 'dispatcher'`, never writes a `policy` key, and emits under
-// its OWN slice — a dispatch id, not a run id — so a dispatcher event can never appear in a
-// sub-run's `forRun(runId)` and be mistaken for the router's.
+// `strategy_selected` used to have two other emitters: the Phase 8 cost router inside
+// `runTask`, using `component: 'router'` and a `policy` key whose values are `always` and
+// `after-plan`. Those are MODEL-TIER decisions, not strategy decisions, and the `EventKind`
+// amendment moved them to `model_selected`. This file is now the ONLY emitter of
+// `strategy_selected`.
+//
+// The `component: 'dispatcher'` key stays anyway, and so do the consumer checks for it, for
+// one reason: JSONL logs written before the amendment carry router events under this kind,
+// and a consumer that stopped discriminating would start rendering a two-year-old model-tier
+// switch as a strategy nobody chose. It also still never writes a `policy` key. And it still
+// emits under its OWN slice — a dispatch id, not a run id — so a dispatcher event can never
+// appear in a sub-run's `forRun(runId)`.
 //
 // ── WHY THE DISPATCHER HAS ITS OWN SLICE ────────────────────────────────────
 //
@@ -611,9 +616,9 @@ export async function dispatch(task: Task, deps: DispatchDeps): Promise<Dispatch
       await deps.events.emit({
         runId: dispatchId,
         kind: 'strategy_selected',
-        // `component` tells this apart from the cost router's two emitters, and there is
-        // deliberately no `policy` key here — that is the router's, and reusing it would
-        // make one payload shape mean two different decisions.
+        // `component` tells this apart from the router events in PRE-AMENDMENT logs, and
+        // there is deliberately no `policy` key here — that was the router's, and reusing it
+        // would make one payload shape mean two different decisions.
         payload: { component: 'dispatcher', taskId: task.id, ...payload },
       })
     },
@@ -688,9 +693,9 @@ export async function dispatch(task: Task, deps: DispatchDeps): Promise<Dispatch
 
   const last = attempts[attempts.length - 1]
   await context.emit({
-    // The RECORD of which strategy succeeded (Requirement 24.2). `strategy_selected` is the
-    // only event kind the contract gives for this, and the closed `EventKind` union is a
-    // spec-level contract, so `phase` discriminates rather than a new kind being invented.
+    // The RECORD of which strategy succeeded (Requirement 24.2). `phase` discriminates the
+    // steps WITHIN one dispatch — attempt, roles, outcome — which is a variant of one fact
+    // and so correctly a payload key rather than three kinds.
     phase: 'outcome',
     succeeded,
     ok: succeeded !== null,

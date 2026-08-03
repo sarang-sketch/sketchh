@@ -225,19 +225,24 @@ describe('what the panel does and does not claim', () => {
     expect(screen.getByText(/Nothing has been dispatched in this session/)).toBeTruthy()
   })
 
-  it('renders real dispatcher events and ignores the cost router\u2019s', async () => {
+  it('renders real dispatcher events and ignores the cost router\u2019s, old kind and new', async () => {
     const root = await makeTmp()
     const client = new EngineClient(root)
     mount(client, root)
     await waitFor(() => expect(screen.getByRole('status')).toBeTruthy())
 
-    const emit = (payload: Record<string, unknown>, id: string): void => {
-      const event: SketchEvent = { id, ts: 1, runId: 'd1', kind: 'strategy_selected', payload }
+    const emitKind = (kind: SketchEvent['kind'], payload: Record<string, unknown>, id: string): void => {
+      const event: SketchEvent = { id, ts: 1, runId: 'd1', kind, payload }
       client.bus.emit(event)
     }
+    const emit = (payload: Record<string, unknown>, id: string): void =>
+      emitKind('strategy_selected', payload, id)
 
-    // The cost router emits the same KIND with `component: 'router'`. Its decision is about
-    // which model to use; showing it here would read as a strategy change.
+    // The cost router used to emit the same KIND with `component: 'router'`; the `EventKind`
+    // amendment gave it `model_selected`. BOTH are sent here — the new kind as a live run
+    // produces it, and the old shape as a pre-amendment JSONL log still holds it. Its decision
+    // is about which model to use, so neither may produce a line on this panel.
+    emitKind('model_selected', { policy: 'always', adapter: 'cheap' }, 'e-new')
     emit({ component: 'router', policy: 'after-plan', adapter: 'cheap' }, 'e0')
     emit({ component: 'dispatcher', phase: 'attempt', attempt: 1, strategy: 'swarm', reason: 'the caller chose swarm' }, 'e1')
     emit({ component: 'dispatcher', phase: 'roles', verifiable: ['research'], skipped: [{ role: 'frontend', reason: 'no build stage' }] }, 'e2')
@@ -247,7 +252,7 @@ describe('what the panel does and does not claim', () => {
     expect(screen.getByText(/1 verifiable, 1 skipped/)).toBeTruthy()
     expect(screen.getByText(/no strategy succeeded/)).toBeTruthy()
 
-    // THE ROUTER EVENT PRODUCED NO LINE. Counting is what makes this a real guard: an
+    // NEITHER ROUTER EVENT PRODUCED A LINE. Counting is what makes this a real guard: an
     // earlier version of this test only asserted that the string `after-plan` was absent,
     // and `after-plan` lives in the router's `policy` key which this panel never renders —
     // so the assertion passed with the `component` check deleted. Three dispatcher events

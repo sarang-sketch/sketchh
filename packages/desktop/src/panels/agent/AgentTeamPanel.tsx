@@ -70,9 +70,11 @@ interface DispatchLine {
 function describeDispatchEvent(event: SketchEvent): DispatchLine | null {
   if (event.kind !== 'strategy_selected') return null
   const payload = event.payload as Record<string, unknown>
-  // The cost router emits this kind too, with `component: 'router'` and a `policy` key. Its
-  // decisions are about which MODEL to use, not which strategy, and showing them here would
-  // read as a strategy change that never happened.
+  // The cost router used to emit this kind too, with `component: 'router'` and a `policy`
+  // key. Its decisions are about which MODEL to use, not which strategy, and the `EventKind`
+  // amendment gave them `model_selected`. The check stays because pre-amendment JSONL logs
+  // still carry router events here, and showing one would read as a strategy change that
+  // never happened.
   if (payload['component'] !== 'dispatcher') return null
 
   const phase = typeof payload['phase'] === 'string' ? payload['phase'] : 'unknown'

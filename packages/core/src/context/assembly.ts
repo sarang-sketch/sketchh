@@ -64,20 +64,21 @@
 // `hybridSearch`'s total order, neighbours are sorted, skills are sorted by
 // name, and no Map iteration order reaches the output.
 //
-// ── THE `context_assembled` COLLISION ───────────────────────────────────────
+// ── THE `context_assembled` DISCRIMINATOR, AND WHY IT SURVIVED ──────────────
 //
-// Three call sites emit this one EventKind, told apart by `component`:
+// TWO call sites emit this EventKind, told apart by `component`:
 //
 //   * `component: "assembly"`   — HERE. The real assembly step, and the only
 //     emitter carrying `primary: true`, the selected paths and the token
 //     estimate that Requirement 18.6 asks for.
-//   * `component: "hybrid-search"` — retrieval telemetry (which channel ran).
 //   * `component: "agent-loop"`  — the loop's message-count breadcrumb.
 //
-// There is no assembly-specific EventKind in the contract and inventing one is
-// not allowed, so the discriminator is the documented workaround. The collision
-// is recorded as a spec gap in the handoff. To keep the log unambiguous, the
-// search's own event is NOT emitted from here by default (`emitSearchEvent`).
+// Both say "the context for this turn is now fixed"; they differ in fidelity, not
+// in fact, so the `EventKind` amendment deliberately did NOT split them. The
+// third emitter, retrieval telemetry, WAS a different fact and left for
+// `context_retrieved`. The search's own event is still not emitted from here by
+// default (`emitSearchEvent`): the assembly record already carries the search's
+// status, and one retrieval should not appear on the log twice.
 //
 // Validates: Requirements 18.4, 18.5, 18.6, 18.8
 

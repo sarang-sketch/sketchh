@@ -446,13 +446,13 @@ describe('an unreachable provider degrades instead of failing', () => {
     expect(status.reason).toContain('embedding provider unavailable')
     expect(status.mixedVectorSpaces).toBe(false)
 
-    const emitted = (await events.readAll()).filter(
-      e => (e.payload as { component?: string }).component === 'embedder'
-    )
+    // Found BY KIND, not by payload key. That is the whole point of the
+    // `EventKind` amendment: this used to be `context_loaded` plus
+    // `component: 'embedder'`, so the only way to find a degrade was to read
+    // payloads and hope the discriminator was spelled the same way.
+    const emitted = (await events.readAll()).filter(e => e.kind === 'embedder_degraded')
     expect(emitted).toHaveLength(1)
-    // No embedding EventKind exists in the contract; `context_loaded` plus a
-    // payload discriminator is the documented workaround.
-    expect(emitted[0]!.kind).toBe('context_loaded')
+    expect(emitted[0]!.payload.component).toBeUndefined()
     expect(emitted[0]!.payload.degraded).toBe(true)
   })
 

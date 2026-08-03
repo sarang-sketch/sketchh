@@ -220,11 +220,12 @@ describe('hybrid retrieval on a real repository', () => {
 
     const emitted = await events.readAll()
     expect(emitted).toHaveLength(1)
-    // No retrieval EventKind exists in the contract and inventing one is not
-    // allowed, so an existing kind carries a payload discriminator.
-    expect(emitted[0]!.kind).toBe('context_assembled')
+    // Retrieval has its own kind since the `EventKind` amendment. It used to be
+    // `context_assembled` plus `component: 'hybrid-search'`, sharing one kind with
+    // the assembly step and the loop's breadcrumb.
+    expect(emitted[0]!.kind).toBe('context_retrieved')
     expect(emitted[0]!.runId).toBe('run-7')
-    expect(emitted[0]!.payload.component).toBe('hybrid-search')
+    expect(emitted[0]!.payload.component).toBeUndefined()
     expect(emitted[0]!.payload.lexicalEngine).toBe(result.lexicalEngine)
     expect(emitted[0]!.payload.vectorOnly).toBe(false)
     expect(emitted[0]!.payload.rrfK).toBe(RRF_K)

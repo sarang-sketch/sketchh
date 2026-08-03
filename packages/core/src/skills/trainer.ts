@@ -45,14 +45,13 @@
 //     workspace per case and removes it. That is what we want for training: a
 //     candidate must not be scored on bytes a previous candidate wrote.
 //
-// EVENTS. There is no `skill_trained` kind in the `EventKind` contract and this
-// file does not invent one — changing types.ts requires a spec update first.
-// Training narration is therefore recorded as `think` carrying a
-// `component: 'skillopt'` discriminator, the same way the loop records an `ask`
-// as a `think`. The per-case `eval_scored` events come from the harness and are
-// not duplicated here. SPEC GAP, recorded rather than patched: a dedicated
-// `skill_trained` kind would make training runs greppable without a payload
-// discriminator.
+// EVENTS. Training narration is `skill_trained`, its own kind since the
+// `EventKind` amendment. It used to be `think` carrying a
+// `component: 'skillopt'` discriminator, which made a training run indexable
+// only by reading payloads. The per-case `eval_scored` events come from the
+// harness and are not duplicated here. `phase` still discriminates the steps
+// WITHIN a training run (`training_started`, `epoch`, `training_finished`),
+// which is a variant of one fact and correctly a payload key.
 //
 // Validates: Requirements 9.1, 9.2, 9.3, 9.4, 9.5, 9.8
 
@@ -345,9 +344,8 @@ export async function trainSkill(options: TrainSkillOptions): Promise<TrainResul
     })
 
   const emit = async (payload: Record<string, unknown>): Promise<void> => {
-    // No `skill_trained` kind exists in the contract; `think` + a discriminator,
-    // as the loop does for `ask`. See the header note.
-    await events.emit({ runId, kind: 'think', payload: { component: 'skillopt', ...payload } })
+    // `skill_trained`, not `think` + a discriminator. See the header note.
+    await events.emit({ runId, kind: 'skill_trained', payload })
   }
 
   let best = options.seed

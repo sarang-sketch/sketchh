@@ -34,13 +34,23 @@ import type {
 // Typed as EventKind[]: drop a member from the union and this stops compiling.
 const ALL_EVENT_KINDS: EventKind[] = [
   'run_started', 'plan_written', 'skill_loaded', 'context_loaded', 'context_assembled',
-  'llm_request', 'llm_response', 'think',
+  'repo_indexed', 'context_retrieved', 'embedder_degraded',
+  'llm_request', 'llm_response', 'think', 'ask',
   'verify_started', 'verify_result',
   'edit_proposed', 'edit_accepted', 'edit_rejected',
   'tool_called', 'tool_denied',
-  'budget_exceeded', 'cache_hit', 'strategy_selected',
+  'budget_exceeded', 'cache_hit', 'strategy_selected', 'model_selected',
   'memory_retrieved', 'memory_superseded', 'diagram_updated',
+  'skill_trained',
   'run_completed', 'run_failed', 'eval_scored',
+]
+
+// The six kinds the `EventKind` amendment added, each of which replaced an
+// existing kind plus a payload discriminator. Listed as `EventKind[]` so
+// reverting one in types.ts stops this file compiling.
+const AMENDMENT_KINDS: EventKind[] = [
+  'repo_indexed', 'context_retrieved', 'embedder_degraded',
+  'model_selected', 'skill_trained', 'ask',
 ]
 
 // The other direction: a Record keyed by the union is only constructible when
@@ -48,11 +58,13 @@ const ALL_EVENT_KINDS: EventKind[] = [
 // build too. Together the two declarations pin the union exactly.
 const EVENT_KIND_EXHAUSTIVE: Record<EventKind, true> = {
   run_started: true, plan_written: true, skill_loaded: true, context_loaded: true,
-  context_assembled: true, llm_request: true, llm_response: true, think: true,
+  context_assembled: true, repo_indexed: true, context_retrieved: true,
+  embedder_degraded: true, llm_request: true, llm_response: true, think: true,
+  ask: true,
   verify_started: true, verify_result: true, edit_proposed: true, edit_accepted: true,
   edit_rejected: true, tool_called: true, tool_denied: true, budget_exceeded: true,
-  cache_hit: true, strategy_selected: true, memory_retrieved: true,
-  memory_superseded: true, diagram_updated: true, run_completed: true,
+  cache_hit: true, strategy_selected: true, model_selected: true, memory_retrieved: true,
+  memory_superseded: true, diagram_updated: true, skill_trained: true, run_completed: true,
   run_failed: true, eval_scored: true,
 }
 
@@ -61,14 +73,21 @@ function roundTrip<T>(value: T): T {
 }
 
 describe('EventKind', () => {
-  it('has exactly the 24 kinds the design specifies', () => {
-    expect(ALL_EVENT_KINDS).toHaveLength(24)
-    expect(new Set(ALL_EVENT_KINDS).size).toBe(24)
+  it('has exactly the 30 kinds the design specifies', () => {
+    expect(ALL_EVENT_KINDS).toHaveLength(30)
+    expect(new Set(ALL_EVENT_KINDS).size).toBe(30)
   })
 
   it('contains no kind outside the union and no union member unlisted', () => {
     const fromRecord = Object.keys(EVENT_KIND_EXHAUSTIVE).sort()
     expect(fromRecord).toEqual([...ALL_EVENT_KINDS].sort())
+  })
+
+  it('carries the six kinds the amendment added, and keeps `context_loaded`', () => {
+    for (const kind of AMENDMENT_KINDS) expect(ALL_EVENT_KINDS).toContain(kind)
+    // Retained with no emitter: it is published contract and it is in logs on
+    // disk. Dropping it would make an old line unreadable to a typed consumer.
+    expect(ALL_EVENT_KINDS).toContain('context_loaded')
   })
 })
 

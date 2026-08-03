@@ -544,8 +544,13 @@ export async function runTask(task: Task, deps: RunTaskDeps): Promise<RunResult>
    */
   if (deps.router?.policy === 'always' && deps.router.cheap !== undefined) {
     adapter = deps.router.cheap
-    await emit('strategy_selected', {
-      component: 'router',
+    // `model_selected`, its own kind since the `EventKind` amendment. This used to
+    // be `strategy_selected` + `component: 'router'`, sharing a kind with the
+    // dispatcher's strategy ladder — two different decisions, one kind, told apart
+    // only by a payload key. Which MODEL runs is not which STRATEGY ran.
+    // No `component` key: this kind has one emitter, so there is nothing to tell
+    // apart, and `policy` already names the mechanism.
+    await emit('model_selected', {
       policy: 'always',
       adapter: adapter.id,
       ...(adapter.model !== undefined ? { model: adapter.model } : {}),
@@ -562,11 +567,13 @@ export async function runTask(task: Task, deps: RunTaskDeps): Promise<RunResult>
   for (const skill of deps.skills ?? []) {
     await emit('skill_loaded', { name: skill.name, source: skill.source })
   }
-  // Three call sites emit `context_assembled`, told apart by `component`:
+  // TWO call sites emit `context_assembled`, told apart by `component`:
   // `assembly` (the real budgeted assembly step, and the primary payload — see
-  // context/assembly.ts), `hybrid-search` (retrieval telemetry) and this one,
-  // the loop's message-count breadcrumb. The discriminator is what keeps a
-  // consumer from reading this breadcrumb as the assembly record.
+  // context/assembly.ts) and this one, the loop's message-count breadcrumb. Both
+  // report the same fact — the context for this turn is now fixed — at different
+  // fidelities, which is what `component` is for and why this one did NOT get its
+  // own kind in the `EventKind` amendment. Retrieval telemetry, which was a third
+  // emitter here and a genuinely different fact, moved to `context_retrieved`.
   await emit('context_assembled', {
     component: 'agent-loop',
     messages: messages.length,
@@ -743,8 +750,9 @@ export async function runTask(task: Task, deps: RunTaskDeps): Promise<RunResult>
           if (deps.router?.policy === 'after-plan' && cheap !== undefined && adapter !== cheap) {
             const previous = adapter.id
             adapter = cheap
-            await emit('strategy_selected', {
-              component: 'router',
+            // `model_selected`, not `strategy_selected`. See the note at the
+            // `always` branch above.
+            await emit('model_selected', {
               policy: 'after-plan',
               from: previous,
               adapter: adapter.id,
@@ -890,11 +898,14 @@ export async function runTask(task: Task, deps: RunTaskDeps): Promise<RunResult>
           // hang every automated caller. The question is surfaced as the run's
           // finalText and the run ends not-ok, which is honest — the task was not
           // completed — and leaves the caller free to re-run with the answer
-          // appended to the prompt. There is no `ask` EventKind in the contract,
-          // so the question is recorded as a `think` carrying the ask payload.
-          await emit('think', {
+          // appended to the prompt. The event is `ask`, its own kind since the
+          // `EventKind` amendment; it used to be a `think` with an
+          // `action: 'ask'` key, which put "the model was reasoning" and "the run
+          // needs a human" under one kind. `text` is kept alongside `question` so
+          // a consumer that reads a generic `text` still shows the question.
+          await emit('ask', {
             iteration: iterations,
-            action: 'ask',
+            question: action.question,
             text: action.question,
             reason: ASK_UNSUPPORTED_REASON,
           })

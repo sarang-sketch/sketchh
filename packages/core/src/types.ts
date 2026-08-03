@@ -13,14 +13,43 @@
 // Both of those types are now deleted along with the legacy `verifier/` and the
 // legacy orchestrator state machine, so the canonical names have no rivals.
 
+// ── WHY SOME KINDS EXIST AND SOME DISCRIMINATORS REMAIN ─────────────────────
+//
+// Six kinds below (`repo_indexed`, `context_retrieved`, `embedder_degraded`,
+// `model_selected`, `skill_trained`, `ask`) were added in one spec-approved
+// change. Before it, each of those facts was carried by an unrelated kind plus a
+// `component` payload discriminator, so a Timeline consumer had to read the
+// payload to know what it was looking at. The rule applied, and the rule to keep
+// applying: a DISTINCT SUBSYSTEM reporting a DISTINCT FACT gets a kind; a
+// variant of the same fact does not.
+//
+// Deliberately still discriminated by `component`, because they are the same
+// fact from different places:
+//
+//   * `context_assembled` — `assembly` (the budgeted assembly step, `primary:
+//     true`) and `agent-loop` (the loop's message-count breadcrumb). Both say
+//     "the context for this turn is now fixed"; they differ in fidelity.
+//   * `tool_called` / `tool_denied` — `mcp` and `registry`. A tool is a tool;
+//     `component` names which provider ran or refused it.
+//   * `strategy_selected` — `dispatcher` only, now that the cost router has
+//     `model_selected`. The discriminator stays because logs written before this
+//     change carry router events under this kind, and consumers that check it
+//     keep reading those old lines correctly.
+//   * `diagram_updated` — `architecture` is its only emitter; the key is
+//     provenance, not a discriminator.
+//
+// `context_loaded` is retained with no emitter. It is part of the published
+// contract and logs on disk contain it.
 export type EventKind =
   | "run_started" | "plan_written" | "skill_loaded" | "context_loaded" | "context_assembled"
-  | "llm_request" | "llm_response" | "think"
+  | "repo_indexed" | "context_retrieved" | "embedder_degraded"
+  | "llm_request" | "llm_response" | "think" | "ask"
   | "verify_started" | "verify_result"
   | "edit_proposed" | "edit_accepted" | "edit_rejected"
   | "tool_called" | "tool_denied"
-  | "budget_exceeded" | "cache_hit" | "strategy_selected"
+  | "budget_exceeded" | "cache_hit" | "strategy_selected" | "model_selected"
   | "memory_retrieved" | "memory_superseded" | "diagram_updated"
+  | "skill_trained"
   | "run_completed" | "run_failed" | "eval_scored";
 
 export interface SketchEvent { id: string; ts: number; runId: string; kind: EventKind; payload: Record<string, unknown>; }

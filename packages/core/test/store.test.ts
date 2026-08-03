@@ -197,6 +197,53 @@ describe('malformed line tolerance', () => {
     expect(skipped).toBe(1)
   })
 
+  it('still reads lines written under the pre-amendment kinds (Requirement 3.1c)', async () => {
+    // THE OLD-LOG QUESTION, asserted rather than asserted-in-prose. Before the
+    // `EventKind` amendment the repo index reported `context_loaded` with
+    // `component: "repo-graph"` and the cost router reported `strategy_selected`
+    // with `component: "router"`. Those lines are on disk in real projects. The
+    // reader validates SHAPE, not membership of the union, so they still load with
+    // their kind and payload intact — which is what keeps an old timeline readable.
+    const base = await makeTmp()
+    const store = deterministicStore(base)
+    const file = store.fileFor(1_700_000_000_000)
+
+    await store.emit({ runId: 'r1', kind: 'repo_indexed', payload: { files: 4 } })
+    await appendFile(
+      file,
+      `${JSON.stringify({
+        id: 'legacy-1',
+        ts: 1_700_000_000_001,
+        runId: 'r1',
+        kind: 'context_loaded',
+        payload: { component: 'repo-graph', files: 9 },
+      })}\n`,
+      'utf8',
+    )
+    await appendFile(
+      file,
+      `${JSON.stringify({
+        id: 'legacy-2',
+        ts: 1_700_000_000_002,
+        runId: 'r1',
+        kind: 'strategy_selected',
+        payload: { component: 'router', policy: 'always' },
+      })}\n`,
+      'utf8',
+    )
+
+    const { events, skipped } = await store.readAllDetailed()
+    expect(skipped).toBe(0)
+    expect(events.map((e) => e.kind)).toEqual([
+      'repo_indexed',
+      'context_loaded',
+      'strategy_selected',
+    ])
+    expect(events[1]!.payload.component).toBe('repo-graph')
+    expect(events[1]!.payload.files).toBe(9)
+    expect(events[2]!.payload.component).toBe('router')
+  })
+
   it('returns [] for a non-existent events directory', async () => {
     const base = await makeTmp()
     const store = new JsonlEventStore({ baseDir: join(base, 'never-written'), secrets: [] })

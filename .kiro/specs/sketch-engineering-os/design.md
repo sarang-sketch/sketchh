@@ -148,12 +148,14 @@ These types are the contract for Phase 1 and are reproduced exactly. Everything 
 ```ts
 export type EventKind =
   | "run_started" | "plan_written" | "skill_loaded" | "context_loaded" | "context_assembled"
-  | "llm_request" | "llm_response" | "think"
+  | "repo_indexed" | "context_retrieved" | "embedder_degraded"
+  | "llm_request" | "llm_response" | "think" | "ask"
   | "verify_started" | "verify_result"
   | "edit_proposed" | "edit_accepted" | "edit_rejected"
   | "tool_called" | "tool_denied"
-  | "budget_exceeded" | "cache_hit" | "strategy_selected"
+  | "budget_exceeded" | "cache_hit" | "strategy_selected" | "model_selected"
   | "memory_retrieved" | "memory_superseded" | "diagram_updated"
+  | "skill_trained"
   | "run_completed" | "run_failed" | "eval_scored";
 
 export interface SketchEvent { id: string; ts: number; runId: string; kind: EventKind; payload: Record<string, unknown>; }
@@ -181,6 +183,32 @@ export interface SecretStore { get(id: string): Promise<string | null>; set(id: 
 ```
 
 Note the deliberate naming collision with existing engine types: the existing `VerifyResult` (an aggregate of `CheckResult[]`) is renamed `VerifySummary` during migration, and the new per-command `VerifyResult` above takes the name. The existing `RunResult` in `orchestrator.ts` is renamed `OrchestratorRunResult`. Both renames are mechanical and covered by the existing test suite.
+
+#### `EventKind` amendment — six explicit kinds, and what stays a payload discriminator
+
+The union originally had 24 members. Phases 5 through 12 added five subsystems that had facts to report and no kind to report them under, and because inventing a kind requires a spec change, each overloaded an existing kind with a `component` key in the payload. Eleven such sites accumulated; three unrelated facts shared `context_assembled`, and `think` carried both skill training and the loop's `ask`. A Timeline consumer had to read the payload to learn what an event was.
+
+Six kinds are therefore added, taking the union to **30**. The test for whether a fact earns a kind: **a distinct subsystem reporting a distinct fact gets one; a variant of the same fact does not.**
+
+| Kind | Emitter | Was | Fact |
+|---|---|---|---|
+| `repo_indexed` | `context/repo-graph.ts` | `context_loaded` + `component: "repo-graph"` | The repository index was built or incrementally rebuilt |
+| `context_retrieved` | `context/hybrid-search.ts` | `context_assembled` + `component: "hybrid-search"` | Retrieval ran, and which channels ran or degraded |
+| `embedder_degraded` | `context/offline-embedder.ts` | `context_loaded` + `component: "embedder"` | The embedding provider became unreachable and local hashing vectors took over |
+| `model_selected` | `loop/agent.ts` (cost router) | `strategy_selected` + `component: "router"` | A model-tier decision under `router.policy`, which is not a strategy decision |
+| `skill_trained` | `skills/trainer.ts` | `think` + `component: "skillopt"` | SkillOpt training narration, off the hot path |
+| `ask` | `loop/agent.ts` | `think` + `action: "ask"` | The run stopped because it needs a human answer |
+
+Five sites keep `component`, because the discriminator is describing provenance rather than telling two facts apart:
+
+- **`context_assembled`** — `assembly` (the budgeted assembly step, the only emitter with `primary: true`, the selected paths and the token estimate Requirement 18.6 asks for) and `agent-loop` (the loop's message-count breadcrumb). Both report that the context for this turn is now fixed; they differ in fidelity, not in kind.
+- **`tool_called` / `tool_denied`** — `mcp` and `registry`. A tool call is a tool call; `component` names which provider ran or refused it.
+- **`strategy_selected`** — `dispatcher` is now its only emitter. The key is kept, and consumers keep checking it, because logs written before this amendment carry router events under this kind.
+- **`diagram_updated`** — `architecture` is its only emitter; the key is provenance.
+
+`context_loaded` stays in the union with no emitter: it is published contract and appears in logs already on disk.
+
+**Log compatibility.** The event store's reader validates shape, not `kind` — a line whose kind is not a union member still parses and still renders. Old JSONL logs therefore continue to display, under their old kind names, with their payloads intact. What is *not* claimed: old lines do not retroactively gain the new kinds' rendering. An old `context_loaded{component:"repo-graph"}` line shows as `context_loaded` with no one-line summary, exactly as it did before. Consumers that discriminate on `component` are unchanged, so no old line is newly misread.
 
 ### Model action protocol
 

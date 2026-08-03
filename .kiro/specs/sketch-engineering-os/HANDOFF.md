@@ -348,15 +348,21 @@ were not touched: replacing `global.fetch` replaces the wrapper, and a mock open
 
 ## Spec gaps found and recorded, not absorbed
 
-- No `ask` EventKind — the loop records a question as `think` with an `action: "ask"` discriminator.
-- No `skill_trained` EventKind — the trainer uses `think` with `component: "skillopt"`.
-- No indexing / retrieval / embedding EventKinds — `repo-graph`, `hybrid-search`, `assembly`,
-  `agent-loop`, `embedder` and `architecture` all reuse `context_loaded` / `context_assembled` /
-  `diagram_updated` with a `component` discriminator in the payload.
+- ~~No `ask` EventKind~~ — **CLOSED** by the `EventKind` amendment (see design.md, "Core contracts").
+- ~~No `skill_trained` EventKind~~ — **CLOSED** by the same amendment.
+- ~~No indexing / retrieval / embedding EventKinds~~ — **CLOSED** for indexing (`repo_indexed`),
+  retrieval (`context_retrieved`) and embedding (`embedder_degraded`). The cost router also moved off
+  `strategy_selected` onto `model_selected`. `assembly` and `agent-loop` deliberately still share
+  `context_assembled` behind `component`, `mcp` and `registry` still share `tool_called` /
+  `tool_denied`, and `architecture` keeps its `component` key on `diagram_updated` — those are one
+  fact from more than one place, which is what a discriminator is for.
 - No CLI cancellation verb — `runTask` accepts an `AbortSignal` the wire cannot reach.
 
-Do not add an EventKind without a spec update; use an existing kind with a payload discriminator and
-report the gap.
+The rule is unchanged: **do not add an EventKind without a spec update.** Use an existing kind with a
+payload discriminator and report the gap. When the accumulated gap is worth fixing, amend
+requirements.md 3.1 and design.md's "Core contracts" section IN THE SAME CHANGE as types.ts, migrate
+every emitter and every consumer, and add a consumer-side test per new kind — a UI that silently stops
+matching fails nothing on its own (`packages/desktop/src/eventKinds-gate.test.tsx`).
 
 ---
 

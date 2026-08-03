@@ -76,6 +76,32 @@ function summarize(event: SketchEvent): string {
       return Array.isArray(p.commands) ? p.commands.join(', ') : ''
     case 'verify_result':
       return `${p.name ?? 'verify'} — ${p.ok ? 'pass' : `fail (exit ${p.exitCode ?? '?'})`}`
+    // ── THE SIX KINDS FROM THE `EventKind` AMENDMENT ─────────────────────────
+    //
+    // Each of these used to arrive under a kind this switch already handled or
+    // ignored. `default:` returns '' — so a migrated emitter whose kind nobody
+    // added here still FIRES, still lists, and silently shows a blank summary.
+    // That is the failure mode the amendment had to guard, and it is guarded by
+    // an assertion per kind in AgentTimeline.test.tsx.
+    case 'repo_indexed':
+      return `${p.files ?? '?'} files · ${p.chunks ?? '?'} chunks · ${p.reused ?? 0} reused`
+    case 'context_retrieved': {
+      const channels = Array.isArray(p.channels)
+        ? (p.channels as Array<{ channel?: unknown; ran?: unknown }>)
+            .filter((c) => c.ran === true)
+            .map((c) => String(c.channel))
+        : []
+      const ran = channels.length > 0 ? channels.join('+') : 'no channel'
+      return `${ran} · ${p.returned ?? 0} of ${p.fused ?? 0}${p.degraded === true ? ' · degraded' : ''}`
+    }
+    case 'embedder_degraded':
+      return typeof p.reason === 'string' ? p.reason : 'embedding provider unavailable'
+    case 'model_selected':
+      return `${p.policy ?? 'policy'} → ${p.adapter ?? 'adapter'}${p.model !== undefined ? ` (${p.model})` : ''}`
+    case 'skill_trained':
+      return `${p.phase ?? 'training'} · ${p.skill ?? 'skill'}`
+    case 'ask':
+      return typeof p.question === 'string' ? p.question : 'awaiting human input'
     case 'strategy_selected': {
       const phase = typeof p.phase === 'string' ? p.phase : 'selection'
       if (phase === 'roles') {

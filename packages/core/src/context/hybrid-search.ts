@@ -24,7 +24,7 @@
 //
 // The fallback is never silent. `LexicalResult.degraded` is true whenever the
 // weaker scanner ran, `reason` says why, and the reason travels into the
-// `context_assembled` payload. A retriever that quietly got worse looks exactly
+// `context_retrieved` payload. A retriever that quietly got worse looks exactly
 // like a repository that quietly lost a file.
 //
 // ── ONE DIALECT, TWO CALLERS ────────────────────────────────────────────────
@@ -1283,9 +1283,11 @@ export const DEFAULT_TOP_K = 12
 /**
  * Retrieve. Hybrid by default (Requirement 18.2).
  *
- * The event is `context_assembled` carrying `component: "hybrid-search"`. There
- * is no retrieval EventKind in the contract and inventing one is not allowed, so
- * the payload carries the discriminator and the gap is recorded in the handoff.
+ * The event is `context_retrieved` — its own kind since the `EventKind`
+ * amendment. It used to be `context_assembled` carrying
+ * `component: "hybrid-search"`, sharing one kind with the assembly step and the
+ * loop's breadcrumb. Retrieval and assembly are different facts from different
+ * subsystems, so retrieval has a kind.
  */
 export async function hybridSearch(options: HybridSearchOptions): Promise<HybridSearchResult> {
   const config = resolveSearchConfig(options.config)
@@ -1373,9 +1375,8 @@ export async function hybridSearch(options: HybridSearchOptions): Promise<Hybrid
 
   await options.events?.emit({
     runId: options.runId ?? 'search',
-    kind: 'context_assembled',
+    kind: 'context_retrieved',
     payload: {
-      component: 'hybrid-search',
       // WHICH CHANNEL RAN. The point of the payload: a degraded retriever must be
       // visible in the log, not inferred from disappointing results.
       channels: channels.map(c => ({

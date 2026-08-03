@@ -426,6 +426,15 @@ describe('termination', () => {
     const terminals = terminal(result.events)
     expect(terminals).toHaveLength(1)
     expect(terminals[0]!.payload.reason).toBe('awaiting_human_input')
+
+    // `ask` has its own kind since the `EventKind` amendment. It used to be a
+    // `think` carrying `action: 'ask'`, so "the model was reasoning" and "the run
+    // needs a human" arrived under one kind and a consumer had to read the payload
+    // to tell a narration from a question.
+    const asked = result.events.filter((e) => e.kind === 'ask')
+    expect(asked).toHaveLength(1)
+    expect(asked[0]!.payload.question).toBe('Which database?')
+    expect(result.events.some((e) => e.kind === 'think')).toBe(false)
   })
 
   it('fails the run without an unhandled rejection when the adapter throws, redacting the message', async () => {

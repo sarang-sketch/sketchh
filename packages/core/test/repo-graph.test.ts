@@ -258,7 +258,7 @@ describe('buildRepoGraph', () => {
     expect(await readFile(join(root, '.sketch', '.gitignore'), 'utf8')).toContain('*')
   })
 
-  it('reports the build on the event log using an existing kind and a discriminator', async () => {
+  it('reports the build on the event log under its own kind', async () => {
     const root = await makeProject()
     await seed(root)
     const events = new MemoryEventStore()
@@ -267,11 +267,14 @@ describe('buildRepoGraph', () => {
     const emitted = await events.readAll()
 
     expect(emitted).toHaveLength(1)
-    expect(emitted[0]!.kind).toBe('context_loaded')
+    // Indexing has its own kind since the `EventKind` amendment. It used to be
+    // `context_loaded` plus `component: 'repo-graph'`, which a consumer had to
+    // read the payload to identify.
+    expect(emitted[0]!.kind).toBe('repo_indexed')
     expect(emitted[0]!.runId).toBe('run-1')
-    // There is no indexing EventKind in the contract and inventing one is not
-    // allowed, so the payload carries the discriminator.
-    expect(emitted[0]!.payload.component).toBe('repo-graph')
+    // And the discriminator is GONE, not merely redundant: leaving it would keep
+    // a consumer's payload check alive and working, so nobody would migrate.
+    expect(emitted[0]!.payload.component).toBeUndefined()
     expect(emitted[0]!.payload.files).toBe(4)
     expect(emitted[0]!.payload.added).toBe(4)
   })

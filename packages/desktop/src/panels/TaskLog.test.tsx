@@ -204,7 +204,24 @@ describe('projectRuns', () => {
     expect(rows[0]!.strategy).toBe('swarm')
   })
 
-  it('does not read the cost router\u2019s strategy_selected as a dispatch', () => {
+  it('does not read the cost router\u2019s model_selected as a dispatch', () => {
+    // Since the `EventKind` amendment the router emits its OWN kind, so this can
+    // no longer be confused with a strategy by accident. Asserted anyway: the
+    // projection must not start treating an unrelated kind as a dispatch.
+    const rows = projectRuns([
+      event('r1', 'run_started', { prompt: 'x', adapter: 'frontier' }, 1),
+      event('r1', 'model_selected', { policy: 'after-plan', adapter: 'ollama' }, 2),
+      event('r1', 'run_completed', { reason: 'done' }, 3),
+    ])
+    expect(rows[0]!.strategy).toBeNull()
+  })
+
+  it('does not read a PRE-AMENDMENT router strategy_selected as a dispatch', () => {
+    // The old-log case, kept as a live test rather than a promise in a comment.
+    // JSONL written before the amendment carries the router under
+    // `strategy_selected` with `component: 'router'`. The `component` check in the
+    // projection is what keeps that from labelling the run with a strategy nobody
+    // chose, so removing the check has to fail something.
     const rows = projectRuns([
       event('r1', 'run_started', { prompt: 'x', adapter: 'frontier' }, 1),
       event('r1', 'strategy_selected', { component: 'router', policy: 'after-plan' }, 2),

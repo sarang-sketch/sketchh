@@ -285,9 +285,13 @@ describe('the router', () => {
     expect(frontier.state.calls).toBe(0)
     expect(cheap.state.calls).toBeGreaterThan(0)
 
-    const chosen = result.events.find((e) => e.kind === 'strategy_selected')!
+    // `model_selected`, not `strategy_selected`. A model-tier decision is not a
+    // strategy decision, and before the `EventKind` amendment this bare `.find`
+    // was the reason the dispatcher had to stay out of a sub-run's slice.
+    const chosen = result.events.find((e) => e.kind === 'model_selected')!
     expect(chosen.payload['policy']).toBe('always')
     expect(chosen.payload['adapter']).toBe('ollama')
+    expect(result.events.some((e) => e.kind === 'strategy_selected')).toBe(false)
   })
 
   it('spends the frontier model on the plan and the cheap one after it', async () => {
@@ -307,9 +311,10 @@ describe('the router', () => {
     expect(frontier.state.calls).toBe(1)
     expect(cheap.state.calls).toBeGreaterThan(0)
 
-    const chosen = result.events.find((e) => e.kind === 'strategy_selected')!
+    const chosen = result.events.find((e) => e.kind === 'model_selected')!
     expect(chosen.payload['policy']).toBe('after-plan')
     expect(chosen.payload['from']).toBe('openai')
+    expect(result.events.some((e) => e.kind === 'strategy_selected')).toBe(false)
   })
 
   it('does not switch after a turn that failed to produce a plan', async () => {

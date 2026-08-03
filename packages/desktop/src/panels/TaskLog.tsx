@@ -184,9 +184,12 @@ export function projectRuns(events: readonly SketchEvent[]): RunRow[] {
     // id, so it never becomes a row, which is right: a ladder is not a task. What it does
     // carry is which strategy is about to run, and the sub-runs that follow belong to it.
     //
-    // The `component` check is load-bearing: the Phase 8 cost router emits this same KIND
-    // with `component: 'router'` and a `policy` key, and its decision is about which model to
-    // use. Reading one as a strategy would label a run with a strategy nobody chose.
+    // The `component` check is still load-bearing, for a narrower reason than before. The
+    // Phase 8 cost router used to emit this same KIND with `component: 'router'` and a
+    // `policy` key; the `EventKind` amendment moved it to `model_selected`, so live runs no
+    // longer collide. But JSONL logs written before the amendment still carry router events
+    // under `strategy_selected`, and reading one as a strategy would label a run with a
+    // strategy nobody chose. So the check stays and old logs keep rendering correctly.
     if (
       event.kind === 'strategy_selected' &&
       payload['component'] === 'dispatcher' &&

@@ -36,9 +36,10 @@
 //
 // ── EVENTS ──────────────────────────────────────────────────────────────────
 //
-// A degrade emits `context_loaded` with `component: "embedder"`. There is no
-// embedding EventKind in the contract and inventing one is not allowed, so the
-// payload carries the discriminator and the gap is recorded in the handoff.
+// A degrade emits `embedder_degraded` — its own kind since the `EventKind`
+// amendment. It used to be `context_loaded` with `component: "embedder"`, which
+// put "the index was built" and "the vectoriser fell back" under one kind. They
+// are different facts from different subsystems, so the degrade has a kind.
 //
 // Validates: Requirements 18.3
 
@@ -421,9 +422,8 @@ export class OfflineFirstEmbedder implements Embedder {
     try {
       await this.events?.emit({
         runId: this.runId,
-        kind: 'context_loaded',
+        kind: 'embedder_degraded',
         payload: {
-          component: 'embedder',
           mode: 'local',
           degraded: true,
           reason: this.reason,

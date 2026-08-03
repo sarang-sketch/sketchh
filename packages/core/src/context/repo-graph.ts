@@ -184,10 +184,11 @@ export function serializeRepoGraph(graph: RepoGraph): string {
 /**
  * Build (or incrementally rebuild) the repository graph.
  *
- * The event, when a sink is supplied, is `context_loaded` carrying
- * `component: "repo-graph"`. There is no indexing EventKind in the contract and
- * one must not be invented; the discriminator is the documented workaround and
- * the gap is recorded in the handoff.
+ * The event, when a sink is supplied, is `repo_indexed` — its own kind since the
+ * `EventKind` amendment. It used to be `context_loaded` carrying
+ * `component: "repo-graph"`, which meant a consumer had to read the payload to
+ * learn that an index had been built. Indexing is a distinct subsystem reporting
+ * a distinct fact, so it has a kind.
  */
 export async function buildRepoGraph(
   options: BuildRepoGraphOptions
@@ -258,9 +259,8 @@ export async function buildRepoGraph(
 
   await options.events?.emit({
     runId: options.runId ?? 'index',
-    kind: 'context_loaded',
+    kind: 'repo_indexed',
     payload: {
-      component: 'repo-graph',
       path,
       files: stats.indexed,
       chunks: stats.chunks,
