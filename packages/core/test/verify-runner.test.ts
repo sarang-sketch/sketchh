@@ -6,6 +6,10 @@
 // Validates: Requirements 4.1, 4.2, 4.6
 
 import { describe, it, expect } from 'vitest'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { join, sep } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
 import {
   runCommand,
   runCommands,
@@ -200,5 +204,66 @@ describe('event emission', () => {
     })
 
     expect(result.ok).toBe(true)
+  })
+})
+
+// ── the invariant: nothing in this package spawns through a shell ─────────────
+//
+// The legacy `src/verifier/` was deleted because its command runner spawned with
+// `shell: true`. Nothing routed untrusted input into it, but "no caller does that
+// yet" is a fact about today's call graph, not a property of the code. This guard
+// makes it a property: `shell: true` cannot exist anywhere under
+// `packages/core/src/`, so the next person to need a Windows shim resolved has to
+// resolve the shim rather than hand a string to cmd.exe.
+//
+// Source-level, and deliberately so — the same shape as the append-only guard in
+// `memory.test.ts`. A behavioural test can only cover the spawn sites it knows
+// about; this covers the ones nobody has written yet.
+
+describe('no shell: true anywhere in packages/core/src', () => {
+  const srcRoot = fileURLToPath(new URL('../src/', import.meta.url))
+
+  /** Every `.ts` file under src, recursively. */
+  function tsFiles(dir: string): string[] {
+    const out: string[] = []
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name)
+      if (entry.isDirectory()) out.push(...tsFiles(full))
+      else if (entry.name.endsWith('.ts')) out.push(full)
+    }
+    return out.sort()
+  }
+
+  /** Drop block and line comments so prose about `shell: true` does not trip the guard. */
+  const stripComments = (source: string): string =>
+    source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '')
+
+  const files = tsFiles(srcRoot)
+
+  it('finds source files to check, so a broken walk cannot pass vacuously', () => {
+    expect(files.length).toBeGreaterThan(50)
+    expect(files.some((f) => f.endsWith(join('verify', 'runner.ts')))).toBe(true)
+  })
+
+  it('has no shell: true, and every shell option is explicitly false', () => {
+    const offenders: string[] = []
+
+    for (const file of files) {
+      const code = stripComments(readFileSync(file, 'utf8'))
+      const relative = file.slice(srcRoot.length).replace(/\\/g, '/')
+
+      for (const match of code.matchAll(/shell\s*:\s*([A-Za-z0-9_.!]+)/g)) {
+        // Not just "never true": every spawn option in this package states `false`
+        // out loud. A computed value is how `true` gets back in without the word.
+        if (match[1] !== 'false') offenders.push(`${relative}: shell: ${match[1]}`)
+      }
+    }
+
+    expect(offenders, `spawn without a shell. Offending sites:\n${offenders.join('\n')}`).toEqual([])
+  })
+
+  it('the legacy verifier directory is gone, not merely unused', () => {
+    expect(existsSync(join(srcRoot, 'verifier'))).toBe(false)
+    expect(files.some((f) => f.includes(`${sep}verifier${sep}`))).toBe(false)
   })
 })

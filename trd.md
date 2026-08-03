@@ -115,8 +115,9 @@ replace or duplicate the run log.
 
 ## Verification Contract
 
-The canonical implementation is `packages/core/src/verify/`, not the compatibility-era four-check
-`packages/core/src/verifier/` path. Verification runs this fixed order:
+The only implementation is `packages/core/src/verify/`. The compatibility-era four-check
+`packages/core/src/verifier/` path was deleted on 2026-08-03; a source-level guard now forbids
+`shell: true` anywhere under `packages/core/src/`. Verification runs this fixed order:
 
 ```
 format → lint → typecheck → build → unit → integration → security → performance → dependency-audit

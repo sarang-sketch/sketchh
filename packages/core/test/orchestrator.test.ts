@@ -1,12 +1,19 @@
-// Tests for memory + orchestrator
+// Tests for the legacy memory surface and what survives of `orchestrator/`:
+// `extractJson`, `isWithin`, and the sandboxed `DiskFileWriter`.
+//
+// The `topoSort` and `Orchestrator` suites that used to sit at the bottom of this
+// file were deleted with the legacy state machine they covered (`orchestrator.ts`,
+// `planner.ts`, `agent-runner.ts`) and the legacy `verifier/` it drove. The
+// canonical driver is `loop.runTask`, covered by `loop.test.ts`.
 
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, afterEach } from 'vitest'
+import { mkdtemp, rm, readFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
 import { MemoryProjectMemory } from '../src/memory/project-memory.js'
 import { extractJson } from '../src/orchestrator/json.js'
-import { topoSort, Orchestrator, type ContextProvider } from '../src/orchestrator/orchestrator.js'
-import { isWithin, type FileWriter } from '../src/orchestrator/file-writer.js'
-import type { Plan, FileEdit } from '../src/orchestrator/types.js'
-import type { VerifyLoopResult } from '../src/verifier/index.js'
+import { DiskFileWriter, isWithin } from '../src/orchestrator/file-writer.js'
 
 // ── MemoryProjectMemory ──────────────────────────────────────────────────────
 
@@ -48,6 +55,20 @@ describe('MemoryProjectMemory', () => {
     const recent = await m.listTestRecords(1)
     expect(recent).toHaveLength(1)
     expect(recent[0].id).toBe('t2')
+  })
+
+  it('stores and lists conversations most-recent-first', async () => {
+    // This was previously only exercised indirectly, through the legacy orchestrator's
+    // end-to-end test. That test is gone; the behaviour is not, so it is asserted here
+    // against the object that owns it.
+    const m = mk()
+    clock = 1; await m.addConversation({ id: 'c1', task: 'add a button', messages: '[]' })
+    clock = 2; await m.addConversation({ id: 'c2', task: 'fix the button', messages: '[]' })
+    const all = await m.listConversations()
+    expect(all).toHaveLength(2)
+    expect(all[0].id).toBe('c2')
+    expect(all[0].createdAt).toBe(2)
+    expect(await m.listConversations(1)).toHaveLength(1)
   })
 
   it('digest summarises standards, decisions, and bugs', async () => {
@@ -97,39 +118,6 @@ describe('extractJson', () => {
   })
 })
 
-// ── topoSort ─────────────────────────────────────────────────────────────────
-
-describe('topoSort', () => {
-  const plan = (steps: Plan['steps']): Plan => ({
-    taskId: 't', summary: '', steps, estimatedFiles: [],
-  })
-
-  it('orders dependencies before dependents', () => {
-    const p = plan([
-      { id: 's2', description: '', files: [], dependsOn: ['s1'] },
-      { id: 's1', description: '', files: [], dependsOn: [] },
-    ])
-    const order = topoSort(p).map(s => s.id)
-    expect(order.indexOf('s1')).toBeLessThan(order.indexOf('s2'))
-  })
-
-  it('handles independent steps', () => {
-    const p = plan([
-      { id: 'a', description: '', files: [], dependsOn: [] },
-      { id: 'b', description: '', files: [], dependsOn: [] },
-    ])
-    expect(topoSort(p)).toHaveLength(2)
-  })
-
-  it('does not loop forever on cycles', () => {
-    const p = plan([
-      { id: 'a', description: '', files: [], dependsOn: ['b'] },
-      { id: 'b', description: '', files: [], dependsOn: ['a'] },
-    ])
-    expect(topoSort(p)).toHaveLength(2)
-  })
-})
-
 // ── isWithin ─────────────────────────────────────────────────────────────────
 
 describe('isWithin', () => {
@@ -147,137 +135,41 @@ describe('isWithin', () => {
   })
 })
 
-// ── Orchestrator (full flow with fakes) ─────────────────────────────────────
+// ── DiskFileWriter ───────────────────────────────────────────────────────────
+//
+// Real temp directory, real writes. Both cases came from the deleted `e2e.test.ts`,
+// where they were the only assertions in that file about code which still ships.
+// The escape refusal in particular had no other coverage anywhere.
 
-describe('Orchestrator', () => {
-  // Fakes for every dependency.
-  const fakeContext: ContextProvider = {
-    retrieve: async () => ({ chunks: [{ path: 'a.ts', content: 'existing code' }] }),
-  }
+describe('DiskFileWriter', () => {
+  let tmp: string | null = null
 
-  const fakePlan: Plan = {
-    taskId: 't', summary: 'do the thing',
-    steps: [{ id: 's1', description: 'write a.ts', files: ['a.ts'], dependsOn: [] }],
-    estimatedFiles: ['a.ts'],
-  }
-
-  const fakePlanner = { plan: vi.fn().mockResolvedValue(fakePlan) }
-  const fakeRunner = {
-    runStep: vi.fn().mockResolvedValue({
-      stepId: 's1',
-      edits: [{ path: 'a.ts', content: 'new code' } as FileEdit],
-      notes: 'done',
-    }),
-  }
-
-  const captureWriter = (): { writer: FileWriter; written: string[] } => {
-    const written: string[] = []
-    return {
-      written,
-      writer: { apply: async (_root, edits) => { written.push(...edits.map(e => e.path)); return edits.map(e => e.path) } },
-    }
-  }
-
-  const passingLoop = (result: Partial<VerifyLoopResult> = {}) => ({
-    run: vi.fn().mockResolvedValue({
-      status: 'passed',
-      attempts: 0,
-      finalResult: { passed: true, checks: [{ name: 'test', passed: true, output: '', durationMs: 1, skipped: false }] },
-      history: [],
-      ...result,
-    } as VerifyLoopResult),
+  afterEach(async () => {
+    if (tmp) await rm(tmp, { recursive: true, force: true }).catch(() => {})
+    tmp = null
   })
 
-  it('runs plan → execute → verify → done on success', async () => {
-    const { writer, written } = captureWriter()
-    const memory = new MemoryProjectMemory(() => 1)
-    const events: string[] = []
+  const root = async (): Promise<string> => {
+    tmp = await mkdtemp(join(tmpdir(), 'sketch-file-writer-'))
+    return tmp
+  }
 
-    const orch = new Orchestrator({
-      planner: fakePlanner as never,
-      runner: fakeRunner as never,
-      verifyLoop: passingLoop() as never,
-      context: fakeContext,
-      memory,
-      fileWriter: writer,
-    })
+  it('writes edits to disk and returns the paths written', async () => {
+    const dir = await root()
+    const written = await new DiskFileWriter().apply(dir, [
+      { path: 'greet.js', content: 'export const greet = (n) => `hi ${n}`\n' },
+      { path: 'nested/deep/a.txt', content: 'a' },
+    ])
 
-    const result = await orch.run('/project', 'build a feature', {
-      onEvent: e => events.push(e.type),
-    })
-
-    expect(result.status).toBe('done')
-    expect(written).toContain('a.ts')
-    expect(events).toContain('plan')
-    expect(events).toContain('file_edit')
-    expect(events).toContain('done')
-    // test history recorded in memory
-    expect(await memory.listTestRecords()).toHaveLength(1)
+    expect(written).toEqual(['greet.js', 'nested/deep/a.txt'])
+    expect(await readFile(join(dir, 'greet.js'), 'utf8')).toContain('export const greet')
+    expect(await readFile(join(dir, 'nested/deep/a.txt'), 'utf8')).toBe('a')
   })
 
-  it('returns needs_human when verification cannot pass', async () => {
-    const { writer } = captureWriter()
-    const failingLoop = {
-      run: vi.fn().mockResolvedValue({
-        status: 'exhausted',
-        attempts: 3,
-        finalResult: { passed: false, checks: [{ name: 'test', passed: false, output: 'boom', durationMs: 1, skipped: false }] },
-        history: [],
-      } as VerifyLoopResult),
-    }
-
-    const orch = new Orchestrator({
-      planner: fakePlanner as never,
-      runner: fakeRunner as never,
-      verifyLoop: failingLoop as never,
-      context: fakeContext,
-      memory: new MemoryProjectMemory(() => 1),
-      fileWriter: writer,
-    })
-
-    const result = await orch.run('/project', 'build a feature')
-    expect(result.status).toBe('needs_human')
-  })
-
-  it('respects plan approval rejection', async () => {
-    const { writer } = captureWriter()
-    // Fresh runner so the assertion is not polluted by other tests' calls.
-    const localRunner = { runStep: vi.fn().mockResolvedValue({ stepId: 's1', edits: [], notes: '' }) }
-    const orch = new Orchestrator({
-      planner: fakePlanner as never,
-      runner: localRunner as never,
-      verifyLoop: passingLoop() as never,
-      context: fakeContext,
-      memory: new MemoryProjectMemory(() => 1),
-      fileWriter: writer,
-      requireApproval: true,
-    })
-
-    const result = await orch.run('/project', 'build', {
-      approvePlan: async () => false,
-    })
-    expect(result.status).toBe('cancelled')
-    // runner should never have executed
-    expect(localRunner.runStep).not.toHaveBeenCalled()
-  })
-
-  it('emits an error event when a dependency throws', async () => {
-    const throwingPlanner = { plan: vi.fn().mockRejectedValue(new Error('planner down')) }
-    const { writer } = captureWriter()
-    const events: Array<{ type: string }> = []
-
-    const orch = new Orchestrator({
-      planner: throwingPlanner as never,
-      runner: fakeRunner as never,
-      verifyLoop: passingLoop() as never,
-      context: fakeContext,
-      memory: new MemoryProjectMemory(() => 1),
-      fileWriter: writer,
-    })
-
-    const result = await orch.run('/project', 'build', { onEvent: e => events.push(e) })
-    expect(result.status).toBe('error')
-    expect(result.summary).toContain('planner down')
-    expect(events.some(e => e.type === 'error')).toBe(true)
+  it('refuses to write outside the project directory', async () => {
+    const dir = await root()
+    await expect(
+      new DiskFileWriter().apply(dir, [{ path: '../escape.js', content: 'x' }]),
+    ).rejects.toThrow(/outside project directory/)
   })
 })

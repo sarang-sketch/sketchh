@@ -7,12 +7,12 @@
 // facts by default.
 //
 // `ProjectMemory` / `MemoryProjectMemory` is the ORIGINAL surface and is still exported,
-// unchanged. The legacy orchestrator (`src/orchestrator/orchestrator.ts`) depends on four
-// of its members — `digest`, `addTestRecord`, `addConversation`, and the type name — and
-// changing them to fit the new store would break a live caller for no benefit to it. The
-// two are bridged by `legacyProjectMemory`, so a caller can hand the versioned store to
-// the old orchestrator and get versioning underneath without the orchestrator learning
-// anything new. Converging them is a spec decision, not a refactor to slip in here.
+// unchanged. Its in-repo caller was the legacy orchestrator state machine, which was
+// deleted with the legacy `verifier/`; the surface is now published API only, so nothing
+// inside this package reads it. The two are bridged by `legacyProjectMemory`, so a caller
+// holding `ProjectMemory` can get the versioned store underneath without learning the new
+// shape. Retiring the old surface is a spec decision about published API — a breaking
+// change, not a refactor to slip in here.
 
 export {
   MEMORY_KINDS,

@@ -226,8 +226,17 @@ describe('root re-export surface', () => {
     // Types erase at runtime, so assert the namespaces still exist alongside them;
     // the type-only reachability is proven by this file's own imports compiling
     // and by typecheck over src/index.ts.
-    for (const ns of ['providers', 'context', 'verifier', 'memory', 'orchestrator']) {
+    for (const ns of ['providers', 'context', 'verify', 'memory', 'orchestrator']) {
       expect(root).toHaveProperty(ns)
     }
+  })
+
+  it('exposes exactly one verify namespace', async () => {
+    // `verifier` was the legacy four-check aggregate over a `shell: true` runner. It
+    // is deleted; `verify` is the whole verify surface. Two namespaces one letter
+    // apart is how a caller reaches for the unhardened one by accident.
+    const root = await import('../src/index.js')
+    expect(root).toHaveProperty('verify')
+    expect(root).not.toHaveProperty('verifier')
   })
 })

@@ -1,10 +1,14 @@
 // Verify runner — spawns verification commands without a shell.
 //
-// This is the hardened replacement for the legacy `src/verifier/command-runner.ts`
-// path (which still uses `shell: true` for the old `Verifier`). Here `shell` is
-// always `false`: command names and arguments are handed to the OS as an argv
-// vector, so a model- or config-supplied string like `&& rm -rf /` is a literal
-// argument and never an injection vector.
+// This replaced the legacy `src/verifier/command-runner.ts`, which spawned with
+// `shell: true`. That directory is now DELETED and this is the only verify path in
+// the package. Here `shell` is always `false`: command names and arguments are
+// handed to the OS as an argv vector, so a model- or config-supplied string like
+// `&& rm -rf /` is a literal argument and never an injection vector.
+//
+// `verify-runner.test.ts` asserts no `shell: true` exists anywhere under
+// `packages/core/src/`. If you need a Windows shim resolved, resolve the shim —
+// do not hand the string to a shell.
 //
 // Guarantees:
 //   - the returned promise ALWAYS settles: timeout, spawn failure, and abort all

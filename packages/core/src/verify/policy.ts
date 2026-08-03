@@ -464,11 +464,13 @@ export function parsePolicyJson(text: string): { policy: VerifyPolicy; diagnosti
 
 // ── auto-detection, extended to nine stages ─────────────────────────────────
 //
-// Requirement 4.8: the existing node/python/rust/go detector is the BASELINE and is
-// extended, not replaced. `verifier/detector.ts` answers a four-name question
-// (lint, typecheck, test, build) and its answers are preserved verbatim here —
-// `test` maps to `unit`, and the rest map to themselves. Everything beyond those
-// four is additive.
+// Requirement 4.8: the node/python/rust/go detector that used to live in
+// `verifier/detector.ts` is the BASELINE and was extended, not replaced. It answered
+// a four-name question (lint, typecheck, test, build); those answers are preserved
+// verbatim below — `test` maps to `unit`, and the rest map to themselves, including
+// the `npx eslint .` and `npx tsc --noEmit` config-file fallbacks. Everything beyond
+// those four is additive. The baseline detector itself is deleted: this function is
+// the only project detection in the package, so there is nothing left to drift from.
 //
 // THE RULE FOR ADDING A STAGE: only when the project has ALREADY declared it. A
 // detector that invents `npm audit` for every Node project has invented a stage the

@@ -2,13 +2,13 @@
 //
 // ── WHY A BRIDGE AND NOT A REWRITE ─────────────────────────────────────────
 //
-// `src/orchestrator/orchestrator.ts` is a live caller of `ProjectMemory`. It uses exactly
-// four members — `digest()`, `addTestRecord()`, `addConversation()`, and the type name —
-// and it is documented as not yet wired into the new agent loop. Changing its dependency
-// to fit Phase 9's store would be a breaking edit to working code that gains that code
-// nothing, so the old interface is preserved and this adapter satisfies it.
+// `ProjectMemory` is published API. Its only in-repo caller was the legacy orchestrator
+// state machine, deleted with the legacy `verifier/`, but the interface itself ships from
+// `@sketch/core` and an external caller holding it did not consent to a breaking change.
+// So the old interface is preserved and this adapter satisfies it.
 //
-// The gain is real, not cosmetic: an orchestrator run through this bridge gets validity
+// The gain is real, not cosmetic: a caller that keeps writing through the old four members
+// — `digest()`, `addTestRecord()`, `addConversation()`, `setStandard()` — gets validity
 // windows, supersede-with-a-reason and the lint pass underneath it, without learning that
 // any of those exist.
 //

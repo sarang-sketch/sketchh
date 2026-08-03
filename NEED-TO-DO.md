@@ -222,18 +222,24 @@ phantom errors. §0.2's ordering was written before this bit, and this is the co
 | Retrieval | Graph/search/assembly are real, but desktop does not send `contextBudgetTokens` by default | default wiring open |
 | Versioned memory | Persistence, hygiene, retrieval, and panel are real | automatic live-run ingestion/injection open |
 | Native/release/offline/community evidence | Workflows and deterministic gates exist | evidence-gated 12.1–12.4 |
-| Legacy compatibility paths | `ProviderAdapter` coexists with `ChatAdapter`; `verifier/` coexists with `verify/` | convergence unowned |
+| Legacy compatibility paths | `ProviderAdapter` coexists with `ChatAdapter` | convergence unowned |
 
-### 1.3 Two deliberate duplications
+### 1.3 One deliberate duplication (was two)
 
-Both are documented in-code and **neither has an owning phase**. Do not "clean them up" on a whim;
-propose a convergence task first.
+It is documented in-code and has **no owning phase**. Do not "clean it up" on a whim; propose a
+convergence task first.
 
 1. `providers/` has a legacy `ProviderAdapter` surface alongside the canonical `ChatAdapter`.
-2. `verifier/` (legacy, `shell: true`) exists alongside `verify/` (new, `shell: false`).
 
-The legacy `verifier/` running with `shell: true` is the more urgent of the two — it is a live
-command-injection surface if anything ever routes user input into it. See §4.2.
+~~2. `verifier/` (legacy, `shell: true`) exists alongside `verify/` (new, `shell: false`).~~
+**RESOLVED 2026-08-03 by deletion, not convergence.** See §4.2. `verify/` is the only verify path,
+and a source-level guard in `verify-runner.test.ts` forbids `shell: true` anywhere under
+`packages/core/src/`.
+
+One legacy surface without an owning phase is left behind by that deletion: `ProjectMemory` /
+`legacyProjectMemory` in `memory/`. It is published API from `@sketch/core` and its bridge tests
+still pass, but the legacy orchestrator was its only in-repo caller. Retiring it is a breaking
+change to published API, so it is a spec decision rather than a cleanup.
 
 ---
 
@@ -1543,15 +1549,25 @@ established workaround is to reuse an existing kind with a payload discriminator
 records a question as `think` with `action: "ask"`, and the trainer records training as `think` with
 `component: "skillopt"`. Follow that pattern and report the gap.
 
-### 4.2 The legacy `verifier/` runs with `shell: true`
+### 4.2 ~~The legacy `verifier/` runs with `shell: true`~~ — CLOSED 2026-08-03
 
-`packages/core/src/verifier/` is pre-existing code that spawns with `shell: true`, sitting alongside
-the new `verify/` which correctly uses `shell: false`. Nothing routes untrusted input into it today.
-The day something does, it is a command-injection vulnerability.
+`packages/core/src/verifier/` was pre-existing code that spawned with `shell: true`, sitting
+alongside `verify/` which correctly uses `shell: false`. Nothing routed untrusted input into it, but
+"no caller does that yet" is a fact about a call graph, not a property of the code.
 
-**Recommendation:** delete `verifier/` during Phase 7 when `verify/` grows the nine-stage policy and
-fully subsumes it. Until then, add a comment at its entry point stating it is legacy and must not be
-given caller-supplied strings. Do not leave two verify paths past Phase 7.
+**Resolved by deletion, not by a comment.** The whole directory is gone
+(`command-runner.ts`, `detector.ts`, `verifier.ts`, `verify-loop.ts`, `types.ts`, `index.ts`), and so
+is the legacy orchestrator state machine that was its only production caller — `orchestrator.ts`,
+`planner.ts`, `agent-runner.ts`. That machine was reachable from nothing shipped: not the agent loop,
+not the RPC methods, not the CLI, not the desktop, all of which use only
+`orchestrator/file-writer.ts` and `orchestrator/json.ts`. `verifier/detector.ts` needed no migration:
+`verify/policy.ts` had already reimplemented its node/python/rust/go answers verbatim as part of the
+nine-stage extension and never imported it, only cited it in a comment.
+
+**The invariant this established, and how it is held:** `verify-runner.test.ts` walks every `.ts`
+file under `packages/core/src/`, strips comments, and fails if any `shell` spawn option is anything
+other than the literal `false`. It also asserts the `verifier/` directory no longer exists. A future
+Windows-shim problem must be solved by resolving the shim, not by handing a string to a shell.
 
 ### 4.3 The terminal allowlist is not a sandbox
 

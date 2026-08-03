@@ -8,16 +8,20 @@ export * from './types.js'
 export * as providers from './providers/index.js'
 export * as context from './context/index.js'
 export * as memory from './memory/index.js'
+// What is left of `orchestrator/`: the sandboxed `DiskFileWriter` and `extractJson`,
+// both genuinely shared with the agent loop. The legacy state machine it was named
+// for is gone.
 export * as orchestrator from './orchestrator/index.js'
 
-// `verifier` and `verify` are BOTH intentional and neither is a typo:
-//   verifier/ — the legacy check-suite aggregate (CheckResult[] → VerifySummary),
-//               still used by the existing orchestrator.
-//   verify/   — the new shell-less command runner (VerifyCommand → VerifyResult)
-//               from the canonical contracts, used by the agent loop.
-// They will converge when the legacy orchestrator is retired. Until then, deleting
-// or merging either one breaks a live caller.
-export * as verifier from './verifier/index.js'
+// There is exactly ONE verify path: `verify/`. Commands are spawned with
+// `shell: false`, a per-command timeout, and SIGKILL on expiry — a model- or
+// config-supplied string is argv text, never shell syntax.
+//
+// The legacy `verifier/` that used to sit beside it (a four-check aggregate over a
+// `shell: true` runner) was deleted. Its detector, its timeout budget and its
+// pass/fail aggregation all live here now — nine stages instead of four, see
+// `verify/policy.ts`. `verify-runner.test.ts` guards the invariant: no `shell: true`
+// anywhere under `packages/core/src/`. Do not reintroduce one.
 export * as verify from './verify/index.js'
 
 // Unified-diff parsing and per-hunk apply: `diff.parseUnifiedDiff`, `diff.applyHunks`.

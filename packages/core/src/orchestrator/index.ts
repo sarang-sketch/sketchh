@@ -1,22 +1,11 @@
-// Public API for the orchestrator module
+// Public API for the orchestrator module.
+//
+// What remains is the sandboxed file writer and the tolerant JSON extractor. The
+// legacy plan → execute → verify → fix state machine and its `Planner` /
+// `AgentRunner` collaborators were deleted with the legacy `verifier/` they drove
+// (see `types.ts`). The canonical driver is `loop.runTask`.
 
-export type {
-  TaskStatus,
-  PlanStep,
-  Plan,
-  FileEdit,
-  StepResult,
-  OrchestratorEvent,
-} from './types.js'
+export type { FileEdit } from './types.js'
 export { extractJson } from './json.js'
-export { Planner } from './planner.js'
-export { AgentRunner } from './agent-runner.js'
 export { DiskFileWriter, isWithin } from './file-writer.js'
 export type { FileWriter } from './file-writer.js'
-export { Orchestrator, topoSort } from './orchestrator.js'
-export type {
-  ContextProvider,
-  OrchestratorDeps,
-  RunOptions,
-  OrchestratorRunResult,
-} from './orchestrator.js'

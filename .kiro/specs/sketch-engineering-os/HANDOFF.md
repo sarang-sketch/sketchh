@@ -270,8 +270,9 @@ architecture generator and the Live Architecture panel.
   command returns a key; the hosted-key invocation crossing remains intentionally half-wired.
 - The curated MCP catalog and local hang/contract scripts are not execution or audit evidence for
   the named third-party MCP packages.
-- The legacy `ProviderAdapter`/canonical `ChatAdapter` and legacy `verifier/`/canonical `verify/`
-  pairs still coexist; convergence has no owning task.
+- The legacy `ProviderAdapter`/canonical `ChatAdapter` pair still coexists; convergence has no owning
+  task. The legacy `verifier/`/canonical `verify/` pair does NOT — `verifier/` was deleted
+  2026-08-03 and a source-level guard now forbids `shell: true` anywhere in `packages/core/src/`.
 - Native installers, installed-app Ollama/no-egress proof, a real verified release tag, and genuine
   third-party community-skill provenance remain evidence-gated under 12.1–12.4.
 
@@ -328,10 +329,20 @@ were not touched: replacing `global.fetch` replaces the wrapper, and a mock open
   import edges; the database view needs a schema file, not a string containing `CREATE TABLE`.
 - **No HTML is built from diagram, terminal, search, git or model output.** Every panel renders those
   as text nodes; the CSP still carries `script-src 'unsafe-inline'`, so an injection is an execution.
-- Two deliberate duplications, both documented in-code and **neither with an owning phase**:
-  `providers/`'s legacy `ProviderAdapter` alongside the canonical `ChatAdapter`, and `verifier/`
-  (legacy, `shell: true`) alongside `verify/` (new, `shell: false`). Propose a convergence task
-  before touching either.
+- **There is exactly ONE verify path, and it never spawns through a shell.** The legacy
+  `packages/core/src/verifier/` — a four-check aggregate over a `shell: true` command runner — was
+  **DELETED 2026-08-03**, along with the legacy orchestrator state machine (`orchestrator.ts`,
+  `planner.ts`, `agent-runner.ts`) that was its only production caller and was itself unreachable
+  from the agent loop, the RPC methods, the CLI and the desktop. `verify/` is the whole surface:
+  `shell: false`, per-command timeout, SIGKILL on expiry. `verify-runner.test.ts` now asserts that
+  **no `shell: true` exists anywhere under `packages/core/src/`** and that every `shell` option is
+  spelled `false` out loud. Do not reintroduce one; if a Windows shim needs resolving, resolve the
+  shim. What survives of `orchestrator/` is `file-writer.ts`, `json.ts` and the `FileEdit` type,
+  all genuinely shared with `loop/`, `strategy/` and `rpc/`.
+- One deliberate duplication remains, documented in-code and with **no owning phase**: `providers/`'s
+  legacy `ProviderAdapter` alongside the canonical `ChatAdapter`. Propose a convergence task before
+  touching it. `ProjectMemory`/`legacyProjectMemory` also survives as published API with no in-repo
+  caller now that the legacy orchestrator is gone — retiring it is a breaking-change decision.
 
 ---
 
@@ -368,7 +379,13 @@ report the gap.
 7. **`os_credentials.rs` unit tests are unverified on this machine** — the module cannot be compiled
    standalone. Only source-level guards cover it.
 8. **26.3 asks for signed releases.** The deterministic GitHub OIDC provenance path is implemented, but no version-tag workflow has run and no release/attestation verifier output exists. Authenticode and Apple Developer ID/notarization identities are not configured.
-9. Two competing verify directories and two provider surfaces (see above).
+9. ~~**Two competing verify directories** (`verifier/` with `shell: true` beside `verify/` with
+   `shell: false`).~~ **CLOSED 2026-08-03.** `packages/core/src/verifier/` is deleted, together with
+   the legacy orchestrator state machine that was its only production caller and was itself
+   unreachable from every shipped path. `verify/` is the sole verify surface, and
+   `verify-runner.test.ts` asserts no `shell: true` exists anywhere under `packages/core/src/`.
+   **Still open:** two provider surfaces (`ProviderAdapter` beside `ChatAdapter`), and the
+   `ProjectMemory` legacy surface that now has no in-repo caller.
 10. ~~**`GitTool` sits outside the capability dispatcher.**~~ **CLOSED 2026-08-03.**
     `packages/core/src/tools/gitDescriptors.ts` exposes the same `GitTool` as six real
     `ToolDescriptor`s behind the one authorisation point: `git-status`, `git-branch` and `git-diff`

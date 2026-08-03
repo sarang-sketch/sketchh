@@ -7,9 +7,11 @@
 // Changing anything in this file requires a spec update first. Do not extend,
 // reorder, or "improve" these declarations locally.
 //
-// Naming note: the pre-existing verifier aggregate was renamed `VerifySummary`
-// and the pre-existing orchestrator result was renamed `OrchestratorRunResult`
-// so that `VerifyResult` and `RunResult` below can hold the canonical names.
+// Naming note: `VerifyResult` and `RunResult` below once had to share the module
+// namespace with a pre-existing verifier aggregate and orchestrator result, which
+// were renamed `VerifySummary` and `OrchestratorRunResult` to get out of the way.
+// Both of those types are now deleted along with the legacy `verifier/` and the
+// legacy orchestrator state machine, so the canonical names have no rivals.
 
 export type EventKind =
   | "run_started" | "plan_written" | "skill_loaded" | "context_loaded" | "context_assembled"
