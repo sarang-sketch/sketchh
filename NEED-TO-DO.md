@@ -86,6 +86,14 @@ run against a real model provider** — both adapters are exercised only against
 and synthetic responses. That will remain true until someone deliberately does it with a key and
 writes down what happened. Do not describe a wired interface as a working feature.
 
+That sentence is now **enforced, not just asserted**. `packages/core/test/setup/noEgress.ts` is a
+vitest setup file (wired in `packages/core/vitest.config.ts`) installed for every core test file. It
+wraps `fetch` and `net.Socket.prototype.connect`, refuses any non-loopback destination, and names the
+URL/host plus the offending test. Loopback stays allowed because the suite genuinely needs it. The
+same guard checks that every `.sketch/bench` artifact's `provider` is a synthetic/offline identity,
+so a real benchmark run fails the suite instead of quietly outdating this paragraph. **Do not widen
+the allowlist.** A test that needs a remote host is a finding to report.
+
 ---
 
 ## 1. Where the project actually stands
@@ -1572,6 +1580,31 @@ runtime with a smaller one. Do not discover this at release.
 Every remaining fixture panel is untested, which means replacing a fixture with real data has no
 safety net. The `GitPanel.test.tsx` pattern — real repo in a temp dir, real git, plus a source-level
 assertion that the fixture is gone — is the pattern to copy. Apply it to every panel you convert.
+
+### 4.7 `GitTool` sits outside the capability dispatcher
+
+**Recorded, deliberately not fixed.** `packages/core/src/tools/` contains exactly one real tool,
+`git.ts`, and `GitTool` is **not** a `ToolDescriptor` with a `requires` field. It is a class the Git
+panel calls through the client seam, so it never passes through `ToolDispatcher`'s authorisation.
+
+The gate is not the problem. Capability scoping is singular and mutation-verified: authorisation
+happens in one place (`capabilities/guard.ts`), `mcp/` produces descriptors and explicitly never
+authorises them, and breaking the check fails tests. The problem is the **population of real tools
+behind the gate**:
+
+- Five of the six adversarial denial paths — network, subprocess, fs read outside the project, and
+  secrets read; every one except `fs:write:home` — are proved by "the tool's `run` body was not
+  entered", using `ToolDescriptor`s **defined inside the tests**.
+- The only production descriptors are minted by `mcp/host.ts` for catalogued third-party servers,
+  which this project has neither audited nor executed.
+- So the consequence, stated plainly: **the gate is verified against synthetic descriptors.** Routing
+  `GitTool` through the dispatcher — a `git:read` descriptor for status/diff and a distinct one for
+  stage/unstage/commit — is the work that would make the adversarial suite bite on a real tool.
+
+**Do not change `GitTool` on a whim.** Moving it behind the dispatcher changes the Git panel's call
+path and its failure modes, which is a behaviour change with no owning task. Propose the task, decide
+which capabilities a read versus a mutation costs, then do it — and expect the adversarial tests to
+be rewritten against the real descriptor rather than a test-local one.
 
 ---
 

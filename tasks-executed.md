@@ -1183,10 +1183,89 @@ Task 13.5 completes Requirement 28.6 and the Phase 13 documentation-reconciliati
 
 ---
 
+## Post-Phase 13 — mutation-verification findings (no owning task)
+
+A mutation-verification pass over the trainer gate, capability scoping, and the budget guard
+confirmed all three are genuinely enforced. It surfaced two findings that were neither recorded nor
+guarded. Both are closed here: the first with a tripwire, the second with a written risk.
+
+### Finding 1 — the no-real-provider invariant is now structural
+
+**Before:** "Nothing has ever run against a real provider" was asserted in `HANDOFF.md`,
+`NEED-TO-DO.md`, `tasks.md`, and this file, and corroborated by every `.sketch/bench` artifact
+carrying `"provider": "synthetic-offline"`. Nothing structurally prevented a future test from
+constructing a real adapter with a key and dialling out. `test/providers.fake.test.ts` tripwires one
+run, `test/verify-live.test.ts` refuses to probe anything but loopback, and the desktop has a
+source-level egress guard — none of which covers the core suite.
+
+**Now:** `packages/core/test/setup/noEgress.ts` is installed as a vitest setup file for EVERY core
+test file through the new `packages/core/vitest.config.ts` (which sets `setupFiles` and nothing else,
+so file discovery, pool, and isolation are unchanged from the configuration-free setup it replaced).
+It wraps `fetch` and, as a backstop, `net.Socket.prototype.connect`, refuses any non-loopback
+destination, and names the destination plus the offending test. Loopback is deliberately, permanently
+allowed: the suite depends on it for `verify-live`'s real servers on ephemeral ports,
+`providerSettings`'s real `node:http` servers and the Ollama-shaped `11434` endpoint, and the dev
+bridge. Non-socket schemes (`data:`, `file:`) and IPC paths are not egress and pass through.
+
+The same guard file exports `isSyntheticProviderIdentity`, which `test/no-egress.test.ts` runs over
+every `.sketch/bench` artifact present on the machine: a `provider` field that is not a
+synthetic/offline identity fails the suite, so the day someone runs a real benchmark the
+documentation cannot silently go stale. The check requires a synthetic token AND the absence of a
+hosted-provider token, so `openai-offline` is refused rather than waved through. Because `.sketch` is
+gitignored working state, the artifact count is machine-dependent; a second test therefore runs the
+same scan over a fixture containing one synthetic and one `"provider": "openai"` artifact, which is
+what stops the scan from being a vacuous pass on a fresh clone.
+
+**No existing test was weakened, skipped, or rewritten**, and no provider adapter test needed
+changing. The mocked-`fetch` and injected-`fetchImpl` tests keep exercising real HTTP request/response
+shapes: replacing `global.fetch` replaces the wrapper, and a mock opens no socket. **No test in the
+core suite legitimately needed a non-loopback host** — the full suite passed on the first run with the
+guard installed, so no hole was punched.
+
+One real defect in the guard was found by mutating it rather than by reading it: the first draft
+judged `Socket.prototype.connect` by its public signature, but `net.connect()` and `http`'s agent
+normalise their arguments and pass ONE array, `[options, listener]`. The first draft therefore let
+every raw `node:http`/`node:https` request and Node's own fetch implementation through while looking
+correct. It now unwraps the normalised array.
+
+**Mutation evidence** (a temporary probe test was added, watched fail, and deleted):
+
+| Probe | Observed refusal |
+|---|---|
+| `await fetch('https://example.com/')` | `NO-EGRESS TRIPWIRE: refused fetch to https://example.com/ from test "mutation probe > reaches a real external host"` — 1 failed |
+| `await fetch('https://api.openai.com/v1/models', { headers: { authorization: 'Bearer sk-live-…' } })` | `NO-EGRESS TRIPWIRE: refused fetch to https://api.openai.com/v1/models from test "mutation probe > reaches a real provider endpoint with a key"` — 1 failed |
+| Raw `node:https` `request({ host: 'example.com', port: 443 })`, bypassing `fetch` entirely | `NO-EGRESS TRIPWIRE: refused socket connect to example.com from test "mutation probe > reaches a real external host with a raw https client"` at `TLSSocket.guardedConnect` — 1 failed |
+
+After deleting the probe file the suite is green: core **1,050 tests / 55 files** (the 1,036 / 54
+baseline plus this file's 14 tests), desktop **503 tests / 54 files** unchanged.
+
+### Finding 2 — `GitTool` sits outside the capability dispatcher (recorded, not fixed)
+
+`packages/core/src/tools/` contains one real tool, `git.ts`, and `GitTool` is **not** a
+`ToolDescriptor` with a `requires` field, so it never passes through `ToolDispatcher`'s
+authorisation. Consequently five of the six adversarial denial paths in
+`test/capabilities.test.ts` — network (twice), subprocess, fs read outside the project, and secrets
+read; every one except `fs:write:home`, which really writes — are proved by "the tool's `run` body was
+not entered" using `ToolDescriptor`s **defined inside the tests**. The only production descriptors are
+minted by `mcp/host.ts` for catalogued third-party servers this project has neither audited nor
+executed.
+
+The gate is correct and singular; the population of real tools behind it is one file that bypasses it.
+Stated consequence: **the gate is verified against synthetic descriptors, and routing `GitTool`
+through the dispatcher is the work that would make the adversarial suite bite on a real tool.**
+`GitTool` was deliberately **not** changed — moving it behind the dispatcher changes the Git panel's
+call path and failure modes, which is a behaviour change with no owning task. Recorded in
+`HANDOFF.md` open risk 10 and `NEED-TO-DO.md` §4.7.
+
+---
+
 ## Decision Log
 
 | Date | Decision | Rationale |
 |---|---|---|
+| 2026-08-03 | The no-real-provider claim gets a **suite-wide tripwire**, and loopback stays open | Every other invariant here has a tripwire; the strongest claim in the repository had only convention plus two single-file guards. `packages/core/vitest.config.ts` now installs `test/setup/noEgress.ts` for every core test file, refusing any non-loopback `fetch` or socket connect and naming the destination and the test. Loopback is not negotiable in the other direction either: `verify-live`, the Ollama-shaped `11434` endpoint, and the dev bridge all need it, so the guard's line is loopback, not "no network". Provider tests keep using mocked `fetch`/injected `fetchImpl`, which open no socket. |
+| 2026-08-03 | A bench artifact whose `provider` is not synthetic **fails the suite** | The documented claim that no benchmark has run against a real provider is corroborated only by artifact contents, and `.sketch` is gitignored working state that no reviewer sees. Scanning every present artifact for a synthetic/offline identity — synthetic token required, hosted token forbidden — means the day a real benchmark runs, the suite fails instead of the docs going stale. A fixture-based companion test keeps the scan from passing vacuously on a fresh clone. |
+| 2026-08-03 | `GitTool` stays outside the dispatcher **as a recorded risk**, not a silent one | `GitTool` is the only real tool in `tools/` and it is not a `ToolDescriptor`, so the adversarial denial suite proves five of its six paths against descriptors defined inside the tests. The gate is singular and mutation-verified; the tool population behind it is not. Routing `GitTool` through the dispatcher changes the Git panel's call path and failure modes, which is a behaviour change with no owning task, so it is written down in `HANDOFF.md` open risk 10 and `NEED-TO-DO.md` §4.7 and left for a task that owns it. |
 | 2026-08-03 | Single-agent remains the default; roles and consensus exist only through eval-gated `swarm` | This supersedes the blanket 2025 “cut consensus” decision without enabling it by default. Consensus runs only inside `swarm`, and `swarm` remains off for a task class until strict measured pass@k lift over `single` justifies the extra cost and complexity. |
 | 2026-08-03 | Curated registry discovery is allowed; open publishing remains digest-gated | The shipped v1-family surface installs pinned content-hash-verified bytes with separately persisted digest-bound grants. Open community publishing remains v2-only behind tested integrity and capability scopes, a review queue, and exact-digest approvals. A content pin is not public-key author identity. |
 | 2026-08-03 | Verification has one fixed nine-stage order | The canonical order is `format → lint → typecheck → build → unit → integration → security → performance → dependency-audit`; build follows typecheck because later integration/security/performance checks may require its artifact. The legacy four-check verifier remains compatibility history, not the canonical policy. |

@@ -279,6 +279,18 @@ architecture generator and the Live Architecture panel.
 but this host has no Ollama installation; every executed adapter test/run still used
 `FakeChatAdapter`, synthetic responses, or explicitly labelled loopback stubs.
 
+**That claim is now structural, not conventional.** `packages/core/test/setup/noEgress.ts` is a
+vitest setup file wired in `packages/core/vitest.config.ts`, so it is installed for EVERY core test
+file. It wraps `fetch` and `net.Socket.prototype.connect` and refuses any destination that is not
+loopback, naming the URL/host and the test that attempted it. Loopback stays open on purpose — the
+suite depends on it (`verify-live.test.ts`'s real servers, `providerSettings.test.ts`'s real
+`node:http` servers and the Ollama-shaped `11434` endpoint shape, the dev bridge). The same guard
+file also supplies `isSyntheticProviderIdentity`, which `test/no-egress.test.ts` runs over every
+`.sketch/bench` artifact on the machine: a benchmark artifact whose `provider` is not a
+synthetic/offline identity fails the suite, so the day a real benchmark is run the documentation
+cannot silently go stale. Mocked-`fetch` and injected-`fetchImpl` provider tests are unaffected and
+were not touched: replacing `global.fetch` replaces the wrapper, and a mock opens no socket.
+
 ---
 
 ## Architecture decisions that must not be silently reversed
@@ -298,6 +310,11 @@ but this host has no Ollama installation; every executed adapter test/run still 
 - **`verify-pass` fails when nothing was verified.**
 - Containment lives in **one** place: `src-tauri/src/command_policy.rs`, with `resolve_within` as the
   single primitive.
+- **The core suite cannot reach a non-loopback host.** `test/setup/noEgress.ts`, wired as a setup
+  file in `packages/core/vitest.config.ts`, is the tripwire under the project's strongest claim. Do
+  not remove it, do not add a host to its allowlist, and do not widen it past loopback. A test that
+  needs a remote host is a finding to report, not a hole to punch. `test/no-egress.test.ts` asserts
+  the wiring itself, so deleting the `setupFiles` line fails the suite.
 - **Core cannot persist a secret.** No persisting `SecretStore` implementation exists in core, and
   `MemorySecretStore` has no `node:fs` import. Real storage is Rust-side, with no file fallback.
 - **The budget is enforced at one point, before the context text is joined.** Assembling first and
@@ -352,6 +369,19 @@ report the gap.
    standalone. Only source-level guards cover it.
 8. **26.3 asks for signed releases.** The deterministic GitHub OIDC provenance path is implemented, but no version-tag workflow has run and no release/attestation verifier output exists. Authenticode and Apple Developer ID/notarization identities are not configured.
 9. Two competing verify directories and two provider surfaces (see above).
+10. **`GitTool` sits outside the capability dispatcher, so the adversarial denial suite bites only on
+    synthetic descriptors.** `packages/core/src/tools/` contains one real tool — `git.ts` — and
+    `GitTool` is not a `ToolDescriptor` with a `requires` field, so it never passes through
+    `ToolDispatcher`'s authorisation. The gate itself is correct and singular (mutation-verified:
+    capability scoping is genuinely enforced), but five of the six adversarial denial paths —
+    network, subprocess, fs read outside the project, and secrets read; all but `fs:write:home` —
+    are proved by "the tool's `run` body was not entered" using descriptors **defined inside the
+    tests**. The only real descriptors behind the gate come from `mcp/host.ts`, and those wrap
+    third-party servers this project has neither audited nor executed. Consequence to state plainly:
+    the gate is verified against synthetic descriptors, and **routing `GitTool` through the
+    dispatcher is the work that would make the adversarial suite bite on a real tool.** Recorded, not
+    fixed: changing `GitTool`'s call path is a behaviour change with no owning task. See
+    `NEED-TO-DO.md` §4.7.
 
 ---
 
