@@ -180,6 +180,17 @@ phantom errors. §0.2's ordering was written before this bit, and this is the co
    entire task prompt as one fixed string, which matched nothing, which made hybrid retrieval
    silently vector-only for every natural-language task. If you touch `queryTerms`, `termsMatched` or
    `smartCase`, read the header of `hybrid-search.ts` first.
+3. **There is one lexical search implementation, and the Search panel is a UI over it.** The panel
+   used to have its own — `git grep` through the Tauri command policy, a folder walk behind it, and a
+   matcher built on JavaScript regular expressions — so the same query over the same file could
+   highlight one thing in the panel and score another in retrieval. `packages/desktop/src/search/`
+   is deleted; the panel calls the `project-search` RPC method
+   (`packages/core/src/context/project-search.ts`), which calls the same `lexicalSearch` the
+   retriever calls. **What the panel lost:** its regex mode. The engine's dialect is literal by
+   construction (`matchSpans`, `--fixed-strings`), and a regex mode in the panel would be a second
+   dialect again — the exact defect this closed. `rg` still is **not** on
+   `command_policy::ALLOWED_PROGRAMS`, and did not need to be: the engine spawns it through the
+   verify runner, on the engine side of the seam.
 
 ### 1.1 What is genuinely real
 

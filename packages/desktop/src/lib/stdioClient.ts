@@ -56,6 +56,7 @@ import type {
   EvalCase,
   EvalResult,
   GitStatusResult,
+  ProjectSearchResult,
   ProviderSettingsFile,
   ProviderTestResult,
   SketchEvent,
@@ -527,6 +528,28 @@ export class StdioSketchClient implements SketchClient {
       ...(params.index === true ? { index: true } : {}),
       ...(params.maxNodes !== undefined ? { maxNodes: params.maxNodes } : {}),
       ...(params.maxEdges !== undefined ? { maxEdges: params.maxEdges } : {}),
+    })
+  }
+
+  // ── project search ────────────────────────────────────────────────────────
+  //
+  // Pass-through to the one `project-search` method, which is the one lexical
+  // channel. The panel no longer spawns anything itself, so `rg` stayed off the Rust
+  // `command_policy` allowlist while search got faster.
+
+  async projectSearch(params: {
+    root: string
+    query: string
+    matchCase?: boolean
+    wholeWord?: boolean
+    maxHits?: number
+  }): Promise<ProjectSearchResult> {
+    return this.call<ProjectSearchResult>('project-search', {
+      root: params.root,
+      query: params.query,
+      ...(params.matchCase === true ? { matchCase: true } : {}),
+      ...(params.wholeWord === true ? { wholeWord: true } : {}),
+      ...(params.maxHits !== undefined ? { maxHits: params.maxHits } : {}),
     })
   }
 

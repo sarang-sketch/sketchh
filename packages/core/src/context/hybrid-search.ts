@@ -27,6 +27,18 @@
 // `context_assembled` payload. A retriever that quietly got worse looks exactly
 // like a repository that quietly lost a file.
 //
+// ── ONE DIALECT, TWO CALLERS ────────────────────────────────────────────────
+//
+// This channel serves the retrieval stack AND the desktop Search panel (which
+// reaches it over the client seam through `project-search`; see
+// ./project-search.ts). It used to serve only the first, and the panel had its own
+// `git grep` + folder-walk implementation with its own idea of what a match was —
+// so the same query over the same file could highlight one thing in the panel and
+// score another in retrieval. There is now exactly one match dialect,
+// {@link matchSpans}, and both callers read it: the ranking counts the spans it
+// returns and the panel highlights those same spans. `LexicalHit.matchedLines`
+// exists for that second caller.
+//
 // ── SPAWNING: ARGV, NEVER A COMMAND STRING ──────────────────────────────────
 //
 // The query is untrusted — it comes from a model, a user, or a config file. It is
@@ -291,6 +303,31 @@ export interface LexicalHit {
   preview: string
   /** True when some matching line looks like a definition of a query term. */
   definition: boolean
+  /**
+   * EVERY matching line in this chunk, with the offsets of the matches inside it.
+   *
+   * The retrieval path does not read this — it ranks chunks, and `score`,
+   * `termsMatched` and `definition` are what it ranks by. It is here because a
+   * TEXT-SEARCH SURFACE has to show the user the lines themselves with the matched
+   * substring highlighted, and if that surface computed its own spans there would be
+   * two notions of a match again, which is the defect this field exists to close.
+   * Both come out of `matchSpans`, so a search panel highlights exactly the
+   * occurrences the ranking counted.
+   *
+   * Lines are 0-based like `firstLine`, ascending, and bounded by
+   * {@link MAX_MATCHES_PER_FILE}.
+   */
+  matchedLines: LexicalLineMatch[]
+}
+
+/** One matching line, with where the matches sit inside it. */
+export interface LexicalLineMatch {
+  /** 0-based, like the chunker. A surface that counts from 1 adds 1 once. */
+  line: number
+  /** The line's text, clipped around its first match by {@link clipLine}. */
+  text: string
+  /** Non-overlapping, left to right, with offsets into `text`. */
+  spans: MatchSpan[]
 }
 
 export interface LexicalResult {
@@ -313,6 +350,16 @@ export interface LexicalSearchOptions {
   /** The universe of files. Both engines are restricted to exactly this list. */
   graph: RepoGraph
   ignoreCase?: boolean
+  /**
+   * Keep only occurrences that sit on an identifier boundary.
+   *
+   * NOT a second dialect: `matchSpans` already decides which occurrences are
+   * boundary matches (it is how `exactMatches` is counted), so this only drops the
+   * substring ones. A chunk whose every occurrence is a substring stops matching.
+   * Off for retrieval — a task prompt has no whole-word toggle — and on when a search
+   * surface's user asks for it.
+   */
+  wholeWord?: boolean
   /** Binary name to probe. Point it at nothing to force the fallback. */
   binary?: string
   /** Set false to skip detection entirely and scan. */
@@ -328,8 +375,8 @@ export const MAX_MATCHES_PER_FILE = 50
 export const MAX_LEXICAL_HITS = 200
 /** Files the scanner will open. A big repo is not a reason to read all of it. */
 export const MAX_SCANNED_FILES = 2_000
-/** Longest preview line kept. */
-const PREVIEW_CHARS = 240
+/** Longest preview or match line kept. A minified bundle is one 200 kB line. */
+export const PREVIEW_CHARS = 240
 
 /**
  * The exact argv handed to ripgrep, minus the program name.
@@ -373,36 +420,122 @@ function isWordChar(ch: string | undefined): boolean {
   return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch === '_' || ch === '$'
 }
 
+/** Where one occurrence sits in a line. */
+export interface MatchSpan {
+  start: number
+  length: number
+  /** True when neither neighbour is an identifier character. Weighted 3x. */
+  exact: boolean
+}
+
+/**
+ * EVERY occurrence of `query` in `line`, left to right, never overlapping.
+ *
+ * ── THE ONE PLACE A MATCH IS DECIDED ────────────────────────────────────────
+ *
+ * This function is the match dialect, and it is the only one in the product. The
+ * two engines call it through {@link countMatches} and `accumulate`, so `rg` and
+ * the scanner cannot disagree; the retrieval channel ranks by what it counted; and
+ * a search surface highlights the spans it returned rather than re-finding them
+ * with a regular expression of its own. Two implementations of "what is a match"
+ * is exactly how one caller ends up highlighting an occurrence another caller
+ * never scored.
+ *
+ * Occurrences are literal — no regular expressions anywhere — so a query of `(`,
+ * `-e` or `$(whoami)` is data. `exact` marks the ones sitting on an identifier
+ * boundary, which is what separates `budget` inside `retryBudgetMs` from a real
+ * reference to `budget`.
+ */
+export function matchSpans(line: string, query: string, ignoreCase = false): MatchSpan[] {
+  if (query === '') return []
+  const hay = ignoreCase ? line.toLowerCase() : line
+  const needle = ignoreCase ? query.toLowerCase() : query
+
+  const spans: MatchSpan[] = []
+  let from = 0
+  for (;;) {
+    const at = hay.indexOf(needle, from)
+    if (at === -1) break
+    const before = at === 0 ? undefined : hay[at - 1]
+    const after = hay[at + needle.length]
+    spans.push({
+      start: at,
+      length: needle.length,
+      exact: !isWordChar(before) && !isWordChar(after),
+    })
+    from = at + needle.length
+  }
+  return spans
+}
+
 /**
  * Count occurrences of `query` in `line`, and how many of those sit on an
- * identifier boundary.
- *
- * Both engines call this, so `rg` and the scanner cannot disagree about a
- * match's worth. Boundary-aware counting is what separates `budget` inside
- * `retryBudgetMs` from a real reference to `budget`.
+ * identifier boundary. A tally over {@link matchSpans}, kept as its own function
+ * because the ranking reads counts and nothing else.
  */
 export function countMatches(
   line: string,
   query: string,
   ignoreCase = false
 ): { matches: number; exact: number } {
-  if (query === '') return { matches: 0, exact: 0 }
-  const hay = ignoreCase ? line.toLowerCase() : line
-  const needle = ignoreCase ? query.toLowerCase() : query
-
-  let matches = 0
+  const spans = matchSpans(line, query, ignoreCase)
   let exact = 0
-  let from = 0
-  for (;;) {
-    const at = hay.indexOf(needle, from)
-    if (at === -1) break
-    matches++
-    const before = at === 0 ? undefined : hay[at - 1]
-    const after = hay[at + needle.length]
-    if (!isWordChar(before) && !isWordChar(after)) exact++
-    from = at + needle.length
+  for (const span of spans) if (span.exact) exact++
+  return { matches: spans.length, exact }
+}
+
+/**
+ * Merge a line's spans from several terms into one non-overlapping, ascending list.
+ *
+ * A line matching `retry` and `retry_budget` produces overlapping spans, and a
+ * surface rendering both would double-highlight the shared bytes. Leftmost wins,
+ * then longest at the same start, and anything overlapping a kept span is dropped —
+ * a fixed rule, so the same line always renders the same way.
+ */
+function mergeSpans(spans: readonly MatchSpan[]): MatchSpan[] {
+  const sorted = [...spans].sort((a, b) => (a.start !== b.start ? a.start - b.start : b.length - a.length))
+  const kept: MatchSpan[] = []
+  let end = -1
+  for (const span of sorted) {
+    if (span.start < end) continue
+    kept.push(span)
+    end = span.start + span.length
   }
-  return { matches, exact }
+  return kept
+}
+
+/**
+ * Keep a long line's first match visible.
+ *
+ * A minified bundle is one 200 kB line: rendering it whole freezes a panel while
+ * showing nothing useful, and truncating from the left hides the very match that
+ * was found. So the window is placed around the first span, spans are shifted into
+ * it, and any span that fell outside is dropped rather than left pointing at the
+ * wrong bytes.
+ */
+export function clipLine(
+  text: string,
+  spans: readonly MatchSpan[],
+  max = PREVIEW_CHARS
+): { text: string; spans: MatchSpan[] } {
+  if (text.length <= max) return { text, spans: [...spans] }
+
+  const leading = 40
+  const first = spans[0]
+  const from = Math.max(0, (first?.start ?? 0) - leading)
+  const body = text.slice(from, from + max)
+  const prefix = from > 0 ? '…' : ''
+  const suffix = from + max < text.length ? '…' : ''
+  const shift = prefix.length - from
+
+  const moved: MatchSpan[] = []
+  for (const span of spans) {
+    const start = span.start + shift
+    if (start < prefix.length) continue
+    if (start + span.length > prefix.length + body.length) continue
+    moved.push({ start, length: span.length, exact: span.exact })
+  }
+  return { text: `${prefix}${body}${suffix}`, spans: moved }
 }
 
 /**
@@ -454,8 +587,12 @@ interface HitAccumulator {
   chunk: GraphChunk
   matches: number
   exactMatches: number
-  /** Distinct `${line}` values that matched any term. Counted once per line. */
-  lines: Set<number>
+  /**
+   * The lines that matched, keyed by line number so a line matching three terms is
+   * still ONE matching line. The value carries the raw text and the spans found so
+   * far, which is what a text-search surface renders.
+   */
+  lines: Map<number, { text: string; spans: MatchSpan[] }>
   /** Distinct terms that matched, lower-cased. */
   terms: Set<string>
   firstLine: number
@@ -467,8 +604,10 @@ interface HitAccumulator {
  * Fold one matching line into the accumulator for its chunk.
  *
  * `term` is one element of {@link queryTerms}, never the whole query, so the same
- * line can arrive here several times — once per term it contains. `lines` is a set
- * for exactly that reason: a line matching three terms is still one matching line.
+ * line can arrive here several times — once per term it contains. Returns whether
+ * anything matched, which is what the scanner counts against its per-file cap: with
+ * `wholeWord` set, a line containing only substring occurrences matches nothing and
+ * must not spend that budget.
  */
 function accumulate(
   acc: Map<string, HitAccumulator>,
@@ -476,12 +615,17 @@ function accumulate(
   line: number,
   text: string,
   term: string,
-  ignoreCase: boolean
-): void {
-  const counted = countMatches(text, term, ignoreCase)
-  if (counted.matches === 0) return
+  ignoreCase: boolean,
+  wholeWord = false
+): boolean {
+  const found = matchSpans(text, term, ignoreCase)
+  const spans = wholeWord ? found.filter((span) => span.exact) : found
+  if (spans.length === 0) return false
   const chunk = chunkForLine(file, line)
-  if (chunk === null) return
+  if (chunk === null) return false
+
+  let exact = 0
+  for (const span of spans) if (span.exact) exact++
 
   const id = `${file.path}#${chunk.index}`
   const existing = acc.get(id)
@@ -491,26 +635,29 @@ function accumulate(
     acc.set(id, {
       file,
       chunk,
-      matches: counted.matches,
-      exactMatches: counted.exact,
-      lines: new Set([line]),
+      matches: spans.length,
+      exactMatches: exact,
+      lines: new Map([[line, { text, spans }]]),
       terms: new Set([term.toLowerCase()]),
       firstLine: line,
       preview: text.slice(0, PREVIEW_CHARS),
       definition,
     })
-    return
+    return true
   }
 
-  existing.matches += counted.matches
-  existing.exactMatches += counted.exact
-  existing.lines.add(line)
+  existing.matches += spans.length
+  existing.exactMatches += exact
+  const seen = existing.lines.get(line)
+  if (seen === undefined) existing.lines.set(line, { text, spans })
+  else seen.spans.push(...spans)
   existing.terms.add(term.toLowerCase())
   existing.definition = existing.definition || definition
   if (line < existing.firstLine) {
     existing.firstLine = line
     existing.preview = text.slice(0, PREVIEW_CHARS)
   }
+  return true
 }
 
 /**
@@ -548,6 +695,16 @@ function compareHits(a: LexicalHit, b: LexicalHit): number {
 function finishHits(acc: Map<string, HitAccumulator>, maxHits: number): { hits: LexicalHit[]; truncated: boolean } {
   const hits: LexicalHit[] = []
   for (const [id, entry] of acc) {
+    // Ascending, so a surface renders a file's matches in file order whichever
+    // engine discovered them and in whatever order the terms were searched.
+    const matchedLines = [...entry.lines.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .slice(0, MAX_MATCHES_PER_FILE)
+      .map(([line, found]) => {
+        const clipped = clipLine(found.text, mergeSpans(found.spans))
+        return { line, text: clipped.text, spans: clipped.spans }
+      })
+
     hits.push({
       id,
       path: entry.file.path,
@@ -562,6 +719,7 @@ function finishHits(acc: Map<string, HitAccumulator>, maxHits: number): { hits: 
       firstLine: entry.firstLine,
       preview: entry.preview,
       definition: entry.definition,
+      matchedLines,
     })
   }
   hits.sort(compareHits)
@@ -642,10 +800,12 @@ async function ripgrepSearch(
       if (parsed === null) continue
       const file = byPath.get(parsed.path)
       // Restrict to the graph's file list so both engines see one universe: the
-      // walker already applied `.gitignore`, the skip list and the size cap.
+      // walker already applied `.gitignore`, the skip list and the size cap. This is
+      // also the containment boundary — a path ripgrep reports that is not in the
+      // walked universe cannot become a hit, whatever it spells.
       if (file === undefined) continue
       files.add(file.path)
-      accumulate(acc, file, parsed.line, parsed.text, term, ignoreCase)
+      accumulate(acc, file, parsed.line, parsed.text, term, ignoreCase, options.wholeWord === true)
     }
   }
 
@@ -703,9 +863,9 @@ async function scannerSearch(
       const text = lines[i]!.replace(/\r$/, '')
       let matchedHere = false
       for (const { term, ignoreCase } of folded) {
-        if (!hasMatch(text, term, ignoreCase)) continue
-        accumulate(acc, file, i, text, term, ignoreCase)
-        matchedHere = true
+        if (accumulate(acc, file, i, text, term, ignoreCase, options.wholeWord === true)) {
+          matchedHere = true
+        }
       }
       if (matchedHere && ++perFile >= MAX_MATCHES_PER_FILE) break
     }
@@ -721,13 +881,6 @@ async function scannerSearch(
     truncated: truncated || overflow,
     terms: [...terms],
   }
-}
-
-function hasMatch(line: string, query: string, ignoreCase: boolean): boolean {
-  if (query === '') return false
-  return ignoreCase
-    ? line.toLowerCase().includes(query.toLowerCase())
-    : line.includes(query)
 }
 
 /**

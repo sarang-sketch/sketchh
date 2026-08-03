@@ -13,6 +13,7 @@ import type {
   EvalCase,
   EvalResult,
   GitStatusResult,
+  ProjectSearchResult,
   ProviderDescriptor,
   ProviderSettingsEntry,
   ProviderSettingsFile,
@@ -654,6 +655,32 @@ export interface SketchClient {
     maxNodes?: number
     maxEdges?: number
   }): Promise<ArchitectureResult>
+
+  // ── project search ────────────────────────────────────────────────────────
+  //
+  // The Search panel calls THIS, and there is nothing behind it in the desktop
+  // package. It used to have its own retriever — `git grep` through the Tauri
+  // command policy with a folder walk behind it — and the engine had its lexical
+  // channel, so the same query could highlight one thing in the panel and score
+  // another in retrieval. One dialect now serves both callers
+  // (packages/core/src/context/hybrid-search.ts, `matchSpans`).
+  //
+  // The engine spawns ripgrep through its own verify runner, which is why this did
+  // not require adding `rg` to the Rust `command_policy` allowlist. `engine` says
+  // which implementation answered — `ripgrep` or `scanner` — and `truncated` says a
+  // cap stopped the search, because "nothing was found" and "we stopped looking" are
+  // different answers (Requirement 27.5).
+
+  /** Search a project's indexed text. Read-only: emits nothing, writes nothing. */
+  projectSearch?(params: {
+    root: string
+    query: string
+    /** Case-sensitive. Omitted keeps the engine's per-term smart case. */
+    matchCase?: boolean
+    /** Keep only identifier-boundary occurrences. */
+    wholeWord?: boolean
+    maxHits?: number
+  }): Promise<ProjectSearchResult>
 
   // ── skills ────────────────────────────────────────────────────────────────
   //

@@ -6,15 +6,18 @@
 // transitions against a process double — while production gets the one contained
 // path through Rust.
 //
-// TWO CALLERS, ONE SPAWN PATH. The terminal panel runs what the user typed; the
-// search panel runs `git grep` as its fast path. Both go through here, so there is
-// exactly one place in the frontend that can start a process, and it is the one the
+// ONE SPAWN PATH, AND ONE CALLER LEFT. The terminal panel runs what the user typed.
+// This is the only place the frontend can start a process, and it is the one the
 // backend contains: program from the allowlist, arguments as a vector, cwd inside
 // the project root, confirmation required (Requirement 22.6).
 //
-// NOTHING HERE WIDENS THE POLICY. `ripgrep` is not on the Rust allowlist and this
-// module does not add it; the search fast path uses `git grep`, which is (see
-// src/search/runSearch.ts for that decision).
+// THE SEARCH PANEL USED TO BE THE SECOND CALLER, and is not any more. It spawned
+// `git grep` here because `rg` is not on the Rust allowlist and widening that list
+// for a search box would have traded a security boundary for speed. The panel now
+// calls the ENGINE's lexical channel over the client seam instead
+// (packages/core/src/context/project-search.ts): the engine spawns ripgrep through
+// its own verify runner, so search got the fast path, the allowlist stayed exactly
+// as narrow as it was, and one of the two search implementations is gone.
 //
 // Validates: Requirements 22.6, 27.4
 

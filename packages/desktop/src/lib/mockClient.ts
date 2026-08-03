@@ -286,6 +286,14 @@ export class MockSketchClient implements SketchClient {
   // made-up digest is a security claim with no bytes behind it. So: no engine, no
   // catalog, and the panel says which transport it is talking to.
 
+  // The same rule for search. A fabricated result list would name files and line
+  // numbers in the user's own project that no engine ever read — the `mockResults`
+  // fixture this panel shipped with, back with a nicer shape. No engine, no results,
+  // and the panel says which transport it is talking to.
+  async projectSearch(): Promise<never> {
+    return this.noEngine('project-search')
+  }
+
   async skillsCatalog(): Promise<never> {
     return this.noEngine('skills-catalog')
   }

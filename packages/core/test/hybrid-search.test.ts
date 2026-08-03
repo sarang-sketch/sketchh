@@ -548,6 +548,7 @@ function lexicalOf(path: string, partial: Partial<LexicalHit> = {}): LexicalHit 
     firstLine: 0,
     preview: '',
     definition: false,
+    matchedLines: [],
     ...partial,
   }
 }

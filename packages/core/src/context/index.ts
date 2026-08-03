@@ -54,11 +54,14 @@ export {
   ripgrepArgs,
   parseRipgrepLine,
   countMatches,
+  matchSpans,
+  clipLine,
   looksLikeDefinition,
   chunkForLine,
   queryTerms,
   smartCase,
   MAX_QUERY_TERMS,
+  PREVIEW_CHARS,
   DEFAULT_SEARCH_CONFIG,
   RERANK_WEIGHTS,
   MAX_RERANK_BOOST,
@@ -78,8 +81,10 @@ export type {
   HybridSearchResult,
   LexicalEngine,
   LexicalHit,
+  LexicalLineMatch,
   LexicalResult,
   LexicalSearchOptions,
+  MatchSpan,
   RankedItem,
   RankedList,
   RipgrepProbe,
@@ -87,6 +92,19 @@ export type {
   VectorChannel,
   VectorHit,
 } from './hybrid-search.js'
+
+// The text-search surface over that ONE lexical channel: the shape a result list
+// renders, and the containment check every path it returns has passed. The desktop
+// Search panel reaches this through the `project-search` RPC method; there is no
+// second search implementation anywhere (Requirement 27.4).
+export { projectSearch, containedProjectPath } from './project-search.js'
+export type {
+  ProjectSearchGroup,
+  ProjectSearchHit,
+  ProjectSearchOptions,
+  ProjectSearchResult,
+  ProjectSearchUniverse,
+} from './project-search.js'
 
 // Embedding. The local hashing path is the default and is NOT a semantic model —
 // see the header of embedder.ts and LOCAL_EMBEDDER_LIMITATIONS before relying on

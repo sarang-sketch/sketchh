@@ -35,6 +35,7 @@ import {
   generateArchitecture,
   graphPath,
   loadRepoGraph,
+  projectSearch,
 } from '../context/index.js'
 import { JsonlEventStore, MemoryEventStore, secretsFromEnv } from '../events/index.js'
 import type { EventStore } from '../events/index.js'
@@ -1600,6 +1601,46 @@ async function architecture(
   }
 }
 
+// ── project text search ──────────────────────────────────────────────────────
+//
+// The Search panel is a UI over this ONE method. It used to have its own retriever
+// in the desktop package — `git grep` through the Tauri command policy, a folder
+// walk behind it, and a matcher built on JavaScript regular expressions — while the
+// retrieval stack used this package's lexical channel. Two engines with two match
+// dialects: the same query over the same file could highlight one thing in the panel
+// and score another in retrieval. That implementation is deleted and this is what
+// the panel calls instead, for the same reasons the Git panel calls `git-*`:
+//
+//   * the dialect. `matchSpans` in context/hybrid-search.ts decides what a match is,
+//     once, for the ranking AND for the highlight. There is no second answer to
+//     reconcile.
+//   * the seam. Engine capability, one implementation, reachable from the browser
+//     dev bridge as well as the app (Requirement 13.3).
+//   * the allowlist. The engine spawns ripgrep through verify/runner.ts, so `rg`
+//     never had to be added to `command_policy::ALLOWED_PROGRAMS` in Rust. The panel
+//     got faster search without widening a security boundary.
+//
+// READ-ONLY AND EVENTLESS. Nothing is emitted (a keystroke is not run history) and
+// nothing is written — with no persisted graph the file list is walked in memory.
+
+async function projectSearchMethod(params: Record<string, unknown>): Promise<unknown> {
+  // Required and explicit, like `gitRoot`: falling back to the server's cwd would
+  // search whatever directory the sidecar happens to have been started in.
+  const root = resolve(readString(params, 'root', 'params.root'))
+  const query = readString(params, 'query', 'params.query')
+  const matchCase = optionalBoolean(params, 'matchCase', 'params.matchCase')
+  const wholeWord = optionalBoolean(params, 'wholeWord', 'params.wholeWord')
+  const maxHits = optionalNumber(params, 'maxHits', 'params.maxHits')
+
+  return projectSearch({
+    root,
+    query,
+    ...(matchCase === true ? { matchCase: true } : {}),
+    ...(wholeWord === true ? { wholeWord: true } : {}),
+    ...(maxHits !== undefined ? { maxHits: Math.max(1, Math.floor(maxHits)) } : {}),
+  })
+}
+
 // ── skills: the registry, installing from it, and training against it ────────
 //
 // The Skills surface is a UI over these three methods, for the third time and the
@@ -1983,6 +2024,10 @@ export const METHODS: Readonly<Record<string, MethodHandler>> = {
   // Task 5.5's Live Architecture panel: the seven views derived from the persisted
   // graph, plus the optional rebuild that makes "index this project" actionable.
   architecture,
+  // The Search panel, over the SAME lexical channel the retrieval stack uses. The
+  // panel's own `git grep` + folder-walk implementation is deleted; one dialect now
+  // serves both callers. Read-only, emits nothing, writes nothing.
+  'project-search': projectSearchMethod,
   // Task 6.4's Skills surface. `skill-install` verifies before it writes and has no
   // force parameter; `skill-train` is the only method here that can reach a provider
   // and is invoked by explicit user action only (Requirement 9.6).

@@ -29,6 +29,7 @@ import type {
   EvalCase,
   EvalResult,
   GitStatusResult,
+  ProjectSearchResult,
   ProviderSettingsFile,
   ProviderTestResult,
   SketchEvent,
@@ -200,6 +201,28 @@ export class HttpSketchClient implements SketchClient {
       ...(params.index === true ? { index: true } : {}),
       ...(params.maxNodes !== undefined ? { maxNodes: params.maxNodes } : {}),
       ...(params.maxEdges !== undefined ? { maxEdges: params.maxEdges } : {}),
+    })
+  }
+
+  // ── project search ────────────────────────────────────────────────────────
+  //
+  // The dev bridge dispatches the same `project-search` method the sidecar does, so
+  // the Search panel is real in the browser too — which the deleted `git grep` path
+  // never was, since it needed the native command bridge to spawn anything.
+
+  async projectSearch(params: {
+    root: string
+    query: string
+    matchCase?: boolean
+    wholeWord?: boolean
+    maxHits?: number
+  }): Promise<ProjectSearchResult> {
+    return this.callMethod<ProjectSearchResult>('project-search', {
+      root: params.root,
+      query: params.query,
+      ...(params.matchCase === true ? { matchCase: true } : {}),
+      ...(params.wholeWord === true ? { wholeWord: true } : {}),
+      ...(params.maxHits !== undefined ? { maxHits: params.maxHits } : {}),
     })
   }
 

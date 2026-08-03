@@ -39,6 +39,20 @@ export type ArchitectureView = context.ArchitectureView
 export type ArchitectureViewKind = context.ArchitectureViewKind
 export type ViewEvidence = context.ViewEvidence
 
+/**
+ * Project search, taken from the engine's ONE lexical channel rather than restated.
+ *
+ * `MatchSpan` offsets come from `matchSpans` in the engine, which is also what the
+ * retrieval ranking counts — so the Search panel highlights exactly the occurrences
+ * retrieval scored. The panel has no matcher of its own to drift from this
+ * (Requirement 27.4).
+ */
+export type ProjectSearchResult = context.ProjectSearchResult
+export type ProjectSearchGroup = context.ProjectSearchGroup
+export type ProjectSearchHit = context.ProjectSearchHit
+export type MatchSpan = context.MatchSpan
+export type LexicalEngine = context.LexicalEngine
+
 export type ProviderDescriptor = providers.ProviderDescriptor
 export type ProviderSettingsEntry = settings.ProviderSettingsEntry
 export type ProviderSettingsFile = settings.ProviderSettingsFile
