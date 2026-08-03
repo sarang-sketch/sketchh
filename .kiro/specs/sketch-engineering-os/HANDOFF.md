@@ -440,3 +440,82 @@ tree hid.
 **Green output alone is not evidence.** Break each guard, watch it fail, restore it, watch it pass,
 and record both. Run the `sanitizePayload` mutation at **every** gate — that is the regression that
 actually happened.
+---
+
+## Mutation ledger — proven vs. assumed (verification session ending at `f2e2fd4`)
+
+This is the record of a dedicated verification session: sixteen guards were each broken, watched to
+fail, restored, and watched to pass green. It says which guards are **mutation-proven** and which of
+those assert on an **EFFECT** (state on disk, a call count, a computed boolean, a process outcome)
+rather than on a **STRING** (a status label, a log message). Anything not in the table has not been
+mutation-tested; treat it as assumed. Read with `NEED-TO-DO.md` §7 (traps) and the verification
+ritual above.
+
+Tree at the time: `f2e2fd4`, clean, cold-verified — core 1,055 tests / 55 files, desktop 503 / 54,
+typecheck and build clean.
+
+### Mutation-proven guards
+
+| # | Guard | Mutation | What broke | Asserts on |
+|---|---|---|---|---|
+| 1 | Zero runtime dependencies in core | add a dependency | `test/deps.test.ts`: `expected ['left-pad'] to deeply equal []` | **EFFECT** (package manifest bytes) |
+| 2 | Plan gate in the engine | bypass `PlanWriter.hasPlan(runId)` in `runTask` | `test/loop.test.ts`, 2 tests: `edit_rejected` absent **and** the file was written | **EFFECT** (event absence + filesystem) |
+| 3 | Plan-gate UI mirror is run-scoped | make it unconditional | 6 tests across 3 desktop files | **EFFECT** |
+| 4 | Trainer's strict `>` validation gate | `>` → `>=` | 5 tests / 2 files, **plus all three degenerate-input tests** — `meanScore([]) === 0` together with strict `>` is what makes an empty validation split safe. One of the failures asserts on the **deployed artifact's bytes**. | **EFFECT** |
+| 5 | Capability scoping | neuter the single `grants()` consultation | 12 tests / 5 files | **EFFECT** |
+| 6 | Budget guard | remove the pre-call projection stop | 3 tests / 2 files; the Phase 8 gate failure bills a real third model call | **EFFECT** (call actually made) |
+| 7 | Secret redaction on the event **write** path | drop `sanitizePayload()` from `emit` | `test/store.test.ts`, 3 tests; `sk-live-…` lands on disk verbatim in four places inside one JSONL line | **EFFECT** (bytes on disk) |
+| 8 | Hunk subset offsets | `oldStart` → `newStart` | `test/diff.test.ts`, 7 tests | **EFFECT** (resulting file content) |
+| 9 | Memory supersession | `supersedeSameKey ?? false` | 6 tests / 2 files; live entry **sets** compared by deep equality | **EFFECT** |
+| 10 | A merge conflict is never guessed | off-by-one in the overlap check | 4 tests / 3 files; the collided file's bytes on disk are asserted unchanged and the follow-up task object is asserted | **EFFECT** |
+| 11 | Bench lift comparison | `> 0` → `>= 0` | 2 tests | **EFFECT** (computed comparison) |
+| 12 | Nine-stage verify policy | invert the ok-computation / the skip logic | 4 tests on the ok-computation, 9 on the skip logic; assertions are on `result.ok` and `verifiedAnything` | **EFFECT** (computed booleans) |
+| 13 | MCP hang-and-continue | remove the request deadline | 6 tests, driven by **real child processes that genuinely never answer** | **EFFECT** — see caveat |
+| 14 | Live environment feedback | `ok: false` → `ok: true` | 4 tests / 2 files against **real HTTP servers on real ports** | **EFFECT** — see caveat, the `status` strings are not the guard |
+| 15 | Response cache makes no second call | disable the cache hit | 8 tests / 2 files asserting the **adapter call count** (`expected 3 to be 1`); `phase8-gate` additionally uses an adapter whose `chat` throws if reached | **EFFECT** (call count) |
+| 16 | `GitTool` behind the capability gate | `git-stage`/`git-commit` → `requires: 'git:read'` | 2 tests; a commit that must not exist appears in `git log` | **EFFECT** (real repository state) |
+
+Guard 5's subtleties, both load-bearing: the *coarse* mutation fails 12 tests, but the subtler one
+(an empty grant treated as unrestricted) fails only **2**, and the structural "exactly one
+enforcement point" test does **not** catch a semantic weakening that keeps the call shape intact.
+Do not read that structural test as protection against a weakened check.
+
+### Three holes found and closed this session
+
+- **`7ce5a58`** — "nothing has ever run against a real provider" was **conventional**, not enforced.
+  It is now a core-suite egress tripwire (`test/setup/noEgress.ts`; see the architecture-decisions
+  entry above). The subtlety that makes a naive guard useless: `net.connect` and `http`'s agent call
+  `Socket.prototype.connect` with a **single array** `[options, listener]`, not the caller's
+  arguments. A guard written against the documented public signature therefore lets every
+  `node:http` request and Node's own `fetch` straight through while looking correct.
+- **`17608ce`** — the CI lift-regression gate had **no executing test**. Inverting its `<` to `>`
+  left all 1,050 tests green. It now runs as a child process with its exit code asserted.
+- **`02ee9c4`** — the MCP hang guard failed by causeless vitest timeout (`Test timed out in
+  5000ms`, with files going 1.5 s → 20.7 s and 3 s → 61.5 s) and never mentioned MCP. It is now
+  bounded and fails by name.
+
+### Caveats a reader must know
+
+- **Guard 14's `status` strings are decoration, not the guard.**
+  `expect(result.status).toBe('runtime-error')` survives the mutation untouched; only the `ok`
+  assertion on the next line catches it. Those `ok` lines are **load-bearing** — deleting them as
+  redundant turns the guard string-only in a single edit.
+- **Guard 5 is mostly proved by absence.** Five of the six adversarial denial paths are proved by
+  "the function was not entered", against descriptors defined inside the test file; only
+  `fs:write:home` leaves real evidence on disk. Git (guard 16) is the one real shipped tool behind
+  the gate — see open risk 10.
+- **Guard 13 is bounded, but the in-process egress tripwire does not cover child processes**, by
+  design. An MCP child's own network behaviour is outside it.
+
+### Not verified — state plainly
+
+- **No run has ever touched a real hosted provider.** Every `.sketch/bench` artifact carries
+  `provider: "synthetic-offline"`, and the tripwire now fails the suite if one does not.
+- **Tasks 12.1–12.4 remain deliberately blocked** (see Phase status): no native installer artifact,
+  no fresh-machine run with process-attributed DNS/socket evidence, no Authenticode or Apple
+  Developer ID signing — **GitHub provenance is not that** — and no real third-party community skill.
+- **`cargo test` cannot link on this machine**; Rust modules are verified with `rustc --test` only,
+  and the macOS keychain path is not compiled here at all.
+- **Monaco is doubled in tests**, and **the Tauri IPC layer is absent from the Phase 3 gate chain**.
+  Editor behaviour is proved against the double, not against Monaco, and nothing in that chain
+  crosses the real IPC boundary.

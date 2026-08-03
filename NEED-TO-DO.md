@@ -1945,6 +1945,16 @@ Every one of these has already happened here, or is one commit away. Read it bef
 | T16 | Rendering untrusted output as HTML | With `script-src 'unsafe-inline'`, XSS becomes RCE. | Text nodes only. No `dangerouslySetInnerHTML` in terminal, diff, search, or git output. |
 | T17 | Claiming `cargo test` passes | It cannot link on this machine. A false claim hides untested policy code. | `rustc --test src/command_policy.rs`. Say which tool you used. |
 | T18 | Reading a skip as a pass | The symlink containment test skips on Windows without Developer Mode. | Count skips separately. Never report a skip as coverage. |
+| T19 | A guard with no executing test | The CI lift gate had none: inverting its `<` to `>` left all 1,050 tests green. **This happened** — closed by `17608ce`. | Every guard has a test that fails when the guard is inverted. Run the script as a child process and assert its exit code. |
+| T20 | A guard that asserts on a string, not an effect | The mutation changes behaviour while the status label stays identical. Live-feedback's `expect(result.status).toBe('runtime-error')` survives the `ok: false → true` mutation; only the `ok` line catches it. | Assert on effects — bytes on disk, call counts, computed booleans, process outcomes. Treat the effect assertions as load-bearing; never delete them as "redundant" next to a string check. |
+| T21 | A guard written against a documented signature the runtime does not use | `net.connect` and `http`'s agent call `Socket.prototype.connect` with a single array `[options, listener]`, so a signature-correct egress guard passes every `node:http` request and Node's `fetch`. **This happened** — closed by `7ce5a58`. | Prove the guard by breaking it against the real call path, not by reading the docs. A convention is not an enforcement. |
+
+**Which of these are actually proven.** Sixteen guards have been broken, watched to fail, restored,
+and watched to pass, and every one of them asserts on an effect. The ledger — the per-guard failing
+test counts, the exact failure signatures, the three holes closed (`7ce5a58`, `17608ce`, `02ee9c4`),
+the caveats, and the explicit not-verified list — lives in
+`.kiro/specs/sketch-engineering-os/HANDOFF.md` § "Mutation ledger — proven vs. assumed". Anything
+absent from that table is assumed, not proven.
 
 ---
 
