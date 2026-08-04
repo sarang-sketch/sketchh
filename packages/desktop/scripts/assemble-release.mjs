@@ -53,8 +53,12 @@ function digestPattern(value) {
   return typeof value === 'string' && /^sha256:[0-9a-f]{64}$/.test(value)
 }
 
+function sha256Bytes(bytes) {
+  return `sha256:${createHash('sha256').update(bytes).digest('hex')}`
+}
+
 async function sha256(path) {
-  return `sha256:${createHash('sha256').update(await readFile(path)).digest('hex')}`
+  return sha256Bytes(await readFile(path))
 }
 
 async function filesUnder(root, found = []) {
@@ -134,7 +138,7 @@ async function validatePlatform(inputRoot, allFiles, platform) {
     manifestPath,
     manifestFilename: manifestName,
     manifestBytes,
-    manifestSha256: await sha256(manifestPath),
+    manifestSha256: sha256Bytes(manifestBytes),
     maxBytesExclusive: manifest.maxBytesExclusive,
   }
 }
@@ -192,9 +196,11 @@ await mkdir(temporary)
 try {
   for (const row of rows) {
     await copyFile(row.artifactPath, resolve(temporary, row.filename), constants.COPYFILE_EXCL)
-    await copyFile(row.manifestPath, resolve(temporary, row.manifestFilename), constants.COPYFILE_EXCL)
     const copiedArtifact = resolve(temporary, row.filename)
     const copiedManifest = resolve(temporary, row.manifestFilename)
+    // Parse, digest, and emit one captured buffer. Rereading/copying the source path here would
+    // let a concurrently replaced manifest differ from the bytes whose policy fields we validated.
+    await writeFile(copiedManifest, row.manifestBytes, { flag: 'wx' })
     const copiedInfo = await stat(copiedArtifact)
     if (copiedInfo.size !== row.bytes || (await sha256(copiedArtifact)) !== row.sha256) {
       throw new Error(`copied ${row.platform} installer no longer matches validated bytes`)

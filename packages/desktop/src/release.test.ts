@@ -87,6 +87,23 @@ describe('Phase 12.3 release assembly', () => {
     expect(Object.keys(manifest)).not.toContain('generatedAt')
   })
 
+  it('emits the exact validated manifest buffer without rereading its source path', () => {
+    const source = readFileSync(script, 'utf8')
+    expect(source).toContain('manifestSha256: sha256Bytes(manifestBytes)')
+    expect(source).toContain("writeFile(copiedManifest, row.manifestBytes, { flag: 'wx' })")
+    expect(source).not.toContain('copyFile(row.manifestPath')
+
+    const test = fixture()
+    const result = test.run()
+    expect(result.status, result.stderr).toBe(0)
+    for (const platform of Object.keys(definitions) as Array<keyof typeof definitions>) {
+      const filename = `package-sizes-${platform}.json`
+      const validated = readFileSync(path.join(platformRoot(test, platform), filename))
+      const emitted = readFileSync(path.join(test.output, filename))
+      expect(emitted.equals(validated)).toBe(true)
+    }
+  })
+
   it('refuses an installer changed after its package-size manifest was written', () => {
     const test = fixture()
     const row = definitions.windows
