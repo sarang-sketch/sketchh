@@ -36,7 +36,7 @@ Download an installer, `release-manifest.json`, `SHA256SUMS`, and its
 `package-sizes-<platform>.json` from the same GitHub Release. From that directory:
 
 ```bash
-gh attestation verify ./Sketch_0.1.0_amd64.AppImage --repo OWNER/REPOSITORY
+gh attestation verify ./Sketch_0.1.0_amd64.deb --repo OWNER/REPOSITORY
 sha256sum -c SHA256SUMS
 ```
 

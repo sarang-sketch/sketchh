@@ -12,7 +12,7 @@
     "package": "tauri build",
     "package:windows": "tauri build --bundles nsis",
     "package:macos": "tauri build --bundles dmg",
-    "package:linux": "tauri build --bundles appimage",
+    "package:linux": "tauri build --bundles deb",
     "package:size": "node scripts/check-package-size.mjs",
     "release:assemble": "node scripts/assemble-release.mjs",
     "preview": "vite preview",

@@ -16,9 +16,9 @@
       "maxBytesExclusive": 100000000
     },
     "linux": {
-      "bundle": "appimage",
-      "artifactDir": "appimage",
-      "extensions": [".AppImage"],
+      "bundle": "deb",
+      "artifactDir": "deb",
+      "extensions": [".deb"],
       "maxBytesExclusive": 100000000
     }
   }

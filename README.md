@@ -141,7 +141,7 @@ npm run verify:sidecar -w @sketch/desktop
 npm run package:windows -w @sketch/desktop  # use macos/linux on those native hosts
 ```
 
-The native workflow builds NSIS, DMG, and AppImage artifacts on Windows, macOS, and Linux runners.
+The native workflow builds NSIS, DMG, and Debian package artifacts on Windows, macOS, and Linux runners.
 Every deliverable must be **strictly under 100,000,000 bytes**; the gate and current evidence status
 are documented in [PACKAGING.md](PACKAGING.md). A configured workflow is not itself proof that a
 platform artifact exists—only its successful native job and uploaded size manifest are.

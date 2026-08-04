@@ -19,7 +19,7 @@ const commit = '0123456789abcdef0123456789abcdef01234567'
 const definitions = {
   windows: { bundle: 'nsis', dir: 'nsis', file: 'Sketch_0.1.0_x64-setup.exe' },
   macos: { bundle: 'dmg', dir: 'dmg', file: 'Sketch_0.1.0_x64.dmg' },
-  linux: { bundle: 'appimage', dir: 'appimage', file: 'Sketch_0.1.0_amd64.AppImage' },
+  linux: { bundle: 'deb', dir: 'deb', file: 'Sketch_0.1.0_amd64.deb' },
 } as const
 
 afterEach(() => {

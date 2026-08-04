@@ -220,7 +220,7 @@ evidence for every third-party MCP server.
 | Indexing speed | Target < 10 seconds for a 10,000-file repo; do not infer from small fixtures |
 | Memory usage | Target < 500 MB idle; installed native measurement pending |
 | Offline capability | Fake/scripted gates pass offline; real installed-app Ollama/no-egress proof pending |
-| Platform support | Windows/NSIS, macOS/DMG, Linux/AppImage jobs configured; three retained native artifacts pending |
+| Platform support | Windows/NSIS, macOS/DMG, Linux/DEB jobs configured; three retained native artifacts pending |
 | Installer size | Strict `<100,000,000-byte` artifact gate configured; no installer artifact produced on this host |
 | Core portability | `@sketch/core` has zero runtime dependencies and a bundleable JSON-line CLI |
 | Privacy | No Sketch telemetry/account backend; outbound provider/tool paths are explicit and scoped |

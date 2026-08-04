@@ -27,7 +27,7 @@ jobs:
           - platform: linux
             os: ubuntu-22.04
             command: package:linux
-            artifact: packages/desktop/src-tauri/target/release/bundle/appimage/*.AppImage
+            artifact: packages/desktop/src-tauri/target/release/bundle/deb/*.deb
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4

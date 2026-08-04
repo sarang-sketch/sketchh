@@ -22,7 +22,7 @@ const repoRoot = resolve(here, '..', '..', '..')
 const platforms = Object.freeze({
   windows: { bundle: 'nsis', extension: '.exe' },
   macos: { bundle: 'dmg', extension: '.dmg' },
-  linux: { bundle: 'appimage', extension: '.AppImage' },
+  linux: { bundle: 'deb', extension: '.deb' },
 })
 
 function option(name) {
