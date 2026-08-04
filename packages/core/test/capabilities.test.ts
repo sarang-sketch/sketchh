@@ -25,7 +25,8 @@ import { spawnSync } from 'node:child_process'
 import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 import {
   CAPABILITIES,
@@ -526,7 +527,7 @@ describe('enforcement does not live in the prompt', () => {
     // "You may not use the network" in a prompt is a request. If the day comes
     // that someone moves the check into the prompt, this fails.
     const loop = readFileSync(
-      resolve(new URL('../src/loop/agent.ts', import.meta.url).pathname.replace(/^\//, '')),
+      fileURLToPath(new URL('../src/loop/agent.ts', import.meta.url)),
       'utf8',
     )
     expect(loop).not.toContain('net:http')
