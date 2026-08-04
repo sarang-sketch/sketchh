@@ -396,13 +396,13 @@ Phase 4 numbering stays intact for anything that references it.
 ## Phase 12 — Packaging and the open flywheel
 
 - [ ] 12. Packaging, offline proof, and extensibility
-- [~] 12.1 Produce cross-platform builds
+- [x] 12.1 Produce cross-platform builds
   - macOS, Windows, and Linux Tauri builds with a documented size budget
-  - Native jobs, sidecar smoke checks, strict `<100,000,000-byte` manifests, and uploads are wired. Completion remains blocked until all three jobs actually produce passing artifacts; local Windows packaging is blocked by OS Application Control and missing `dlltool.exe`.
+  - Run `30936156941` at commit `642b70ae8d9a360e8bbdb3940907df2a0aa9955f` concluded `success` with all three native jobs green. The uploaded artifacts were downloaded and independently re-measured: `Sketch_0.1.0_x64-setup.exe` 25,236,326 bytes, `Sketch_0.1.0_aarch64.dmg` 40,239,845 bytes, and `Sketch_0.1.0_amd64.deb` 48,572,918 bytes, each matching its `package-sizes-<platform>.json` size and SHA-256 exactly, each `passed: true` and strictly under 100,000,000 bytes, and each carrying its expected container header. Packages are unsigned, and local Windows packaging is still blocked by Application Control (OS error 4551).
   - _Requirements: 26.1_
 - [~] 12.2 Prove local-first on a clean offline machine
   - Install, index a repository, and complete a task on local Ollama with no external network call beyond the local model endpoint
-  - The desktop now forwards the authoritative selected key-free provider through both production transports. A direct host-sidecar preflight requires a numeric IPv4/IPv6 loopback address, Ollama's identity/model endpoints, and an exact installed model; it indexes a fresh fixture, runs and verifies an edit, and never starts or substitutes a stub/fake provider. `OFFLINE-PROOF.md` defines the retained clean-machine procedure and evidence bundle. Completion remains blocked on a verified native installer, a fresh-machine installed-app UI run, and raw process-attributed DNS/socket evidence.
+  - The desktop now forwards the authoritative selected key-free provider through both production transports. A direct host-sidecar preflight requires a numeric IPv4/IPv6 loopback address, Ollama's identity/model endpoints, and an exact installed model; it indexes a fresh fixture, runs and verifies an edit, and never starts or substitutes a stub/fake provider. `OFFLINE-PROOF.md` defines the retained clean-machine procedure and evidence bundle. A verified native installer is now available from run `30936156941`, so completion remains blocked only on a fresh-machine installed-app UI run against a genuine local model and raw process-attributed DNS/socket evidence.
   - _Requirements: 26.2_
 - [~] 12.3 Ship the open-source scaffolding
   - `CONTRIBUTING.md` and signed releases; the marketplace retains hash, scope, and review

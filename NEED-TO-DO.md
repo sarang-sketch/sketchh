@@ -1,7 +1,7 @@
 # NEED TO DO — Sketch, from here to done
 
 **Audience:** the developer who is going to write this code.
-**Status date:** latest validated implementation checkpoint `d815196`; task 12.4 completed at `ff99c43`. The living log distinguishes historical snapshots from current phase truth, covers every spec decision, and reports reproducible actionable-leaf progress. **79 of 82 actionable leaves are complete; only evidence-gated 12.1–12.3 remain open.**
+**Status date:** native package evidence checkpoint `642b70a`; task 12.4 completed at `ff99c43`. The living log distinguishes historical snapshots from current phase truth, covers every spec decision, and reports reproducible actionable-leaf progress. **80 of 82 actionable leaves are complete. Task 12.1 closed on independently re-measured installers from run `30936156941`; only evidence-gated 12.2 and 12.3 remain open.**
 **Authority:** `.kiro/specs/sketch-engineering-os/{requirements,design,tasks}.md` are the contract.
 This file is the working plan on top of them. Where this file and the spec disagree, the spec wins
 and you should fix this file.
@@ -98,10 +98,10 @@ the allowlist.** A test that needs a remote host is a finding to report.
 
 ## 1. Where the project actually stands
 
-**Status date: latest validated implementation checkpoint `d815196`; task 12.4 completed at
-`ff99c43`; only evidence-gated tasks 12.1–12.3 remain open. 79 of 82 actionable leaves are
+**Status date: native package evidence checkpoint `642b70a`; task 12.4 completed at
+`ff99c43`; only evidence-gated tasks 12.2 and 12.3 remain open. 80 of 82 actionable leaves are
 complete.** `tasks.md` has 96 raw checkbox rows: 83 leaves and 13 phase summaries. Superseded leaf
-4.3 is excluded, leaving 82 actionable leaves; the normalized raw state is 91 complete, three
+4.3 is excluded, leaving 82 actionable leaves; the normalized raw state is 92 complete, two
 evidence-gated leaves, one superseded row, and one open Phase 12 summary. Current independent
 validation is build 0, typecheck 0, core 1,059 tests / 55 files, and desktop 511 tests / 55 files,
 with both suites passing with `SKETCH_FAKE_PROVIDER` unset and set to `1`. The Windows symlink branch
@@ -109,21 +109,22 @@ printed `SKIPPED` and is not claimed. Task 13.5 remains the documentation-only
 historical reconciliation checkpoint; task 12.4 subsequently supplied genuine licensed third-party
 Git blob bytes and completed Requirement 26.4 without claiming organic skill quality or real-provider
 evidence. Task 12.6 remains scripted offline harness evidence, not real-provider capability evidence.
-Cross-platform package jobs and the strict `<100,000,000-byte` size gate are implemented, but 12.1
-remains open until native Windows, macOS, and Linux workflow jobs produce uploaded installers and
-passing size manifests.
+Task 12.1 is complete: run `30936156941` produced successful Windows/NSIS, macOS/DMG, and
+Linux/DEB jobs, and every uploaded installer was re-measured to equal its size manifest's bytes and
+SHA-256 under the unchanged strict ceiling.
 
 **Release readiness is hardened but still not release evidence.** Publication now depends on both
 the native package matrix and the canonical behavioral/security gates. The assembler emits the same
 manifest bytes it parsed and hashed, and joins root npm, desktop npm, Tauri, and Cargo versions to
 the tag. The Ollama preflight refuses unresolved hostname aliases and accepts only numeric loopback.
-None of this supplies native artifacts, an installed-app capture, GitHub OIDC attestations, or an
-independent release verification, so 12.1–12.3 remain open.
+Native artifacts now exist, but no installed-app capture, GitHub OIDC attestation, or independent
+release verification does, so 12.2 and 12.3 remain open.
 
-**Packaging evidence is honest.** The local Windows Tauri attempt reached Rust compilation but this
-host's Application Control blocked Cargo build scripts (OS error 4551) and `dlltool.exe` is absent.
-No Windows installer was produced or measured, and macOS/Linux were not run here. `PACKAGING.md`
-defines the release matrix, measurement basis, unsigned status, and exact blocker.
+**Packaging evidence is honest.** Hosted run `30936156941` supplies all three verified installers.
+Locally, the Windows Tauri attempt reached Rust compilation before this host's Application Control
+blocked Cargo build scripts (OS error 4551), and `dlltool.exe` is absent, so nothing was ever built
+or measured on this machine. `PACKAGING.md` defines the release matrix, measurement basis, retained
+artifact digests, unsigned status, and that local blocker.
 
 **Benchmark evidence is deliberately narrow.** The internal CI result compares
 `offline-scripted-v1 + Sketch` with the same scripted model plus `naive`. It is deterministic
@@ -137,7 +138,7 @@ Phase 11's synthetic harness lift does not change that verdict and is not a lice
 
 The detailed task expansions below are retained as historical implementation guidance from earlier
 phase vantage points. They are not a current backlog. Current status comes from this section,
-`tasks.md`, `tasks-executed.md`, and `HANDOFF.md`; only evidence-gated 12.1–12.3 remain open.
+`tasks.md`, `tasks-executed.md`, and `HANDOFF.md`; only evidence-gated 12.2 and 12.3 remain open.
 
 ```
 c13967d  phase 11 task 11.6 — read-only benchmark report panel
@@ -239,7 +240,7 @@ phantom errors. §0.2's ordering was written before this bit, and this is the co
 | Cost guard | Enforced before calls when configured; no default desktop budget | desktop default open |
 | Retrieval | Graph/search/assembly are real, but desktop does not send `contextBudgetTokens` by default | default wiring open |
 | Versioned memory | Persistence, hygiene, retrieval, and panel are real | automatic live-run ingestion/injection open |
-| Native/release/offline evidence | Workflows and deterministic gates exist | evidence-gated 12.1–12.3 |
+| Native/release/offline evidence | Verified installers exist from run `30936156941`; deterministic release gates exist | evidence-gated 12.2–12.3 |
 | Third-party community flywheel | Exact licensed third-party Git blob bytes pass production install/run/capture/train/promote/replay | complete (12.4); scripted-quality and no-real-provider limits remain |
 | Legacy compatibility paths | `ProviderAdapter` coexists with `ChatAdapter` | convergence unowned |
 
@@ -295,7 +296,7 @@ and this project's worst incident was invisible precisely because there was noth
 ## 3. Historical implementation expansion (written from the Phase 3 vantage point)
 
 At this checkpoint, 73 tasks remained. The prose below is retained for rationale and failure traps,
-not as a current backlog. Current progress is 79/82 actionable leaves with only 12.1–12.3 open.
+not as a current backlog. Current progress is 80/82 actionable leaves with only 12.2–12.3 open.
 Requirement IDs in `_italics_` remain useful historical acceptance references.
 
 ### Phase 3 — Code surface (4 tasks left)
@@ -2047,11 +2048,13 @@ of `d815196`. Anything absent from that table is assumed, not proven.
 - [ ] Any new debt added to §4 rather than left in someone's head.
 
 ### Whole project
-- [ ] 82 of 82 actionable leaves. Current state: 79 complete; evidence-gated 12.1–12.3 remain.
+- [ ] 82 of 82 actionable leaves. Current state: 80 complete; evidence-gated 12.2–12.3 remain.
 - [x] 12.6 canonical scripted acceptance is green: plan gate, verification contract, consensus, and
       cost guard are observable in the Timeline. This is harness evidence, not real-provider proof.
-- [ ] Native Windows, macOS, and Linux installers retained within the strict
-      **`<100,000,000-byte` per-deliverable** budget (§4.5).
+- [x] Native Windows, macOS, and Linux installers retained within the strict
+      **`<100,000,000-byte` per-deliverable** budget (§4.5): run `30936156941` produced
+      25,236,326-byte NSIS, 40,239,845-byte DMG, and 48,572,918-byte DEB deliverables whose
+      re-measured bytes and SHA-256 equal their size manifests.
 - [ ] Installed-app clean-machine Ollama run retained with process-attributed DNS/socket/packet
       evidence showing no non-loopback attempt.
 - [ ] A package-version-matching release tag publishes and independently verifies all native assets
@@ -2068,7 +2071,7 @@ of `d815196`. Anything absent from that table is assumed, not proven.
 ## 9. Start here
 
 ```powershell
-# 1. Confirm the latest validated implementation checkpoint at d815196 and inspect the docs-only tree.
+# 1. Confirm the native package evidence checkpoint at 642b70a and inspect the tree.
 git status --short
 git log --oneline -3
 
@@ -2078,10 +2081,10 @@ git log --oneline -3
 #    tasks-executed.md
 #    PACKAGING.md, OFFLINE-PROOF.md, RELEASES.md
 
-# 3. The next actionable work is external evidence-gated task 12.1.
-#    Run the native package matrix; do not mark it complete from workflow source alone.
-#    After retaining all three installer artifacts and passing size manifests, proceed to 12.2
-#    and 12.3 using those exact bytes and the documented evidence procedures.
+# 3. The next actionable work is external evidence-gated task 12.2, then 12.3.
+#    Task 12.1's installers are retained and verified from run 30936156941; use those exact
+#    bytes and the documented evidence procedures. Do not mark 12.2 or 12.3 complete from
+#    workflow source, preflight refusal, or a green branch build alone.
 
 # 4. Before recording a green checkpoint, validate in canonical order in both environments.
 npm run build

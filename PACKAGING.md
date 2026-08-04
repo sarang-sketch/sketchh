@@ -52,7 +52,25 @@ protocol, enforces the budget, writes `package-sizes-<platform>.json`, and uploa
 manifest. A workflow definition proves the path is wired; only a successful native job with its
 uploaded artifact proves that platform's build was produced.
 
-Hosted status on 2026-08-04: the icon-fixed run produced passing Windows/NSIS and macOS/DMG jobs.
-Linux produced a valid 121,412,088-byte AppImage, which the unchanged strict budget correctly
-rejected; the replacement native DEB path has not yet completed. Local Windows packaging remains
-blocked by Application Control (OS error 4551) and missing `dlltool.exe`. Task 12.1 remains evidence-gated until one run completes all three native jobs.
+## Retained native package evidence
+
+Workflow run [`30936156941`](https://github.com/sarang-sketch/sketch/actions/runs/30936156941)
+(`Native packages`, push event) completed with conclusion `success` at commit
+`642b70ae8d9a360e8bbdb3940907df2a0aa9955f`. The `windows native package`, `macos native package`,
+`linux native package`, and `Release behavioral and security gates` jobs each concluded `success`.
+`Attest and publish release` was correctly skipped because a branch push is not a version tag.
+
+All three uploaded artifacts were downloaded and independently re-measured. Each installer's actual
+byte count and SHA-256 equal its uploaded `package-sizes-<platform>.json` entry exactly, each
+manifest records `passed: true`, and each is strictly under the unchanged 100,000,000-byte ceiling:
+
+| Platform | Deliverable | Bytes | SHA-256 | Container check |
+|---|---|---|---|---|
+| Windows | `nsis/Sketch_0.1.0_x64-setup.exe` | 25,236,326 | `0bcc779fb1922682ebba65caab614cb8b8c137a3e47d1eac1158fbbc32b219b1` | PE image (`MZ`) |
+| macOS | `dmg/Sketch_0.1.0_aarch64.dmg` | 40,239,845 | `68ef4372f90b9387b9be0ed588e69a5d190430887cd45900f52d8dbcf749a437` | UDIF `koly` trailer |
+| Linux | `deb/Sketch_0.1.0_amd64.deb` | 48,572,918 | `c155fdd3a9d97efa637b39daaab1bfd8b5b2cb807f6cb628f7b6e9116720b93b` | `ar` archive, `debian-binary` 2.0 |
+
+Task 12.1 is complete on this evidence. Two limits are explicit: local Windows packaging on the
+development host remains blocked by Application Control (OS error 4551) and missing `dlltool.exe`,
+and none of these packages is Authenticode- or Developer ID-signed. A successful native matrix is
+also not release publication, so task 12.3 stays open.

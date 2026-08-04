@@ -19,18 +19,20 @@ Phase 3 and had gone four phases stale.
 
 ## IMMEDIATE NEXT ACTION
 
-**Tasks 12.1–12.3 are the only remaining actionable leaves, and all are external evidence gates.
-Run the native package matrix first. Then run the no-fallback Ollama preflight and retained
-installed-app clean-machine procedure against those exact installer bytes. For 12.3, push a
+**Tasks 12.2 and 12.3 are the only remaining actionable leaves, and both are external evidence gates.
+The native matrix is done: run `30936156941` supplies verified Windows/NSIS, macOS/DMG, and
+Linux/DEB installers whose bytes and SHA-256 match their size manifests. Next, run the no-fallback
+Ollama preflight and the retained installed-app clean-machine procedure against those exact
+installer bytes. For 12.3, push a
 package-version-matching semantic tag only after the matrix is green, retain every release
 asset/hash/attestation verification result, and do not call GitHub provenance Authenticode or Apple
 Developer ID signing/notarization. Source tests, workflow configuration, local fixtures, and
 documentation complete none of those claims.**
 
-**79 of 82 actionable leaves are complete.** `tasks.md` has 96 raw checkbox rows: 83 leaves and 13
+**80 of 82 actionable leaves are complete.** `tasks.md` has 96 raw checkbox rows: 83 leaves and 13
 phase summaries. Excluding superseded leaf 4.3 leaves 82 actionable leaves. The normalized raw state
-is 91 complete, three evidence-gated leaves, one superseded row, and one open Phase 12 summary.
-Phases 1–11 and 13 are complete; Phase 12 remains open only for 12.1–12.3.
+is 92 complete, two evidence-gated leaves, one superseded row, and one open Phase 12 summary.
+Phases 1–11 and 13 are complete; Phase 12 remains open only for 12.2 and 12.3.
 
 Task 13.5 reconciled the living ledger at its historical checkpoint: Milestones 1–5 are labelled
 historical snapshots, phase-gate sections remain immutable checkpoint evidence, all ten design
@@ -39,14 +41,15 @@ conflicts and all five design-authority decisions are represented in the Decisio
 latest validated implementation checkpoint is `d815196`. Current independent source verification is
 **build 0, typecheck 0, core 1,059 tests / 55 files, and desktop 511 tests / 55 files**, with both
 suites passing with `SKETCH_FAKE_PROVIDER` unset and set to `1`. The Windows symlink branch printed
-`SKIPPED` and is not claimed. Tasks 12.1–12.3 remain blocked on native artifacts, installed-app
-no-egress/Ollama evidence, and a verified real tag release respectively.
+`SKIPPED` and is not claimed. Tasks 12.2 and 12.3 remain blocked on installed-app no-egress/Ollama
+evidence and a verified real tag release respectively.
 
-Task 12.1 now has native Windows/NSIS, macOS/DMG, and Ubuntu 22.04/AppImage jobs. Each rebuilds and
-smoke-tests its own host-native sidecar, packages with Tauri, enforces a strict `<100,000,000-byte`
-installer budget, writes a SHA-256 size manifest, and uploads both. `PACKAGING.md` defines the
-measurement and states the unsigned pre-release status. A configured workflow is not build evidence:
-12.1 stays open until all three jobs have successful uploaded artifacts.
+Task 12.1 is complete. Native Windows/NSIS, macOS/DMG, and Ubuntu 22.04/DEB jobs each rebuild and
+smoke-test their own host-native sidecar, package with Tauri, enforce a strict `<100,000,000-byte`
+installer budget, write a SHA-256 size manifest, and upload both. Run `30936156941` at
+`642b70ae8d9a360e8bbdb3940907df2a0aa9955f` concluded `success`, and its three uploaded installers
+were re-measured to 25,236,326, 40,239,845, and 48,572,918 bytes with digests equal to their
+manifests. `PACKAGING.md` records those measurements and the unsigned pre-release status.
 
 Task 12.2's source-sidecar preflight now refuses hostname aliases such as `localhost` and accepts
 only numeric IPv4/IPv6 loopback endpoints before contacting Ollama. Re-allowing `localhost` made the
@@ -260,10 +263,10 @@ because there was nothing to bisect.
 | 9 — Versioned memory with hygiene (9.1–9.5) | **DONE**, gate green cold |
 | 10 — Eval-gated multi-agent (10.1–10.5) | **DONE**, gate green. `swarm` ships **off**: no measured strategy lift |
 | 11 — Honest benchmarks (11.1–11.6) | **DONE**, gate green cold. CI result is synthetic only; real-provider public matrix unperformed |
-| 12 — Packaging and open flywheel | **IN PROGRESS** — 12.1 native artifacts required; 12.2 forwarding/preflight built with installed-app clean-machine evidence required; 12.3 deterministic release/provenance path built with real tag-release evidence and native signing identities absent; **12.4 DONE** with exact licensed third-party Git blob bytes, digest-bound zero-capability review, production flywheel, and mutation evidence, not organic-quality or real-provider evidence; **12.5 DONE** with production-consumed contracts for all nine categories and behavioral/mutation evidence; **12.6 DONE** with scripted offline canonical acceptance and Timeline evidence, not real-provider capability evidence |
+| 12 — Packaging and open flywheel | **IN PROGRESS** — **12.1 DONE** with run `30936156941` native Windows/macOS/Linux installers re-measured against their size manifests, unsigned; 12.2 forwarding/preflight built with installed-app clean-machine evidence required; 12.3 deterministic release/provenance path built with real tag-release evidence and native signing identities absent; **12.4 DONE** with exact licensed third-party Git blob bytes, digest-bound zero-capability review, production flywheel, and mutation evidence, not organic-quality or real-provider evidence; **12.5 DONE** with production-consumed contracts for all nine categories and behavioral/mutation evidence; **12.6 DONE** with scripted offline canonical acceptance and Timeline evidence, not real-provider capability evidence |
 | 13 — Documentation reconciliation | **DONE** — 13.1–13.5 reconciled contributor rules, marketplace scope, architecture contracts, product metrics, and the living-log/decision/counting conventions |
 
-Task counts: **79 of 82 actionable leaves complete**. Raw checkbox state: 91 complete, three
+Task counts: **80 of 82 actionable leaves complete**. Raw checkbox state: 92 complete, two
 evidence-gated, one superseded, and one open Phase 12 summary.
 
 ---
@@ -297,8 +300,8 @@ architecture generator and the Live Architecture panel.
 - The legacy `ProviderAdapter`/canonical `ChatAdapter` pair still coexists; convergence has no owning
   task. The legacy `verifier/`/canonical `verify/` pair does NOT — `verifier/` was deleted
   2026-08-03 and a source-level guard now forbids `shell: true` anywhere in `packages/core/src/`.
-- Native installers, installed-app Ollama/no-egress proof, and a real verified release tag remain
-  evidence-gated under 12.1–12.3. Task 12.4's retained licensed third-party bytes close the community
+- Installed-app Ollama/no-egress proof and a real verified release tag remain evidence-gated under
+  12.2 and 12.3; native installers are now retained and verified. Task 12.4's licensed third-party bytes close the community
   provenance gate, but do not establish organic skill quality or real-provider performance.
 
 **Nothing has ever run against a real provider.** The production local-provider route is now wired,
@@ -637,8 +640,8 @@ below remain unchanged.
 
 - **No run has ever touched a real hosted provider.** Every `.sketch/bench` artifact carries
   `provider: "synthetic-offline"`, and the tripwire now fails the suite if one does not.
-- **Tasks 12.1–12.3 remain deliberately blocked** (see Phase status): no complete native installer
-  matrix, no fresh-machine run with process-attributed DNS/socket evidence, and no verified real tag
+- **Tasks 12.2 and 12.3 remain deliberately blocked** (see Phase status): no fresh-machine run with
+  process-attributed DNS/socket evidence, and no verified real tag
   release or native signing identity. **GitHub provenance is not Authenticode or Apple Developer ID
   signing/notarization.** Task 12.4's scripted flywheel does not establish organic quality or
   real-provider performance.

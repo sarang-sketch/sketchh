@@ -92,6 +92,13 @@ describe('Phase 12.1 package size gate', () => {
     const documentation = readFileSync(path.join(repo, 'PACKAGING.md'), 'utf8')
     expect(documentation).toContain('strictly less than 100,000,000 bytes')
     expect(documentation).toContain('only a successful native job')
-    expect(documentation).toContain('Task 12.1 remains evidence-gated')
+    // 12.1 closed on retained artifacts, so the record must keep the run identity, the exact
+    // re-measured bytes, and the unsigned/no-release limits it does not cover.
+    expect(documentation).toContain('30936156941')
+    expect(documentation).toContain('642b70ae8d9a360e8bbdb3940907df2a0aa9955f')
+    for (const bytes of ['25,236,326', '40,239,845', '48,572,918']) {
+      expect(documentation).toContain(bytes)
+    }
+    expect(documentation).toContain('task 12.3 stays open')
   })
 })
