@@ -45,7 +45,10 @@ describe('Phase 11 gate', () => {
       expect(entry.eval.task.verify.length).toBeGreaterThan(0)
       expect(entry.eval.checks).toContainEqual({ kind: 'verify-pass' })
     }
-    const captured = await readFile(fileURLToPath(new URL('../.sketch/evals/evals.jsonl', import.meta.url)), 'utf8')
+    const captured = await readFile(
+      fileURLToPath(new URL('./fixtures/phase11-vacuous-captured-evals.jsonl', import.meta.url)),
+      'utf8',
+    )
     expect(captured).toContain('"verify":[]')
     expect(JSON.stringify(suite.suite)).not.toContain('eval_178509')
   })
