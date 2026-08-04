@@ -36,11 +36,11 @@ Task 13.5 reconciled the living ledger at its historical checkpoint: Milestones 
 historical snapshots, phase-gate sections remain immutable checkpoint evidence, all ten design
 conflicts and all five design-authority decisions are represented in the Decision Log, and old
 `/96` figures are explicitly legacy counters. Task 12.4 subsequently completed at `ff99c43`; the
-current checkpoint is `03a1ab3`. Current independent source verification is **build 0, typecheck 0,
-core 1,059 tests / 55 files, and desktop 508 tests / 54 files**, with both suites passing with
-`SKETCH_FAKE_PROVIDER` unset and set to `1`. The Windows symlink branch printed `SKIPPED` and is not
-claimed. Tasks 12.1–12.3 remain blocked on native artifacts, installed-app no-egress/Ollama evidence,
-and a verified real tag release respectively.
+latest validated implementation checkpoint is `d815196`. Current independent source verification is
+**build 0, typecheck 0, core 1,059 tests / 55 files, and desktop 511 tests / 55 files**, with both
+suites passing with `SKETCH_FAKE_PROVIDER` unset and set to `1`. The Windows symlink branch printed
+`SKIPPED` and is not claimed. Tasks 12.1–12.3 remain blocked on native artifacts, installed-app
+no-egress/Ollama evidence, and a verified real tag release respectively.
 
 Task 12.1 now has native Windows/NSIS, macOS/DMG, and Ubuntu 22.04/AppImage jobs. Each rebuilds and
 smoke-tests its own host-native sidecar, packages with Tauri, enforces a strict `<100,000,000-byte`
@@ -48,13 +48,20 @@ installer budget, writes a SHA-256 size manifest, and uploads both. `PACKAGING.m
 measurement and states the unsigned pre-release status. A configured workflow is not build evidence:
 12.1 stays open until all three jobs have successful uploaded artifacts.
 
+Task 12.2's source-sidecar preflight now refuses hostname aliases such as `localhost` and accepts
+only numeric IPv4/IPv6 loopback endpoints before contacting Ollama. Re-allowing `localhost` made the
+focused endpoint guard fall through to a real network attempt and fail 1/2; restoration passed 2/2.
+This remains preflight hardening, not installed-app or no-egress evidence, so 12.2 stays open.
+
 Task 12.3 now has a deterministic assembler that accepts exactly one passing installer/size manifest
-per platform, re-hashes before and after copying, binds package version, tag, commit, and repository,
-and atomically emits `release-manifest.json` plus `SHA256SUMS`. The tag-only release job depends on
-the complete native matrix, obtains GitHub OIDC build-provenance attestations, verifies every asset,
-and only then calls `gh release create --verify-tag`. `RELEASES.md` documents maintainer and consumer
-checks. No tag workflow has run, no release exists, and no Authenticode/Developer ID identity exists;
-12.3 therefore stays open.
+per platform, binds parsing, hashing, and emission to one captured manifest buffer, re-hashes
+installer bytes before and after copying, and binds root npm, desktop npm, Tauri, Cargo, tag, commit,
+and repository identity. The tag-only release job depends on both the complete native matrix and the
+canonical build/typecheck/provider-environment/benchmark/marketplace gates, obtains GitHub OIDC
+build-provenance attestations, verifies every asset, and only then calls
+`gh release create --verify-tag`. `RELEASES.md` documents maintainer and consumer checks. No tag
+workflow has run, no release exists, and no Authenticode/Developer ID identity exists; 12.3 therefore
+stays open.
 
 Task 12.4 is complete at `ff99c43`. The retained input is the exact canonical Git blob bytes from
 third-party [`dotcomjack/parallel-agents-skill`](https://github.com/dotcomjack/parallel-agents-skill)
@@ -198,6 +205,10 @@ ledger commits are intentionally omitted so this handoff does not embed a self-i
 claim.
 
 ```
+d815196  fix: require numeric loopback for Ollama preflight
+06944cf  fix: bind releases to native package versions
+0c76131  fix: bind release manifests to validated bytes
+ce366dd  ci: gate release publication on canonical checks
 03a1ab3  test: fail loudly when CLI build artifact is missing
 ff99c43  sketch: phase 12 task 12.4 - prove third-party skill flywheel
 437d004  sketch: phase 13 task 13.4 - reconcile product metrics
@@ -506,24 +517,25 @@ and record both. Run the `sanitizePayload` mutation at **every** gate — that i
 actually happened.
 ---
 
-## Mutation ledger — proven vs. assumed (current as of `03a1ab3`)
+## Mutation ledger — proven vs. assumed (current as of `d815196`)
 
 This is the running record of every guard that has been broken, watched to fail, restored, and
-watched to pass green — **twenty-one** of them. It says which guards are **mutation-proven** and which
-of those assert on an **EFFECT** (state on disk, a call count, a computed boolean, a process outcome,
-rendered DOM) rather than on a **STRING** (a status label, a log message). Anything not in the table
-has not been mutation-tested; treat it as assumed. Read with `NEED-TO-DO.md` §7 (traps) and the
-verification ritual above.
+watched to pass green — **twenty-five** of them. It says which guards are **mutation-proven** and
+whether they assert on an **EFFECT** (state on disk, a call count, a computed boolean, a process
+outcome, rendered DOM) or only on **STRUCTURE** (source/workflow shape). Anything not in the table
+has not been mutation-tested; treat it as assumed. Structural guards prove fail-closed wiring but do
+not substitute for the external execution they describe. Read with `NEED-TO-DO.md` §7 (traps) and
+the verification ritual above.
 
 **How to keep this current.** Append new guards as new numbered rows and never renumber existing
 ones — the numbers are cited from `NEED-TO-DO.md` §7 and from in-test comments. If a commit widens an
 existing guard rather than adding one, extend that row instead of adding a duplicate. Then move the
 hash in this heading, the tree line below, and the count in the paragraph above. Rows 1–16 come from
-the dedicated verification session that ended at `f2e2fd4`; rows 17–21 landed with the commits named
+the dedicated verification session that ended at `f2e2fd4`; rows 17–25 landed with the commits named
 in their rows.
 
-Tree at the time: `03a1ab3`, clean — build and typecheck exit 0; core 1,059 tests / 55 files and
-desktop 508 / 54 pass with `SKETCH_FAKE_PROVIDER` unset and set to `1`. The Windows symlink branch
+Tree at the time: `d815196`, clean — build and typecheck exit 0; core 1,059 tests / 55 files and
+desktop 511 / 55 pass with `SKETCH_FAKE_PROVIDER` unset and set to `1`. The Windows symlink branch
 printed `SKIPPED` and is not claimed as passing coverage.
 
 ### Mutation-proven guards
@@ -551,6 +563,10 @@ printed `SKIPPED` and is not claimed as passing coverage.
 | 19 | Consumer-side rendering of every `EventKind` (`6eced6d`, six explicit kinds) | revert the repo-graph emitter to `context_loaded` | `packages/desktop/src/eventKinds-gate.test.tsx`: `Unable to find an element with the text: repo_indexed` | **EFFECT** (rendered DOM) |
 | 20 | Exact retained third-party Git blob bytes and complete MIT license (`ff99c43`) | append ` MUTATION` to the retained LICENSE copyright | focused third-party flywheel gate failed: `LICENSE: expected 1076 to be 1067`; restore passed 1/1 | **EFFECT** (retained vendor/license bytes) |
 | 21 | Real-pipe CLI coverage requires the generated CLI artifact (`03a1ab3`) | delete generated `packages/core/dist` before the focused CLI suite | focused suite exited nonzero before collection: 1 suite failed / 0 tests, caused by `CLI BUILD PRECONDITION FAILED: ... real-pipe protocol coverage must not be skipped.`; rebuild restored 38/38 | **EFFECT** (suite exit nonzero / missing artifact) |
+| 22 | Release publication depends on canonical release gates (`ce366dd`) | restore the real defect, `needs: package`, while retaining the new policy test | focused packaging/release run failed 1/9 on the missing `needs: [package, release-gates]`; repair passed 9/9 | **STRUCTURE** (workflow job graph; no GitHub run claimed) |
+| 23 | Size-manifest policy fields, digest, and emitted bytes share one captured buffer (`0c76131`) | replace the captured-buffer write with `copyFile(row.manifestPath, ...)` | focused release suite failed 1/7 on the forbidden mutable-path reread; restoration passed 7/7 | **STRUCTURE + normal-path EFFECT** (emitted bytes equal captured bytes; the concurrent race itself was not dynamically induced) |
+| 24 | Release tag identity includes root npm, desktop npm, Tauri, and Cargo versions (`06944cf`) | change only `tauri.conf.json` from `0.1.0` to `9.9.9` | focused release suite failed 6/7 with `root version 0.1.0 does not match Tauri package version 9.9.9`; restoration passed 7/7 | **EFFECT** (assembler process refuses before output) |
+| 25 | Real-Ollama preflight accepts only numeric loopback (`d815196`) | re-allow the unresolved `localhost` alias | focused endpoint guard failed 1/2 because validation reached `fetch` and reported `real Ollama is unavailable`; restoration passed 2/2 with refusal before provider I/O | **EFFECT** (provider request reached vs refused) |
 
 Guard 5's subtleties, both load-bearing: the *coarse* mutation fails 12 tests, but the subtler one
 (an empty grant treated as unrestricted) fails only **2**, and the structural "exactly one

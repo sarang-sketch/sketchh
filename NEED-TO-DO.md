@@ -1,7 +1,7 @@
 # NEED TO DO — Sketch, from here to done
 
 **Audience:** the developer who is going to write this code.
-**Status date:** current checkpoint `03a1ab3`; task 12.4 completed at `ff99c43`. The living log distinguishes historical snapshots from current phase truth, covers every spec decision, and reports reproducible actionable-leaf progress. **79 of 82 actionable leaves are complete; only evidence-gated 12.1–12.3 remain open.**
+**Status date:** latest validated implementation checkpoint `d815196`; task 12.4 completed at `ff99c43`. The living log distinguishes historical snapshots from current phase truth, covers every spec decision, and reports reproducible actionable-leaf progress. **79 of 82 actionable leaves are complete; only evidence-gated 12.1–12.3 remain open.**
 **Authority:** `.kiro/specs/sketch-engineering-os/{requirements,design,tasks}.md` are the contract.
 This file is the working plan on top of them. Where this file and the spec disagree, the spec wins
 and you should fix this file.
@@ -98,20 +98,27 @@ the allowlist.** A test that needs a remote host is a finding to report.
 
 ## 1. Where the project actually stands
 
-**Status date: current checkpoint `03a1ab3`; task 12.4 completed at `ff99c43`; only
-evidence-gated tasks 12.1–12.3 remain open. 79 of 82 actionable leaves are complete.** `tasks.md` has
-96 raw checkbox rows: 83 leaves and 13 phase summaries. Superseded leaf 4.3 is excluded, leaving 82
-actionable leaves; the normalized raw state is 91 complete, three evidence-gated leaves, one
-superseded row, and one open Phase 12 summary. Current independent validation is build 0, typecheck
-0, core 1,059 tests / 55 files, and desktop 508 tests / 54 files, with both suites passing with
-`SKETCH_FAKE_PROVIDER` unset and set to `1`. The Windows symlink branch printed `SKIPPED` and is not
-claimed. Task 13.5 remains the documentation-only
+**Status date: latest validated implementation checkpoint `d815196`; task 12.4 completed at
+`ff99c43`; only evidence-gated tasks 12.1–12.3 remain open. 79 of 82 actionable leaves are
+complete.** `tasks.md` has 96 raw checkbox rows: 83 leaves and 13 phase summaries. Superseded leaf
+4.3 is excluded, leaving 82 actionable leaves; the normalized raw state is 91 complete, three
+evidence-gated leaves, one superseded row, and one open Phase 12 summary. Current independent
+validation is build 0, typecheck 0, core 1,059 tests / 55 files, and desktop 511 tests / 55 files,
+with both suites passing with `SKETCH_FAKE_PROVIDER` unset and set to `1`. The Windows symlink branch
+printed `SKIPPED` and is not claimed. Task 13.5 remains the documentation-only
 historical reconciliation checkpoint; task 12.4 subsequently supplied genuine licensed third-party
 Git blob bytes and completed Requirement 26.4 without claiming organic skill quality or real-provider
 evidence. Task 12.6 remains scripted offline harness evidence, not real-provider capability evidence.
 Cross-platform package jobs and the strict `<100,000,000-byte` size gate are implemented, but 12.1
 remains open until native Windows, macOS, and Linux workflow jobs produce uploaded installers and
 passing size manifests.
+
+**Release readiness is hardened but still not release evidence.** Publication now depends on both
+the native package matrix and the canonical behavioral/security gates. The assembler emits the same
+manifest bytes it parsed and hashed, and joins root npm, desktop npm, Tauri, and Cargo versions to
+the tag. The Ollama preflight refuses unresolved hostname aliases and accepts only numeric loopback.
+None of this supplies native artifacts, an installed-app capture, GitHub OIDC attestations, or an
+independent release verification, so 12.1–12.3 remain open.
 
 **Packaging evidence is honest.** The local Windows Tauri attempt reached Rust compilation but this
 host's Application Control blocked Cargo build scripts (OS error 4551) and `dlltool.exe` is absent.
@@ -153,9 +160,9 @@ d759311  phase 4 complete — self-hosted fonts, README zero-dollar recipe, gate
 
 **Historical cold-gate checkpoint:** an earlier cold reinstall recorded core 1,028 tests / 51
 files and desktop 481 tests / 48 files, with build, typecheck, and `bench:check` green in both
-provider environments. The current `03a1ab3` validation records 1,059 / 55 core and 508 / 54 desktop
-as stated above. The cold install's cache/network conditions were not instrumented, so neither
-checkpoint is proof of an offline install.
+provider environments. The latest `d815196` validation records 1,059 / 55 core and 511 / 55
+desktop as stated above. The cold install's cache/network conditions were not instrumented, so
+neither checkpoint is proof of an offline install.
 
 **Previously recurring Windows timing issue, now stabilized:** `verify-live.test.ts` binds a real
 port. Commit `012e109` increased only the post-kill settle allowance from 300 ms to 1,000 ms; the
@@ -2005,13 +2012,18 @@ Every one of these has already happened here, or is one commit away. Read it bef
 | T20 | A guard that asserts on a string, not an effect | The mutation changes behaviour while the status label stays identical. Live-feedback's `expect(result.status).toBe('runtime-error')` survives the `ok: false → true` mutation; only the `ok` line catches it. | Assert on effects — bytes on disk, call counts, computed booleans, process outcomes. Treat the effect assertions as load-bearing; never delete them as "redundant" next to a string check. |
 | T21 | A guard written against a documented signature the runtime does not use | `net.connect` and `http`'s agent call `Socket.prototype.connect` with a single array `[options, listener]`, so a signature-correct egress guard passes every `node:http` request and Node's `fetch`. **This happened** — closed by `7ce5a58`. | Prove the guard by breaking it against the real call path, not by reading the docs. A convention is not an enforcement. |
 | T22 | Cross-platform EOL conversion changes signed or vendored digests | A Windows CRLF checkout changed retained third-party bytes and produced a digest that would not reproduce from the canonical Git blobs. **This happened** during task 12.4 and was fixed before `ff99c43`. | Retain and hash canonical raw Git blob bytes; use only narrow `eol=lf` attributes for signed/vendor text; assert exact byte lengths and mutate a retained byte to prove the gate fails. |
+| T23 | A release job builds artifacts but bypasses behavioral/security gates | `release` depended only on `package`, so a tag could publish despite failed build, tests, benchmark, or marketplace checks. **This happened** and was closed at `ce366dd`. | Make publication depend on both `package` and `release-gates`; keep a workflow-graph guard, but do not call that structural check a real GitHub run. |
+| T24 | Validated metadata is reread from a mutable path | The assembler parsed one size manifest, then hashed and copied later reads; a concurrent replacement could make emitted bytes differ from policy fields. **This happened** and was closed at `0c76131`. | Parse, digest, and emit one captured buffer. Re-hash copied installer bytes separately because changed installer bytes must fail closed. |
+| T25 | A tag matches npm but not the native package | Root/desktop npm versions matched while Tauri or Cargo could drift, allowing misleading native installer identity. Closed at `06944cf`. | Join root npm, desktop npm, Tauri, Cargo, and tag versions before creating output. |
+| T26 | `localhost` is trusted without observing resolution | A hostname alias can resolve somewhere other than loopback; spelling is not network containment. Closed for the preflight at `d815196`. | Require numeric `127.0.0.0/8` or `::1`; process-attributed clean-machine capture remains the actual 12.2 evidence. |
 
-**Which of these are actually proven.** Twenty-one guards have been broken, watched to fail,
-restored, and watched to pass, and every one of them asserts on an effect. The ledger — the
-per-guard failing test counts, the exact failure signatures, the three holes closed (`7ce5a58`,
-`17608ce`, `02ee9c4`), the caveats, and the explicit not-verified list — lives in
-`.kiro/specs/sketch-engineering-os/HANDOFF.md` § "Mutation ledger — proven vs. assumed", current as of
-`03a1ab3`. Anything absent from that table is assumed, not proven.
+**Which of these are actually proven.** Twenty-five guards have been broken, watched to fail,
+restored, and watched to pass. Rows 22 and 23 include structural workflow/source assertions whose
+limits are stated explicitly; they are not promoted to external execution evidence. The ledger —
+the per-guard failing test counts, exact failure signatures, three earlier holes closed (`7ce5a58`,
+`17608ce`, `02ee9c4`), caveats, and explicit not-verified list — lives in
+`.kiro/specs/sketch-engineering-os/HANDOFF.md` § "Mutation ledger — proven vs. assumed", current as
+of `d815196`. Anything absent from that table is assumed, not proven.
 
 ---
 
@@ -2056,7 +2068,7 @@ per-guard failing test counts, the exact failure signatures, the three holes clo
 ## 9. Start here
 
 ```powershell
-# 1. Confirm the current checkpoint at 03a1ab3 and inspect the docs-only tree.
+# 1. Confirm the latest validated implementation checkpoint at d815196 and inspect the docs-only tree.
 git status --short
 git log --oneline -3
 

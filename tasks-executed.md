@@ -35,9 +35,9 @@ interface exists and no real implementation does.
   after Phase N” describes that gate, even when a later phase implemented the seam.
 - **Current progress counts actionable leaves only.** `tasks.md` has 96 checkbox rows: 83 leaves and
   13 phase-summary rows. Superseded leaf 4.3 is excluded, leaving 82 actionable leaves. At the
-  current `03a1ab3` checkpoint, 79 are complete and three—12.1 through 12.3—remain evidence-gated;
-  task 12.4 completed earlier at `ff99c43`. The normalized raw row state is 91 complete, 3
-  evidence-gated, 1 superseded, and 1 open Phase 12 summary.
+  latest validated implementation checkpoint `d815196`, 79 are complete and three—12.1 through
+  12.3—remain evidence-gated; task 12.4 completed earlier at `ff99c43`. The normalized raw row state
+  is 91 complete, 3 evidence-gated, 1 superseded, and 1 open Phase 12 summary.
 - Historical `/96` counters below are retained as legacy checkpoint text; they were manually
   maintained and are not the current counting convention.
 
@@ -45,6 +45,10 @@ interface exists and no real implementation does.
 
 | Date | Commit | Result |
 |---|---|---|
+| 2026-08-04 | `d815196` | Real-Ollama source-sidecar preflight now refuses unresolved `localhost` and accepts only numeric IPv4/IPv6 loopback. Re-allowing the alias failed 1/2 because validation reached `fetch`; restoration passed 2/2. This is preflight hardening, not installed-app/no-egress evidence. Canonical validation over the full hardening series: build/typecheck exit 0; core 1,059/55 and desktop 511/55 pass with `SKETCH_FAKE_PROVIDER` unset and `1`; Windows file-symlink branch printed `SKIPPED` and is not claimed. |
+| 2026-08-04 | `06944cf` | Release assembly now joins root npm, desktop npm, Tauri, Cargo, and tag versions. Mutating only Tauri `0.1.0 → 9.9.9` failed 6/7 with a named mismatch; restoration passed 7/7. No native package or release was created. |
+| 2026-08-04 | `0c76131` | Size-manifest parsing, digesting, and emission now use one captured buffer rather than rereading a mutable source path. Restoring the vulnerable copy-path shape failed 1/7; restoration passed 7/7. The race guard is structural plus normal-path byte equality; no concurrent race is claimed as dynamically reproduced. |
+| 2026-08-04 | `ce366dd` | Fixed a real release bypass: publication now depends on both `package` and `release-gates`, whose build/typecheck/two-environment tests/benchmark/marketplace checks are guarded. The pre-fix focused run failed 1/9; repair passed 9/9. This proves workflow structure, not a GitHub execution. |
 | 2026-08-03 | `03a1ab3` | `cli.test.ts` no longer silently skips 20 real-pipe tests when `packages/core/dist/cli.js` is absent. Deleting generated `packages/core/dist` made the focused CLI suite fail nonzero before collection (1 suite / 0 tests) with `CLI BUILD PRECONDITION FAILED: ... real-pipe protocol coverage must not be skipped.`; rebuilding restored 38/38. Full validation: build/typecheck exit 0; core 1,059/55 and desktop 508/54 pass with `SKETCH_FAKE_PROVIDER` unset and `1`. The Windows symlink branch printed `SKIPPED` and is not claimed. Build before test remains required. Mutation ledger guard 21 records the missing-artifact process effect. |
 
 ---

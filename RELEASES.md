@@ -19,10 +19,12 @@ attestations are independently verified. Workflow configuration is not signed-re
    registry/hash/scope/review tests to pass.
 3. Create and push a version tag exactly matching the package version, for example `v0.1.0`.
 4. Require all Windows, macOS, and Linux package matrix jobs to succeed. The release job is tag-only,
-   depends on the complete matrix, and has no `always()` escape path.
-5. The assembler re-hashes each installer against its passing package-size manifest, rejects missing,
-   duplicate, unexpected, traversing, or changed files, and emits `release-manifest.json` plus
-   `SHA256SUMS` atomically.
+   depends on both the complete matrix and the canonical release-gates job, and has no `always()`
+   escape path.
+5. The assembler joins the tag to root npm, desktop npm, Tauri, and Cargo versions; parses, hashes,
+   and emits each size manifest from one captured byte buffer; re-hashes each installer against that
+   passing manifest; rejects missing, duplicate, unexpected, traversing, or changed files; and emits
+   `release-manifest.json` plus `SHA256SUMS` atomically.
 6. GitHub attests every validated release asset. The same job verifies every attestation before
    `gh release create --verify-tag` publishes anything.
 7. Retain the release URL, tag, commit, workflow run, installer names/sizes/digests, canonical manifest
