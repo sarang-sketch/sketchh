@@ -1,7 +1,7 @@
 {
   "version": 1,
   "synthetic": true,
-  "suiteDigest": "sha256:6e387d43953739f038695b142628a76e8f83f1ac8960bed834540049d6f31a6e",
+  "suiteDigest": "sha256:6346707996bcf5ce54416f4387965342bba59cb50858ceb20e6143d727a31d88",
   "model": "offline-scripted-v1",
   "k": 2,
   "minimumPassAtKLift": 1,

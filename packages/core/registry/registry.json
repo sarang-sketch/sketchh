@@ -9,7 +9,7 @@
       "pack": "engineering",
       "summary": "Reconstruct why code exists from local git history, separating what the history says from what you infer.",
       "path": "skills/commit-context",
-      "digest": "sha256:95bfb1c3aec99cd15e6f61ab5b1d4c9767e4277fb60967cf67a97a12dc78a68f",
+      "digest": "sha256:b66858aef508e7c479d8262ee01ac8f3c4ab3aa0a84f01ee15efcba4f29a2e34",
       "capabilities": [
         "fs:read:project",
         "git:read"
@@ -19,8 +19,8 @@
       "files": [
         {
           "path": "SKILL.md",
-          "digest": "sha256:d70360c7f3be94bcaeb014f721ad966e06ba2c338e510aec455df71c5887e617",
-          "bytes": 2377
+          "digest": "sha256:f5738bb72f4adea6d673c8acc5c68d2172b43aa11d380cdf0049d61d4966ef5f",
+          "bytes": 2328
         }
       ]
     },
@@ -30,7 +30,7 @@
       "pack": "context-packing",
       "summary": "Choose what code the model sees under a fixed token budget, and degrade detail before coverage.",
       "path": "skills/context-packing",
-      "digest": "sha256:921ce4f72f3c8c3711155763dc3e8d1e1c04ec18f8a30788696f717ee7111a44",
+      "digest": "sha256:db6cde1cfdade04722a24cab5cd27065e70cba7a870f4859a74f1441f3db5aaf",
       "capabilities": [
         "fs:read:project"
       ],
@@ -39,8 +39,8 @@
       "files": [
         {
           "path": "SKILL.md",
-          "digest": "sha256:bd79447486656573bdaa51f48d137ed0c319d7065e8d105d5b71a7b6c571b7ba",
-          "bytes": 2618
+          "digest": "sha256:d5716140740bd8c97758756150006ef163c6e7d0e014d8564a40eb4cad5b4100",
+          "bytes": 2559
         }
       ]
     },
@@ -50,7 +50,7 @@
       "pack": "finance-quant",
       "summary": "Financial and numerical code with exact money arithmetic, stated units, and no advice.",
       "path": "skills/finance-quant",
-      "digest": "sha256:9e6550028ed36ce3f6df634d9737c7675254ef39814288a470b84def816d91ab",
+      "digest": "sha256:c2487e82311bf4a6921ff67e86e65b2e4691766dc6287d1f92c43ecc27a07039",
       "capabilities": [
         "fs:read:project"
       ],
@@ -59,8 +59,8 @@
       "files": [
         {
           "path": "SKILL.md",
-          "digest": "sha256:d50545afe770dac65bf8a12539ad8da988044b5271b5f557e145e35e0d883cf2",
-          "bytes": 3370
+          "digest": "sha256:9e21fe69c23511c5e72dff5efae5367590ee0966d7afae4cdccaf8b7436fdfe0",
+          "bytes": 3295
         }
       ]
     },
@@ -70,7 +70,7 @@
       "pack": "frontend-design",
       "summary": "Interface code that is accessible, honest about every state, and uses the project’s own design language.",
       "path": "skills/frontend-design",
-      "digest": "sha256:77dae1f5230e0c53a7636e6173b999e14dcc2403e86c488ccca4bfe294709bde",
+      "digest": "sha256:dc381eea4957218a39890642d7debe971acde05fd145cfe89430c4cbccfba9e5",
       "capabilities": [
         "fs:read:project"
       ],
@@ -79,8 +79,8 @@
       "files": [
         {
           "path": "SKILL.md",
-          "digest": "sha256:b89d1f0c0e69062ea32ef178d380e333aa8c5ee549e3f475a6140066add1658e",
-          "bytes": 3023
+          "digest": "sha256:81034a4901061eea7d76dc0a4a7030b97af85c6588830ed85f7a3764aaa8e561",
+          "bytes": 2955
         }
       ]
     },
@@ -90,7 +90,7 @@
       "pack": "research",
       "summary": "Investigate before implementing, and keep what was verified separate from what was assumed.",
       "path": "skills/research-stage",
-      "digest": "sha256:e0d35ae11f26533f6f8bdb4ccbad0b62ce6ae80d43eff16c0cf8035c1f1bbd00",
+      "digest": "sha256:f2aff05472ae25b982f064f471a96c9e151b029239f34028ee172b415b79c665",
       "capabilities": [
         "fs:read:project"
       ],
@@ -99,8 +99,8 @@
       "files": [
         {
           "path": "SKILL.md",
-          "digest": "sha256:0f0299c9b88ae7cd7a2726369d632b05290418386f3fad489e748394626f324e",
-          "bytes": 2494
+          "digest": "sha256:9a2dbf9f70fe803f0dbce5e4e7098c10ee2e523158a98f07bc203b1e0d5b7f2e",
+          "bytes": 2435
         }
       ]
     },
@@ -110,7 +110,7 @@
       "pack": "engineering",
       "summary": "Check a diff against its stated intent and report what it touches that it did not need to.",
       "path": "skills/scope-discipline",
-      "digest": "sha256:37885a29ccbf6c890c3dab52ea9afe4284c69b5bad4e688a04d85b798fdb4674",
+      "digest": "sha256:ebeae562d7e164261e3ef4440f69a7431f838d30fa9c2e4f4f903f82cb9efaac",
       "capabilities": [
         "fs:read:project",
         "git:read"
@@ -120,8 +120,8 @@
       "files": [
         {
           "path": "SKILL.md",
-          "digest": "sha256:1b97323cae89444c790c9a09d7bd00476151fbbd8b3cb6f687893106132663e0",
-          "bytes": 2602
+          "digest": "sha256:248f76709eadad06b4c6be7fda7419bafb18f45b3fb96c7028f38766bd78497c",
+          "bytes": 2548
         }
       ]
     },
@@ -131,7 +131,7 @@
       "pack": "web-data",
       "summary": "Fetch and extract data with the request budget, the failure modes and the provenance all stated.",
       "path": "skills/web-data",
-      "digest": "sha256:d2203351091c31870131babc20a180ea24e2e090621df472a4eac8194cf50928",
+      "digest": "sha256:65d1f4ca8e727d074a5fc306d540bda05f5c6763009353114c258e628935dc7d",
       "capabilities": [
         "net:http"
       ],
@@ -140,8 +140,8 @@
       "files": [
         {
           "path": "SKILL.md",
-          "digest": "sha256:7a5f1f4beba2a5389c5c78e1ed2c1ae8da1f74b004e83c62443f4230bd65bb23",
-          "bytes": 2543
+          "digest": "sha256:2f59bf4910d3e5bef27b5d8932023c99d93ab0c3af421747d3de78ba42e89cdf",
+          "bytes": 2484
         }
       ]
     }
