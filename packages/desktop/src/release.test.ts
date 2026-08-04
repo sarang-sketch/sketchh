@@ -143,8 +143,23 @@ describe('Phase 12.3 release assembly', () => {
 describe('Phase 12.3 release workflow policy', () => {
   it('publishes only a successful version-tag matrix with narrowly scoped provenance permissions', () => {
     const workflow = readFileSync(path.join(repo, '.github/workflows/package.yml'), 'utf8')
+    const releaseGates = workflow.slice(
+      workflow.indexOf('\n  release-gates:'),
+      workflow.indexOf('\n  release:'),
+    )
     const release = workflow.slice(workflow.indexOf('\n  release:'))
-    expect(release).toContain('needs: package')
+    expect(release).toContain('needs: [package, release-gates]')
+    expect(releaseGates).toContain('npm run build')
+    expect(releaseGates).toContain('npm run typecheck')
+    expect(releaseGates).toContain('env -u SKETCH_FAKE_PROVIDER npm test -w @sketch/core')
+    expect(releaseGates).toContain('env -u SKETCH_FAKE_PROVIDER npm test -w @sketch/desktop')
+    expect(releaseGates.match(/SKETCH_FAKE_PROVIDER: '1'/g)).toHaveLength(2)
+    expect(releaseGates).toContain('npm run bench:check')
+    expect(releaseGates).toContain(
+      'npm test -w @sketch/core -- phase6-gate.test.ts registry.test.ts registry.seed.test.ts',
+    )
+    expect(releaseGates).not.toContain('continue-on-error')
+    expect(releaseGates).not.toContain('if: always()')
     expect(release).toContain("github.event_name == 'push'")
     expect(release).toContain("startsWith(github.ref, 'refs/tags/v')")
     expect(release).toContain('contents: write')

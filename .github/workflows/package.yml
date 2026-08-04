@@ -59,9 +59,40 @@ jobs:
           if-no-files-found: error
 
 
+  release-gates:
+    name: Release behavioral and security gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Core tests (provider switch unset)
+        run: env -u SKETCH_FAKE_PROVIDER npm test -w @sketch/core
+      - name: Desktop tests (provider switch unset)
+        run: env -u SKETCH_FAKE_PROVIDER npm test -w @sketch/desktop
+      - name: Core tests (fake provider enabled)
+        run: npm test -w @sketch/core
+        env:
+          SKETCH_FAKE_PROVIDER: '1'
+      - name: Desktop tests (fake provider enabled)
+        run: npm test -w @sketch/desktop
+        env:
+          SKETCH_FAKE_PROVIDER: '1'
+      - name: Benchmark lift regression
+        run: npm run bench:check
+      - name: Phase 6 registry, scope, and review gates
+        run: npm test -w @sketch/core -- phase6-gate.test.ts registry.test.ts registry.seed.test.ts
+
   release:
     name: Attest and publish release
-    needs: package
+    needs: [package, release-gates]
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
