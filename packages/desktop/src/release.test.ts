@@ -145,7 +145,13 @@ describe('Phase 12.3 release assembly', () => {
     expect(() => readFileSync(path.join(test.output, 'release-manifest.json'))).toThrow()
   })
 
-  it('binds release identity to semver, the package version, a full commit, and repository', () => {
+  it('binds release identity to semver, every native package version, a full commit, and repository', () => {
+    const source = readFileSync(script, 'utf8')
+    expect(source).toContain("'src-tauri', 'tauri.conf.json'")
+    expect(source).toContain("'src-tauri', 'Cargo.toml'")
+    expect(source).toContain("['Tauri package', tauriConfig.version]")
+    expect(source).toContain("['Cargo package', cargoVersion]")
+
     const test = fixture()
     const args = [script, '--input', test.input, '--output', test.output]
     const run = (...identity: string[]) => spawnSync(process.execPath, [...args, ...identity], { encoding: 'utf8' })

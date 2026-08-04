@@ -53,6 +53,22 @@ function digestPattern(value) {
   return typeof value === 'string' && /^sha256:[0-9a-f]{64}$/.test(value)
 }
 
+function cargoPackageVersion(source) {
+  let section = ''
+  for (const rawLine of source.split(/\r?\n/)) {
+    const line = rawLine.trim()
+    const heading = /^\[([^\]]+)](?:\s*#.*)?$/.exec(line)
+    if (heading) {
+      section = heading[1]
+      continue
+    }
+    if (section !== 'package') continue
+    const version = /^version\s*=\s*"([^"]+)"(?:\s*#.*)?$/.exec(line)
+    if (version) return version[1]
+  }
+  throw new Error('packages/desktop/src-tauri/Cargo.toml has no [package] version')
+}
+
 function sha256Bytes(bytes) {
   return `sha256:${createHash('sha256').update(bytes).digest('hex')}`
 }
@@ -164,8 +180,21 @@ const packageJson = JSON.parse(await readFile(resolve(repoRoot, 'package.json'),
 const desktopPackage = JSON.parse(
   await readFile(resolve(repoRoot, 'packages', 'desktop', 'package.json'), 'utf8'),
 )
-if (packageJson.version !== desktopPackage.version) {
-  throw new Error(`root version ${packageJson.version} does not match desktop version ${desktopPackage.version}`)
+const tauriConfig = JSON.parse(
+  await readFile(resolve(repoRoot, 'packages', 'desktop', 'src-tauri', 'tauri.conf.json'), 'utf8'),
+)
+const cargoVersion = cargoPackageVersion(
+  await readFile(resolve(repoRoot, 'packages', 'desktop', 'src-tauri', 'Cargo.toml'), 'utf8'),
+)
+const versionSources = [
+  ['desktop package', desktopPackage.version],
+  ['Tauri package', tauriConfig.version],
+  ['Cargo package', cargoVersion],
+]
+for (const [label, version] of versionSources) {
+  if (version !== packageJson.version) {
+    throw new Error(`root version ${packageJson.version} does not match ${label} version ${version}`)
+  }
 }
 if (tag !== `v${packageJson.version}`) {
   throw new Error(`tag ${tag} does not match package version ${packageJson.version}`)
