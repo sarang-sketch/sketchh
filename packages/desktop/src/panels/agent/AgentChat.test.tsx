@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { RunOptions, SketchClient } from '../../lib/client'
 import { SketchClientProvider } from '../../lib/ClientProvider'
+import { DESKTOP_RUN_DEFAULTS } from '../../lib/runDefaults'
 import type { ProviderSettingsEntry, RunResult, Task } from '../../lib/contracts'
 import { AppStateProvider } from '../../state/AppState'
 import { AgentChat } from './AgentChat'
@@ -78,6 +79,12 @@ describe('AgentChat provider selection', () => {
     expect(options?.provider).toBe(ollama)
     expect(JSON.stringify(options?.provider)).not.toContain('apiKey')
     expect(options?.reviewEdits).toBe(true)
+    // A desktop run must reach the model with repository context and a spend ceiling.
+    // Without these the retrieval engine is unreachable and the bill is unbounded.
+    expect(options?.contextBudgetTokens).toBe(DESKTOP_RUN_DEFAULTS.contextBudgetTokens)
+    expect(options?.contextBudgetTokens).toBeGreaterThan(0)
+    expect(options?.budget).toEqual({ ...DESKTOP_RUN_DEFAULTS.budget })
+    expect(options?.budget?.onBreach).toBe('stop')
   })
 
   it('passes no fabricated fallback when the selected id resolves to no entry', async () => {

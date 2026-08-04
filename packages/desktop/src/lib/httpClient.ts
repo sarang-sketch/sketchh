@@ -105,6 +105,11 @@ export class HttpSketchClient implements SketchClient {
       // Omitted means the single-agent path, unchanged. See the note on the stdio transport.
       ...(options.strategy !== undefined ? { strategy: options.strategy } : {}),
       ...(options.escalate !== undefined ? { escalate: options.escalate } : {}),
+      // See the note on the stdio transport: absent still means off on the wire.
+      ...(options.contextBudgetTokens !== undefined
+        ? { contextBudgetTokens: options.contextBudgetTokens }
+        : {}),
+      ...(options.budget !== undefined ? { budget: options.budget } : {}),
     })
   }
 

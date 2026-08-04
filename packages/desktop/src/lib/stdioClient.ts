@@ -414,6 +414,13 @@ export class StdioSketchClient implements SketchClient {
       // every log for a decision nobody made.
       ...(options.strategy !== undefined ? { strategy: options.strategy } : {}),
       ...(options.escalate !== undefined ? { escalate: options.escalate } : {}),
+      // Retrieval and the spend ceiling are both opt-in on the wire. Forwarding them
+      // exactly as given keeps the engine's "absent means off" contract intact while
+      // letting the surface that spends the money choose (see runDefaults.ts).
+      ...(options.contextBudgetTokens !== undefined
+        ? { contextBudgetTokens: options.contextBudgetTokens }
+        : {}),
+      ...(options.budget !== undefined ? { budget: options.budget } : {}),
     })
   }
 

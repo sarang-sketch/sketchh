@@ -554,6 +554,26 @@ export interface RunOptions {
    * its budget, and escalating would turn one ceiling into several bills.
    */
   escalate?: boolean
+  /**
+   * Tokens of retrieved repository context to assemble for this run.
+   *
+   * OMITTED means no retrieval: the engine keeps its opt-in default, and the model is
+   * sent the prompt with no repository evidence. The desktop supplies a value from
+   * `DESKTOP_RUN_DEFAULTS` so that a normal run is not blind to the open project.
+   */
+  contextBudgetTokens?: number
+  /**
+   * The spend ceiling enforced before every model call in this run.
+   *
+   * OMITTED means unbounded, which is the engine's deliberate default. `onBreach` is
+   * required with any ceiling: the guard has to know what to do when it fires.
+   */
+  budget?: {
+    maxTokens?: number
+    maxUsd?: number
+    maxCalls?: number
+    onBreach: 'stop' | 'downgrade'
+  }
 }
 
 export interface SketchClient {

@@ -8,6 +8,7 @@ import { ModelSelector } from '../../components/ModelSelector';
 import { useAppState, useAppDispatch } from '../../state/AppState';
 import { useFileActions } from '../../editor/useFileActions';
 import { useSketchClient } from '../../lib/ClientProvider';
+import { withDesktopRunDefaults } from '../../lib/runDefaults';
 
 interface DisplayMessage {
   id: string;
@@ -57,11 +58,14 @@ export const AgentChat: React.FC = () => {
     client
       .run(
         { id: newId(), prompt, verify: [] },
-        {
+        // Retrieval and the spend ceiling come from one authority so this panel and its
+        // tests cannot drift. Without them a desktop run reaches the model with no
+        // repository context and no bill ceiling — see runDefaults.ts.
+        withDesktopRunDefaults({
           ...(provider !== undefined ? { provider } : {}),
           ...(state.projectRoot ? { root: state.projectRoot } : {}),
           reviewEdits: true,
-        },
+        }),
       )
       .then((result) => {
         dispatch({ type: 'SET_THINKING', payload: { isThinking: false } });

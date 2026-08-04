@@ -443,6 +443,74 @@ describe('Phase 8 gate — the limitation, asserted rather than hidden', () => {
   })
 })
 
+// ── the guard is reachable from the wire ────────────────────────────────────
+//
+// Everything above drives `runTask` directly. That left the guard unreachable by the
+// only callers a user actually has: the desktop and the CLI both speak the `run` method,
+// and it accepted no budget at all, so a shipped run was unbounded no matter what the
+// surface intended. These tests cover the parameter itself.
+
+describe('the run method carries a spend ceiling', () => {
+  it('enforces a wire budget on the run it was given', async () => {
+    const project = await makeProject()
+    const log: string[] = []
+    const ctx: MethodContext = { ...methodContext(project, log), env: { SKETCH_FAKE_PROVIDER: '1' } }
+
+    // One token is below the pessimistic estimate for any request, so the FIRST call is
+    // refused. That is the point: no model call happens at all, which is only possible if
+    // the parameter reached the guard.
+    const result = (await METHODS.run(
+      {
+        root: project,
+        task: { id: 'wire-budget', prompt: 'Spend nothing.', verify: [] },
+        budget: { maxTokens: 1, onBreach: 'stop' },
+      },
+      ctx,
+    )) as { ok: boolean; events: SketchEvent[] }
+
+    expect(result.ok).toBe(false)
+    const exceeded = result.events.find((e) => e.kind === 'budget_exceeded')
+    expect(exceeded).toBeDefined()
+    expect(exceeded!.payload['limit']).toBe('tokens')
+    expect(exceeded!.payload['configured']).toBe('stop')
+    expect(result.events.find((e) => e.kind === 'run_failed')!.payload['reason']).toBe('budget')
+    expect(result.events.some((e) => e.kind === 'llm_response')).toBe(false)
+  }, 30_000)
+
+  it('leaves a run with no budget parameter unbounded', async () => {
+    const project = await makeProject()
+    const log: string[] = []
+    const ctx: MethodContext = { ...methodContext(project, log), env: { SKETCH_FAKE_PROVIDER: '1' } }
+
+    const result = (await METHODS.run(
+      { root: project, task: { id: 'wire-unbounded', prompt: 'Finish normally.', verify: [] } },
+      ctx,
+    )) as { events: SketchEvent[] }
+
+    // Absent must stay absent. A default ceiling invented in the engine would stop
+    // somebody's long legitimate task with a limit they never chose.
+    expect(result.events.some((e) => e.kind === 'budget_exceeded')).toBe(false)
+  }, 30_000)
+
+  it('refuses a ceiling it cannot act on rather than ignoring it', async () => {
+    const project = await makeProject()
+    // The fake switch so the refusal under test is the budget's, not the missing
+    // provider's: `run` resolves an adapter before it parses this parameter.
+    const ctx: MethodContext = { ...methodContext(project, []), env: { SKETCH_FAKE_PROVIDER: '1' } }
+    const task = { id: 'bad-budget', prompt: 'x', verify: [] }
+    const refuse = (budget: unknown) => METHODS.run({ root: project, task, budget }, ctx)
+
+    // A ceiling with no declared consequence is the failure Requirement 20.4 exists to
+    // prevent, and `budget: {}` under a parameter named budget must not read as "no limit".
+    await expect(refuse({ maxCalls: 5 })).rejects.toThrow(/onBreach must be 'stop' or 'downgrade'/)
+    await expect(refuse({ onBreach: 'stop' })).rejects.toThrow(/at least one of maxTokens/)
+    await expect(refuse({ onBreach: 'halt', maxCalls: 5 })).rejects.toThrow(/onBreach/)
+    await expect(refuse({ onBreach: 'stop', maxCalls: 0 })).rejects.toThrow(/greater than zero/)
+    await expect(refuse({ onBreach: 'stop', maxUsd: -1 })).rejects.toThrow(/greater than zero/)
+    await expect(refuse([{ onBreach: 'stop' }])).rejects.toThrow(/must be an object/)
+  })
+})
+
 /** Guards against a stray import being dropped by a future edit. */
 const _usedTypes: SketchEvent[] = []
 void _usedTypes

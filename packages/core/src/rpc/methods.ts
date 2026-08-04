@@ -25,6 +25,7 @@ import { dirname, join, resolve } from 'node:path'
 
 import { ToolDispatcher, capabilitiesForSkill } from '../capabilities/index.js'
 import { describeLedger, ledgerFor, ledgerForRun } from '../cost/index.js'
+import type { RunBudget } from '../cost/index.js'
 import { latestBenchArtifactPath, loadLatestBenchArtifact } from '../bench/index.js'
 import * as memory from '../memory/index.js'
 import type { Capability, CapabilitySet } from '../capabilities/index.js'
@@ -214,6 +215,49 @@ function optionalBoolean(
     throw new InvalidParamsError(`${field} must be a boolean when present`)
   }
   return value
+}
+
+/**
+ * `params.budget`, or `undefined` for an unbounded run.
+ *
+ * ABSENT STAYS UNBOUNDED. The Phase 8 guard has no default ceiling on purpose — a limit
+ * invented inside the engine would stop somebody's long legitimate task with an error it
+ * never chose. A caller that wants a ceiling states one, and a SURFACE that spends a
+ * user's money by default is where that decision belongs (see the desktop's
+ * `DESKTOP_RUN_DEFAULTS`).
+ *
+ * `onBreach` is REQUIRED whenever a budget is present, mirroring `RunBudget`. A ceiling
+ * with no declared consequence is the failure mode Requirement 20.4 exists to prevent:
+ * the guard would compute a breach and then have nothing to do about it. Every ceiling is
+ * a positive finite number, and at least one must be given, so `budget: {}` is refused
+ * rather than silently meaning "no limit" under a parameter named budget.
+ */
+function readBudget(params: Record<string, unknown>): RunBudget | undefined {
+  const value = params['budget']
+  if (value === undefined || value === null) return undefined
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    throw new InvalidParamsError('params.budget must be an object when present')
+  }
+  const source = value as Record<string, unknown>
+  const onBreach = source['onBreach']
+  if (onBreach !== 'stop' && onBreach !== 'downgrade') {
+    throw new InvalidParamsError("params.budget.onBreach must be 'stop' or 'downgrade'")
+  }
+  const ceilings: Partial<Record<'maxTokens' | 'maxUsd' | 'maxCalls', number>> = {}
+  for (const key of ['maxTokens', 'maxUsd', 'maxCalls'] as const) {
+    const ceiling = optionalNumber(source, key, `params.budget.${key}`)
+    if (ceiling === undefined) continue
+    if (ceiling <= 0) {
+      throw new InvalidParamsError(`params.budget.${key} must be greater than zero`)
+    }
+    ceilings[key] = ceiling
+  }
+  if (Object.keys(ceilings).length === 0) {
+    throw new InvalidParamsError(
+      'params.budget must set at least one of maxTokens, maxUsd, or maxCalls',
+    )
+  }
+  return { ...ceilings, onBreach }
 }
 
 /**
@@ -488,6 +532,7 @@ async function run(params: Record<string, unknown>, ctx: MethodContext): Promise
     'contextBudgetTokens',
     'params.contextBudgetTokens',
   )
+  const budget = readBudget(params)
 
   const events = new StreamingEventStore(
     new JsonlEventStore({ baseDir: root, secrets: () => ctx.secrets() }),
@@ -531,6 +576,9 @@ async function run(params: Record<string, unknown>, ctx: MethodContext): Promise
     ...(toolLayer !== undefined ? { tools: toolLayer.dispatcher } : {}),
     ...(maxIterations !== undefined ? { maxIterations } : {}),
     ...(reviewEdits !== undefined ? { reviewEdits } : {}),
+    // The guard runs before every call on both the `runTask` and dispatcher paths,
+    // because both are handed exactly this object.
+    ...(budget !== undefined ? { budget } : {}),
   }
 
   try {

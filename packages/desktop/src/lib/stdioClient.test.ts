@@ -158,6 +158,32 @@ describe('StdioSketchClient — framing', () => {
     await expect(pending).resolves.toMatchObject({ runId: 'r-provider' })
   })
 
+  it('forwards the retrieval and spend ceilings', async () => {
+    const fake = new FakeSidecar()
+    const client = new StdioSketchClient({ spawn: fake.spawn, onDiagnostic: () => {} })
+    const budget = { maxCalls: 40, maxTokens: 250_000, maxUsd: 2, onBreach: 'stop' as const }
+
+    client.run({ id: 'bounded', prompt: 'fix the retry bug', verify: [] }, {
+      contextBudgetTokens: 6_000,
+      budget,
+    })
+    const request = await nextRequest(fake)
+    expect(request.params.contextBudgetTokens).toBe(6_000)
+    expect(request.params.budget).toEqual(budget)
+  })
+
+  it('omits both ceilings when the caller set neither', async () => {
+    const fake = new FakeSidecar()
+    const client = new StdioSketchClient({ spawn: fake.spawn, onDiagnostic: () => {} })
+
+    // Absent must stay absent on the wire. Retrieval keys off the parameter existing at
+    // all, and a null budget is a malformed one the engine would refuse outright.
+    client.run({ id: 'unbounded', prompt: 'no ceilings', verify: [] })
+    const request = await nextRequest(fake)
+    expect(Object.keys(request.params)).not.toContain('contextBudgetTokens')
+    expect(Object.keys(request.params)).not.toContain('budget')
+  })
+
   it('forwards explicit skill promotion with the exact root and name', async () => {
     const fake = new FakeSidecar()
     const client = new StdioSketchClient({ spawn: fake.spawn, onDiagnostic: () => {} })
