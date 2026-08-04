@@ -39,14 +39,15 @@ function parseBudget(value, platform) {
   return row
 }
 
-async function collectFiles(root, extensions, found = []) {
+async function collectFiles(root, extensions) {
+  const found = []
   const entries = await readdir(root, { withFileTypes: true })
   for (const entry of entries) {
+    if (!extensions.some(extension => entry.name.endsWith(extension))) continue
     const path = join(root, entry.name)
-    if (entry.isSymbolicLink()) throw new Error(`package output contains a symbolic link: ${path}`)
-    if (entry.isDirectory()) await collectFiles(path, extensions, found)
-    else if (entry.isFile() && extensions.some(extension => entry.name.endsWith(extension))) found.push(path)
-    else if (!entry.isFile()) throw new Error(`package output contains a special entry: ${path}`)
+    if (entry.isSymbolicLink()) throw new Error(`package artifact is a symbolic link: ${path}`)
+    if (entry.isFile()) found.push(path)
+    else throw new Error(`package artifact is not a regular file: ${path}`)
   }
   return found
 }

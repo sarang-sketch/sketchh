@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
@@ -29,15 +29,32 @@ function fixture(maxBytesExclusive = 10) {
 }
 
 describe('Phase 12.1 package size gate', () => {
-  it('refuses missing artifacts and treats the documented ceiling as exclusive', () => {
+  it('measures only regular installer artifacts, refuses links, and keeps the ceiling exclusive', () => {
     const test = fixture()
     expect(test.run().status).not.toBe(0)
+
+    // Tauri's Linux AppDir is packaging workspace, not a distributable artifact.
+    // Its normal .DirIcon symlink must not prevent measuring the sibling AppImage.
+    const appDir = path.join(test.artifactDir, 'Sketch.AppDir')
+    const iconTarget = path.join(appDir, 'usr', 'share', 'icons')
+    mkdirSync(iconTarget, { recursive: true })
+    symlinkSync(iconTarget, path.join(appDir, '.DirIcon'), 'junction')
+
     writeFileSync(path.join(test.artifactDir, 'Sketch.exe'), Buffer.alloc(9))
     expect(test.run().status).toBe(0)
     const report = JSON.parse(readFileSync(test.manifest, 'utf8'))
     expect(report.largestBytes).toBe(9)
     expect(report.maxBytesExclusive).toBe(10)
     expect(report.passed).toBe(true)
+
+    // Narrowing discovery must not permit a link masquerading as an installer.
+    const linkedInstaller = path.join(test.artifactDir, 'Linked.exe')
+    symlinkSync(appDir, linkedInstaller, 'junction')
+    const linked = test.run()
+    expect(linked.status).not.toBe(0)
+    expect(linked.stderr).toContain('package artifact is a symbolic link')
+    rmSync(linkedInstaller, { recursive: true, force: true })
+
     writeFileSync(path.join(test.artifactDir, 'Sketch.exe'), Buffer.alloc(10))
     const boundary = test.run()
     expect(boundary.status).not.toBe(0)
