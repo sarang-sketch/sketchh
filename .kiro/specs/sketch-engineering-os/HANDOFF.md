@@ -286,8 +286,11 @@ embeddings; budgeted context assembly that degrades detail before coverage; the 
 architecture generator and the Live Architecture panel.
 
 **Current limitations / unclosed evidence, with no implied completion:**
-- `ask` still terminates a run; the CLI wire still has no cancellation verb even though `runTask`
-  accepts an `AbortSignal`.
+- `ask` still terminates a run: there is no interactive reply channel, so a clarifying question
+  ends the run instead of pausing it. This remains unowned.
+- Cancellation IS now wired: the `cancel` method aborts an in-flight run by id, the caller may supply
+  that id so a Stop control works before `run_started` arrives, and the run emits its own
+  `run_failed{reason:"aborted"}`. The chat panel's send control becomes Stop while a run is live.
 - Repository retrieval stays opt-in through `contextBudgetTokens` in the engine; the desktop now
   supplies a default from `DESKTOP_RUN_DEFAULTS`. Versioned memory is still NOT automatically
   ingested from or injected into every live run.

@@ -79,6 +79,9 @@ class EngineClient implements SketchClient {
   run(): Promise<never> {
     return Promise.reject(new Error('this panel never starts a run'))
   }
+  cancel(): Promise<never> {
+    return Promise.reject(new Error('this panel never cancels a run'))
+  }
   eval(): Promise<never[]> {
     return Promise.resolve([])
   }

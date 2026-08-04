@@ -116,6 +116,12 @@ class EngineClient implements SketchClient {
     return Promise.reject(new Error('the settings panel never starts a run'))
   }
 
+  /** This panel starts no run, so it has none to stop. */
+  
+cancel(): Promise<never> {
+    return Promise.reject(new Error('this surface never cancels a run'))
+  }
+
   eval(): Promise<never[]> {
     return Promise.resolve([])
   }

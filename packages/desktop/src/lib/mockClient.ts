@@ -20,7 +20,13 @@ import type {
   Task,
   VerifyResult,
 } from './contracts'
-import { createEventBus, type EventHandler, type PingResult, type SketchClient } from './client'
+import {
+  createEventBus,
+  type CancelResult,
+  type EventHandler,
+  type PingResult,
+  type SketchClient,
+} from './client'
 
 export interface MockClientOptions {
   /** Delay between emitted events. Short by default; 0 in tests. */
@@ -65,6 +71,21 @@ export class MockSketchClient implements SketchClient {
 
   subscribe(handler: EventHandler) {
     return this.bus.subscribe(handler)
+  }
+
+  /**
+   * Always `cancelled: false`.
+   *
+   * This client's runs are a scripted sequence with no model call to interrupt, so there
+   * is nothing here that an abort could stop. Reporting `true` would be the mock claiming
+   * a capability it does not have — the same reason it does not pretend to price a call.
+   */
+  async cancel(runId: string): Promise<CancelResult> {
+    return {
+      runId,
+      cancelled: false,
+      detail: 'the mock transport runs a scripted sequence, so there is nothing to abort',
+    }
   }
 
   async run(task: Task): Promise<RunResult> {

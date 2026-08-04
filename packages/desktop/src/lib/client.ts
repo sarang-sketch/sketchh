@@ -528,6 +528,15 @@ export interface MemorySupersedeResult {
   reason: string | null
 }
 
+/** What the engine did about a stop request. */
+export interface CancelResult {
+  runId: string
+  /** True only when a run was in flight and has been asked to abort. */
+  cancelled: boolean
+  /** Plain words, safe to show. */
+  detail: string
+}
+
 export interface RunOptions {
   /**
    * Exact key-free provider entry selected from persisted settings for this run.
@@ -546,6 +555,15 @@ export interface RunOptions {
    * event log. Never read this back out of state — see `lib/secrets.ts`.
    */
   apiKey?: string
+  /**
+   * The id this run will be logged and cancelled under.
+   *
+   * Supplying it is what makes a Stop control possible from the first moment: a caller
+   * that waits for `run_started` to learn the id cannot cancel during the window in which
+   * a misfired run most wants stopping. The engine refuses an id already in flight, so
+   * generate a fresh one per run.
+   */
+  runId?: string
   /** Project root for this run. Required by the desktop to match the open folder. */
   root?: string
   /** Leave emitted patches open for human hunk review instead of auto-applying. */
@@ -604,6 +622,18 @@ export interface SketchClient {
    * so a caller that never subscribed still gets the whole log.
    */
   run(task: Task, options?: RunOptions): Promise<RunResult>
+
+  /**
+   * Ask the engine to stop an in-flight run.
+   *
+   * `cancelled: false` means no run is in flight under that id — already finished, never
+   * started, and unknown id are deliberately the same answer, because the only thing a
+   * surface can act on is whether a run is still going.
+   *
+   * This does not resolve the `run` promise: the run observes the abort and ends itself
+   * with `run_failed{reason:"aborted"}`, so the terminal event has one author.
+   */
+  cancel(runId: string): Promise<CancelResult>
 
   /** Score eval cases through the harness. */
   eval(cases: EvalCase[]): Promise<EvalResult[]>

@@ -27,6 +27,7 @@
 
 import type {
   SketchClient,
+  CancelResult,
   PingResult,
   EventHandler,
   Unsubscribe,
@@ -417,6 +418,7 @@ export class StdioSketchClient implements SketchClient {
             },
           }
         : {}),
+      ...(options.runId !== undefined ? { runId: options.runId } : {}),
       ...(options.root !== undefined ? { root: options.root } : this.root !== undefined ? { root: this.root } : {}),
       ...(options.reviewEdits !== undefined ? { reviewEdits: options.reviewEdits } : {}),
       // Omitted means the single-agent path, byte for byte what this transport sent before
@@ -432,6 +434,11 @@ export class StdioSketchClient implements SketchClient {
         : {}),
       ...(options.budget !== undefined ? { budget: options.budget } : {}),
     })
+  }
+
+  async cancel(runId: string): Promise<CancelResult> {
+    // No root: a run id is not a path, and the registry it addresses is per-engine.
+    return this.call<CancelResult>('cancel', { runId })
   }
 
   async eval(cases: EvalCase[]): Promise<EvalResult[]> {

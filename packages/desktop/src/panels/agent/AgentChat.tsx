@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import styles from './AgentChat.module.css';
 import { 
-  Sparkles, Copy, Plus, Send, Folder
+  Sparkles, Copy, Plus, Send, Folder, Stop
 } from '../../components/Icons';
 import { ThinkingIndicator } from '../../components/ThinkingIndicator';
 import { ModelSelector } from '../../components/ModelSelector';
@@ -30,6 +30,9 @@ export const AgentChat: React.FC = () => {
   const client = useSketchClient();
   const bottomRef = useRef<HTMLDivElement>(null);
   const [inputText, setInputText] = useState('');
+  // The id of the run currently in flight, so it can be stopped. Held here and not in
+  // AppState because it is this panel's control state, not project state.
+  const [activeRunId, setActiveRunId] = useState<string | null>(null);
 
   const messages: DisplayMessage[] = state.chatMessages.length > 0 ? state.chatMessages : [];
 
@@ -44,10 +47,39 @@ export const AgentChat: React.FC = () => {
   // they arrive — no simulated response. Provider selection has one authority:
   // the key-free entry in AppState loaded from providers.json. No selection means
   // no provider on the wire, so the engine gives its existing honest refusal.
+  /**
+   * Stop the run in flight.
+   *
+   * The engine aborts it and the RUN emits its own `run_failed{reason:"aborted"}`, so this
+   * does not write a terminal message of its own — the `run` promise still settles below
+   * and reports what actually happened.
+   */
+  const handleStop = () => {
+    const runId = activeRunId;
+    if (runId === null) return;
+    dispatch({ type: 'SET_THINKING', payload: { isThinking: true, stage: 'Stopping the run...' } });
+    client.cancel(runId).catch((err: unknown) => {
+      dispatch({
+        type: 'ADD_MESSAGE',
+        payload: {
+          id: newId(),
+          role: 'system',
+          content: `Could not stop the run: ${err instanceof Error ? err.message : String(err)}`,
+          timestamp: Date.now(),
+        },
+      });
+    });
+  };
+
   const handleSend = () => {
     const prompt = inputText.trim();
-    if (!prompt) return;
+    // One run at a time from this panel: the engine refuses a duplicate in-flight id, and
+    // a second concurrent run is a second bill nobody asked for.
+    if (!prompt || activeRunId !== null) return;
     const provider = state.providers.find((entry) => entry.id === state.selectedProvider);
+    // Generated here so Stop works immediately, before `run_started` arrives.
+    const runId = newId();
+    setActiveRunId(runId);
 
     dispatch({
       type: 'ADD_MESSAGE',
@@ -82,6 +114,7 @@ export const AgentChat: React.FC = () => {
           // its tests cannot drift. Without them a desktop run reaches the model with no
           // repository context and no bill ceiling — see runDefaults.ts.
           withDesktopRunDefaults({
+            runId,
             ...(provider !== undefined ? { provider } : {}),
             // Present only when the store actually held one. `apiKey: undefined` would
             // still be an own property on the wire object.
@@ -92,6 +125,7 @@ export const AgentChat: React.FC = () => {
         ),
       )
       .then((result) => {
+        setActiveRunId(null);
         dispatch({ type: 'SET_THINKING', payload: { isThinking: false } });
         dispatch({
           type: 'ADD_MESSAGE',
@@ -99,6 +133,7 @@ export const AgentChat: React.FC = () => {
         });
       })
       .catch((err: unknown) => {
+        setActiveRunId(null);
         dispatch({ type: 'SET_THINKING', payload: { isThinking: false } });
         dispatch({
           type: 'ADD_MESSAGE',
@@ -159,11 +194,15 @@ export const AgentChat: React.FC = () => {
                     here named a model on machines with nothing configured. */}
                 <ModelSelector />
 
+                {/* Same circle control, two jobs: a run in flight can be stopped from
+                    where it was started, rather than by killing the app. */}
                 <button 
-                  className={`${styles.sendCircleBtn} ${inputText.trim() ? styles.sendActive : ''}`} 
-                  onClick={handleSend}
+                  className={`${styles.sendCircleBtn} ${activeRunId !== null || inputText.trim() ? styles.sendActive : ''}`} 
+                  onClick={activeRunId !== null ? handleStop : handleSend}
+                  title={activeRunId !== null ? 'Stop this run' : 'Send'}
+                  aria-label={activeRunId !== null ? 'Stop this run' : 'Send'}
                 >
-                  <Send size={14} />
+                  {activeRunId !== null ? <Stop size={12} /> : <Send size={14} />}
                 </button>
               </div>
             </div>
@@ -262,10 +301,12 @@ export const AgentChat: React.FC = () => {
             <div className={styles.promptRightActions}>
               <ModelSelector />
               <button 
-                className={`${styles.sendCircleBtn} ${inputText.trim() ? styles.sendActive : ''}`} 
-                onClick={handleSend}
+                className={`${styles.sendCircleBtn} ${activeRunId !== null || inputText.trim() ? styles.sendActive : ''}`} 
+                onClick={activeRunId !== null ? handleStop : handleSend}
+                title={activeRunId !== null ? 'Stop this run' : 'Send'}
+                aria-label={activeRunId !== null ? 'Stop this run' : 'Send'}
               >
-                <Send size={14} />
+                {activeRunId !== null ? <Stop size={12} /> : <Send size={14} />}
               </button>
             </div>
           </div>

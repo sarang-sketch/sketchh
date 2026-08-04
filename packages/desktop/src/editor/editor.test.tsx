@@ -58,6 +58,11 @@ class FakeEventClient implements SketchClient {
     throw new Error('the editor never starts a run')
   }
 
+  cancel(): Promise<never> {
+    // The editor starts no run, so it has none to stop.
+    return Promise.reject(new Error('the editor never cancels a run'))
+  }
+
   eval(): Promise<never[]> {
     return Promise.resolve([])
   }

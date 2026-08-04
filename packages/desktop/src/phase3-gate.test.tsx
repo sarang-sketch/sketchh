@@ -58,6 +58,12 @@ class InProcessGateClient implements SketchClient {
     return Promise.resolve({ ok: true, version: 'phase3-gate', transport: 'mock' })
   }
   subscribe(handler: (event: SketchEvent) => void) { return this.bus.subscribe(handler) }
+  /** This panel starts no run, so it has none to stop. */
+  
+cancel(): Promise<never> {
+    return Promise.reject(new Error('this surface never cancels a run'))
+  }
+
   eval(): Promise<never[]> { return Promise.resolve([]) }
 
   async run(task: Parameters<SketchClient['run']>[0], options?: Parameters<SketchClient['run']>[1]) {

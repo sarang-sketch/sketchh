@@ -120,6 +120,58 @@ describe('AgentChat provider selection', () => {
     expect(options?.provider).toBe(ollama)
   })
 
+  it('offers Stop while a run is in flight and cancels the id it started', async () => {
+    let settle: (result: RunResult) => void = () => {}
+    const run = vi.fn(
+      (_task: Task, _options?: RunOptions) => new Promise<RunResult>((resolve) => { settle = resolve }),
+    )
+    const cancel = vi.fn(async (runId: string) => ({ runId, cancelled: true, detail: 'ok' }))
+    const client = { ...clientWith(run), cancel } as unknown as SketchClient
+    send(client, {
+      providerSettingsPath: 'C:\\Users\\test\\.sketch\\providers.json',
+      providers: [ollama],
+      selectedProvider: ollama.id,
+      selectedModel: ollama.model,
+    })
+
+    await waitFor(() => expect(run).toHaveBeenCalledTimes(1))
+    // The panel supplies the id, so Stop works without waiting for `run_started`.
+    const runId = run.mock.calls[0]![1]!.runId
+    expect(typeof runId).toBe('string')
+
+    const stop = await waitFor(() => screen.getByLabelText('Stop this run'))
+    fireEvent.click(stop)
+    await waitFor(() => expect(cancel).toHaveBeenCalledTimes(1))
+    // Exactly the run this panel started — not a guess, and not every run.
+    expect(cancel).toHaveBeenCalledWith(runId)
+
+    // The run's own terminal result is still what gets reported: cancel writes no
+    // message of its own.
+    settle({ runId: runId!, ok: false, finalText: 'Run aborted.', iterations: 1, verify: [], events: [] })
+    await waitFor(() => expect(screen.getByLabelText('Send')).toBeTruthy())
+  })
+
+  it('refuses a second concurrent run from the same panel', async () => {
+    const run = vi.fn((_task: Task, _options?: RunOptions) => new Promise<RunResult>(() => {}))
+    send(clientWith(run), {
+      providerSettingsPath: 'C:\\Users\\test\\.sketch\\providers.json',
+      providers: [ollama],
+      selectedProvider: ollama.id,
+      selectedModel: ollama.model,
+    })
+
+    await waitFor(() => expect(run).toHaveBeenCalledTimes(1))
+    // The first message moves the panel into its conversation view, which has its own
+    // follow-up box.
+    const box = await waitFor(() => screen.getByPlaceholderText('Ask a follow up...'))
+    fireEvent.change(box, { target: { value: 'And another thing' } })
+    fireEvent.keyDown(box, { key: 'Enter' })
+
+    // A second bill nobody asked for. The engine would refuse the duplicate id anyway;
+    // the panel must not send it.
+    expect(run).toHaveBeenCalledTimes(1)
+  })
+
   it('runs key-free when nothing is stored, without an apiKey property', async () => {
     resolveApiKeyForRun.mockResolvedValue(null)
     const run = vi.fn(async (_task: Task, _options?: RunOptions) => result())

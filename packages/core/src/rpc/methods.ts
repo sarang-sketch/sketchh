@@ -38,7 +38,7 @@ import {
   loadRepoGraph,
   projectSearch,
 } from '../context/index.js'
-import { JsonlEventStore, MemoryEventStore, secretsFromEnv } from '../events/index.js'
+import { JsonlEventStore, MemoryEventStore, newRunId, secretsFromEnv } from '../events/index.js'
 import type { EventStore } from '../events/index.js'
 import {
   runEvalSet,
@@ -511,6 +511,73 @@ async function ping(_params: Record<string, unknown>, ctx: MethodContext): Promi
  * No graph on disk means no retrieval: `assembleContext` would otherwise walk the
  * user's whole tree because a run started. The refusal is logged, not silent.
  */
+/**
+ * Runs that can still be cancelled, by run id.
+ *
+ * ── WHY A REGISTRY AND NOT A PARAMETER ──────────────────────────────────────
+ *
+ * `runTask` has always accepted an `AbortSignal`, and nothing on the wire could ever
+ * produce one. A method call is request/response: the caller that wants to stop a run is
+ * making a SECOND call while the first is still open, so the two have to meet somewhere,
+ * and this is that place.
+ *
+ * Keyed by run id, and the caller may supply it (`params.runId`) precisely so a Stop
+ * control is possible from the first moment: without that, a client has to wait for
+ * `run_started` to learn the id, and the window before it arrives is exactly when a
+ * misfired run most wants cancelling.
+ *
+ * Entries are removed in the run's `finally`, so a completed run cannot be cancelled and
+ * this cannot grow without bound. Nothing here holds a task, a provider, or a key — one
+ * `AbortController` per in-flight run and nothing else.
+ */
+const inFlightRuns = new Map<string, AbortController>()
+
+/**
+ * `params.runId`, or `undefined` to let the engine mint one.
+ *
+ * A caller-supplied id is a correlation handle, not a licence to collide: a second run
+ * under an id already in flight is REFUSED, because accepting it would leave `cancel`
+ * unable to say which run it stopped, and would silently make one of the two runs
+ * uncancellable. Refusing also turns an accidental double-submit into an error rather
+ * than two bills.
+ */
+function readRunId(params: Record<string, unknown>): string | undefined {
+  const runId = optionalString(params, 'runId', 'params.runId')
+  if (runId === undefined) return undefined
+  if (!/^[A-Za-z0-9._-]{1,128}$/.test(runId)) {
+    throw new InvalidParamsError(
+      'params.runId must be 1-128 characters from A-Z a-z 0-9 . _ - when present',
+    )
+  }
+  if (inFlightRuns.has(runId)) {
+    throw new InvalidParamsError(`params.runId ${JSON.stringify(runId)} is already running`)
+  }
+  return runId
+}
+
+/**
+ * Stop an in-flight run.
+ *
+ * Idempotent and honest: `{ cancelled: false }` when no run is in flight under that id,
+ * which is the same answer for "already finished", "never started", and "wrong id". A
+ * caller cannot distinguish those and should not try to — the only thing it can act on is
+ * whether a run is still going.
+ *
+ * This does not fabricate a terminal event. The run itself observes the abort and emits
+ * `run_failed{reason:"aborted"}` through its own log, so the record of a cancelled run is
+ * written by the run, exactly like every other way it can end.
+ */
+async function cancel(params: Record<string, unknown>, _ctx: MethodContext): Promise<unknown> {
+  const runId = optionalString(params, 'runId', 'params.runId')
+  if (runId === undefined) throw new InvalidParamsError('params.runId is required')
+  const controller = inFlightRuns.get(runId)
+  if (controller === undefined) {
+    return { runId, cancelled: false, detail: 'no run with that id is in flight' }
+  }
+  controller.abort()
+  return { runId, cancelled: true, detail: 'abort requested; the run emits its own terminal event' }
+}
+
 async function run(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
   const task = readTask(params['task'], 'params.task')
   const root = resolve(optionalString(params, 'root', 'params.root') ?? ctx.cwd())
@@ -533,6 +600,11 @@ async function run(params: Record<string, unknown>, ctx: MethodContext): Promise
     'params.contextBudgetTokens',
   )
   const budget = readBudget(params)
+  // Cancellation. The id is the caller's when it supplied one, so a Stop control works
+  // before `run_started` arrives; otherwise it is the same id `runTask` would have minted.
+  const runId = readRunId(params) ?? newRunId()
+  const controller = new AbortController()
+  inFlightRuns.set(runId, controller)
 
   const events = new StreamingEventStore(
     new JsonlEventStore({ baseDir: root, secrets: () => ctx.secrets() }),
@@ -579,6 +651,10 @@ async function run(params: Record<string, unknown>, ctx: MethodContext): Promise
     // The guard runs before every call on both the `runTask` and dispatcher paths,
     // because both are handed exactly this object.
     ...(budget !== undefined ? { budget } : {}),
+    // The run uses the id `cancel` is registered under, so the two cannot disagree about
+    // which run a Stop request means.
+    ids: () => runId,
+    signal: controller.signal,
   }
 
   try {
@@ -614,6 +690,9 @@ async function run(params: Record<string, unknown>, ctx: MethodContext): Promise
       grant: granted,
     })
   } finally {
+    // A finished run is not cancellable, and the registry must not grow with every
+    // completed run. Both are this one line.
+    inFlightRuns.delete(runId)
     // A server left running holds a pipe, a port, and often a lock. `close()` never
     // throws, but it is in `finally` so a failed run cannot leak one either.
     await toolLayer?.host.close()
@@ -2056,6 +2135,9 @@ async function benchmarkReport(
 export const METHODS: Readonly<Record<string, MethodHandler>> = {
   ping,
   run,
+  // Stopping a run. `runTask` accepted an `AbortSignal` from the beginning and no wire
+  // could produce one, so a runaway run could only be ended by killing the process.
+  cancel,
   eval: evalCases,
   'parse-skill': parseSkill,
   'capture-eval': captureEval,
