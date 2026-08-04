@@ -1,10 +1,10 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { RunOptions, SketchClient } from '../../lib/client'
 import { SketchClientProvider } from '../../lib/ClientProvider'
 import { DESKTOP_RUN_DEFAULTS } from '../../lib/runDefaults'
-import type { ProviderSettingsEntry, RunResult, Task } from '../../lib/contracts'
+import type { ProviderSettingsEntry, RunResult, SketchEvent, Task } from '../../lib/contracts'
 import { AppStateProvider } from '../../state/AppState'
 import { AgentChat } from './AgentChat'
 
@@ -170,6 +170,73 @@ describe('AgentChat provider selection', () => {
     // A second bill nobody asked for. The engine would refuse the duplicate id anyway;
     // the panel must not send it.
     expect(run).toHaveBeenCalledTimes(1)
+  })
+
+  it('answers a paused run instead of starting a second one', async () => {
+    let emit: (event: SketchEvent) => void = () => {}
+    const run = vi.fn((_task: Task, _options?: RunOptions) => new Promise<RunResult>(() => {}))
+    const reply = vi.fn(async (runId: string, _answer: string) => ({ runId, answered: true }))
+    const client = {
+      ...clientWith(run),
+      reply,
+      subscribe: (handler: (event: SketchEvent) => void) => { emit = handler; return () => {} },
+    } as unknown as SketchClient
+    send(client, {
+      providerSettingsPath: 'C:\\Users\\test\\.sketch\\providers.json',
+      providers: [ollama],
+      selectedProvider: ollama.id,
+      selectedModel: ollama.model,
+    })
+
+    await waitFor(() => expect(run).toHaveBeenCalledTimes(1))
+    const options = run.mock.calls[0]![1]!
+    // The panel has a person in front of it, so a question must pause rather than end.
+    expect(options.interactive).toBe(true)
+    const runId = options.runId!
+
+    // The paused run announces itself on the event stream; the run promise is still open.
+    emit({ id: 'e1', ts: 1, runId, kind: 'ask', payload: { question: 'Which database?' } })
+    const box = await waitFor(() => screen.getByPlaceholderText('Answer the question above...'))
+
+    fireEvent.change(box, { target: { value: 'Postgres' } })
+    fireEvent.keyDown(box, { key: 'Enter' })
+
+    // Answered, not restarted. Sending a new task here would abandon the paused run and
+    // start a second bill.
+    await waitFor(() => expect(reply).toHaveBeenCalledWith(runId, 'Postgres'))
+    expect(run).toHaveBeenCalledTimes(1)
+  })
+
+  it('ignores a question belonging to a different run', async () => {
+    let emit: (event: SketchEvent) => void = () => {}
+    const run = vi.fn((_task: Task, _options?: RunOptions) => new Promise<RunResult>(() => {}))
+    const client = {
+      ...clientWith(run),
+      subscribe: (handler: (event: SketchEvent) => void) => { emit = handler; return () => {} },
+    } as unknown as SketchClient
+    send(client, {
+      providerSettingsPath: 'C:\\Users\\test\\.sketch\\providers.json',
+      providers: [ollama],
+      selectedProvider: ollama.id,
+      selectedModel: ollama.model,
+    })
+
+    await waitFor(() => expect(run).toHaveBeenCalledTimes(1))
+    const runId = run.mock.calls[0]![1]!.runId!
+
+    // One engine serves several runs. A question from somebody else's run must not hijack
+    // this panel's box.
+    await act(async () => {
+      emit({ id: 'e1', ts: 1, runId: 'someone-elses-run', kind: 'ask', payload: { question: 'Not yours' } })
+    })
+    expect(screen.queryByPlaceholderText('Answer the question above...')).toBeNull()
+
+    // The panel's OWN question does open it, so the check above is scoping and not a
+    // subscription that never fires.
+    await act(async () => {
+      emit({ id: 'e2', ts: 2, runId, kind: 'ask', payload: { question: 'Which database?' } })
+    })
+    expect(screen.getByPlaceholderText('Answer the question above...')).toBeTruthy()
   })
 
   it('runs key-free when nothing is stored, without an apiKey property', async () => {

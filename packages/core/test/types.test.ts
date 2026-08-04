@@ -35,7 +35,7 @@ import type {
 const ALL_EVENT_KINDS: EventKind[] = [
   'run_started', 'plan_written', 'skill_loaded', 'context_loaded', 'context_assembled',
   'repo_indexed', 'context_retrieved', 'embedder_degraded',
-  'llm_request', 'llm_response', 'think', 'ask',
+  'llm_request', 'llm_response', 'think', 'ask', 'ask_answered',
   'verify_started', 'verify_result',
   'edit_proposed', 'edit_accepted', 'edit_rejected',
   'tool_called', 'tool_denied',
@@ -60,7 +60,7 @@ const EVENT_KIND_EXHAUSTIVE: Record<EventKind, true> = {
   run_started: true, plan_written: true, skill_loaded: true, context_loaded: true,
   context_assembled: true, repo_indexed: true, context_retrieved: true,
   embedder_degraded: true, llm_request: true, llm_response: true, think: true,
-  ask: true,
+  ask: true, ask_answered: true,
   verify_started: true, verify_result: true, edit_proposed: true, edit_accepted: true,
   edit_rejected: true, tool_called: true, tool_denied: true, budget_exceeded: true,
   cache_hit: true, strategy_selected: true, model_selected: true, memory_retrieved: true,
@@ -73,9 +73,18 @@ function roundTrip<T>(value: T): T {
 }
 
 describe('EventKind', () => {
-  it('has exactly the 30 kinds the design specifies', () => {
-    expect(ALL_EVENT_KINDS).toHaveLength(30)
-    expect(new Set(ALL_EVENT_KINDS).size).toBe(30)
+  it('has exactly the 31 kinds the design specifies', () => {
+    expect(ALL_EVENT_KINDS).toHaveLength(31)
+    expect(new Set(ALL_EVENT_KINDS).size).toBe(31)
+  })
+
+  it('separates a question from its answer instead of overloading `ask`', () => {
+    // The union's own rule: a distinct fact gets a kind, a variant of one fact does
+    // not. "nobody answered" and "somebody answered and the run continued" have
+    // different causes and different actors, so a consumer must not have to read a
+    // payload key to tell them apart.
+    expect(ALL_EVENT_KINDS).toContain('ask')
+    expect(ALL_EVENT_KINDS).toContain('ask_answered')
   })
 
   it('contains no kind outside the union and no union member unlisted', () => {

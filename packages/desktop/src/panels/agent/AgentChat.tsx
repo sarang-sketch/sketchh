@@ -33,6 +33,9 @@ export const AgentChat: React.FC = () => {
   // The id of the run currently in flight, so it can be stopped. Held here and not in
   // AppState because it is this panel's control state, not project state.
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
+  // The question the active run is waiting on, from its `ask` event. Non-null means the
+  // prompt box is an answer box.
+  const [pendingQuestion, setPendingQuestion] = useState<string | null>(null);
 
   const messages: DisplayMessage[] = state.chatMessages.length > 0 ? state.chatMessages : [];
 
@@ -41,6 +44,27 @@ export const AgentChat: React.FC = () => {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // A paused run announces itself on the event stream, not on the run promise — the
+  // promise is still open, which is the point. `ask_answered` closes the prompt again for
+  // the case where something other than this panel supplied the answer.
+  useEffect(() => {
+    return client.subscribe((event) => {
+      if (event.runId !== activeRunId) return;
+      if (event.kind === 'ask') {
+        const question = event.payload['question'];
+        if (typeof question !== 'string' || question.trim() === '') return;
+        setPendingQuestion(question);
+        dispatch({
+          type: 'ADD_MESSAGE',
+          payload: { id: newId(), role: 'agent', content: question, timestamp: Date.now() },
+        });
+        dispatch({ type: 'SET_THINKING', payload: { isThinking: false } });
+      } else if (event.kind === 'ask_answered') {
+        setPendingQuestion(null);
+      }
+    });
+  }, [client, activeRunId, dispatch]);
 
   // Sends go through the client seam. The reply is the engine's real `finalText`,
   // and the events the run emits show up in the Timeline and the Agent Console as
@@ -73,9 +97,50 @@ export const AgentChat: React.FC = () => {
 
   const handleSend = () => {
     const prompt = inputText.trim();
+    if (!prompt) return;
+
+    // A question in flight turns the box into an answer box. Sending the text as a new
+    // task instead would abandon the paused run and start a second bill.
+    if (pendingQuestion !== null && activeRunId !== null) {
+      const runId = activeRunId;
+      setInputText('');
+      dispatch({
+        type: 'ADD_MESSAGE',
+        payload: { id: newId(), role: 'user', content: prompt, timestamp: Date.now() }
+      });
+      setPendingQuestion(null);
+      dispatch({ type: 'SET_THINKING', payload: { isThinking: true, stage: 'Continuing with your answer...' } });
+      client.reply(runId, prompt).then((outcome) => {
+        // The engine says whether the answer was actually delivered. A stale or timed-out
+        // question must not look answered.
+        if (!outcome.answered) {
+          dispatch({
+            type: 'ADD_MESSAGE',
+            payload: {
+              id: newId(),
+              role: 'system',
+              content: `That run was no longer waiting for an answer: ${outcome.detail ?? 'it had already moved on'}`,
+              timestamp: Date.now(),
+            },
+          });
+        }
+      }).catch((err: unknown) => {
+        dispatch({
+          type: 'ADD_MESSAGE',
+          payload: {
+            id: newId(),
+            role: 'system',
+            content: `Could not deliver the answer: ${err instanceof Error ? err.message : String(err)}`,
+            timestamp: Date.now(),
+          },
+        });
+      });
+      return;
+    }
+
     // One run at a time from this panel: the engine refuses a duplicate in-flight id, and
     // a second concurrent run is a second bill nobody asked for.
-    if (!prompt || activeRunId !== null) return;
+    if (activeRunId !== null) return;
     const provider = state.providers.find((entry) => entry.id === state.selectedProvider);
     // Generated here so Stop works immediately, before `run_started` arrives.
     const runId = newId();
@@ -115,6 +180,9 @@ export const AgentChat: React.FC = () => {
           // repository context and no bill ceiling — see runDefaults.ts.
           withDesktopRunDefaults({
             runId,
+            // There is a person here who can answer, so a question pauses the run
+            // instead of ending it.
+            interactive: true,
             ...(provider !== undefined ? { provider } : {}),
             // Present only when the store actually held one. `apiKey: undefined` would
             // still be an own property on the wire object.
@@ -126,6 +194,7 @@ export const AgentChat: React.FC = () => {
       )
       .then((result) => {
         setActiveRunId(null);
+        setPendingQuestion(null);
         dispatch({ type: 'SET_THINKING', payload: { isThinking: false } });
         dispatch({
           type: 'ADD_MESSAGE',
@@ -134,6 +203,7 @@ export const AgentChat: React.FC = () => {
       })
       .catch((err: unknown) => {
         setActiveRunId(null);
+        setPendingQuestion(null);
         dispatch({ type: 'SET_THINKING', payload: { isThinking: false } });
         dispatch({
           type: 'ADD_MESSAGE',
@@ -288,7 +358,7 @@ export const AgentChat: React.FC = () => {
         <div className={styles.activeChatCard}>
           <textarea
             className={styles.promptInput}
-            placeholder="Ask a follow up..."
+            placeholder={pendingQuestion !== null ? 'Answer the question above...' : 'Ask a follow up...'}
             rows={1}
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}

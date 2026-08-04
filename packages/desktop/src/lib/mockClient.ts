@@ -23,6 +23,7 @@ import type {
 import {
   createEventBus,
   type CancelResult,
+  type ReplyResult,
   type EventHandler,
   type PingResult,
   type SketchClient,
@@ -86,6 +87,11 @@ export class MockSketchClient implements SketchClient {
       cancelled: false,
       detail: 'the mock transport runs a scripted sequence, so there is nothing to abort',
     }
+  }
+
+  /** Always `answered: false`: this client's scripted runs never ask a question. */
+  async reply(runId: string): Promise<ReplyResult> {
+    return { runId, answered: false, detail: 'the mock transport never asks a question' }
   }
 
   async run(task: Task): Promise<RunResult> {

@@ -149,7 +149,7 @@ These types are the contract for Phase 1 and are reproduced exactly. Everything 
 export type EventKind =
   | "run_started" | "plan_written" | "skill_loaded" | "context_loaded" | "context_assembled"
   | "repo_indexed" | "context_retrieved" | "embedder_degraded"
-  | "llm_request" | "llm_response" | "think" | "ask"
+  | "llm_request" | "llm_response" | "think" | "ask" | "ask_answered"
   | "verify_started" | "verify_result"
   | "edit_proposed" | "edit_accepted" | "edit_rejected"
   | "tool_called" | "tool_denied"
@@ -198,6 +198,23 @@ Six kinds are therefore added, taking the union to **30**. The test for whether 
 | `model_selected` | `loop/agent.ts` (cost router) | `strategy_selected` + `component: "router"` | A model-tier decision under `router.policy`, which is not a strategy decision |
 | `skill_trained` | `skills/trainer.ts` | `think` + `component: "skillopt"` | SkillOpt training narration, off the hot path |
 | `ask` | `loop/agent.ts` | `think` + `action: "ask"` | The run stopped because it needs a human answer |
+| `ask_answered` | `loop/agent.ts` | — (new fact, added with the reply channel) | A human answered an `ask` and the run resumed |
+
+#### `ask_answered` — why a kind and not a payload key on `ask`
+
+The reply channel made `ask` ambiguous. Before it, `ask` meant one thing: the run
+stopped and no answer was possible. With a channel, the same kind would have had to
+mean both "stopped, unanswered" and "paused, then resumed" — which is precisely the
+overloading rule 1a forbids. The two have different causes (no channel or a decline,
+versus a human acting), different actors, and different consequences for the run, so a
+consumer must not have to read a payload key to tell them apart. `ask` therefore keeps
+its original meaning of "a question was raised", and `ask_answered` records that one was
+answered. A run that ends unanswered emits `ask` with no `ask_answered` after it.
+
+The channel is OPT-IN (`params.interactive`). Absent, the loop behaves exactly as before,
+because the eval harness and every CLI caller are headless and blocking on a human would
+hang them. The wait is bounded and an abort ends it, so an interactive run whose surface
+went away cannot hold the engine open indefinitely.
 
 Five sites keep `component`, because the discriminator is describing provenance rather than telling two facts apart:
 

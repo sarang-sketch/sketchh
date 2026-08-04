@@ -79,6 +79,12 @@ class EngineClient implements SketchClient {
   run(): Promise<never> {
     return Promise.reject(new Error('this panel never starts a run'))
   }
+  /** This surface starts no interactive run, so nothing awaits an answer. */
+
+reply(): Promise<never> {
+    return Promise.reject(new Error('this surface never answers a question'))
+  }
+
   cancel(): Promise<never> {
     return Promise.reject(new Error('this panel never cancels a run'))
   }

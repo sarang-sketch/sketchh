@@ -150,6 +150,23 @@ export interface RunTaskDeps {
   maxIterations?: number
   /** Cancels the run. Forwarded to the adapter and the verify runner. */
   signal?: AbortSignal
+  /**
+   * Answer an `ask` mid-run, so a question pauses the run instead of ending it.
+   *
+   * ABSENT IS THE DEFAULT AND MEANS THE ORIGINAL BEHAVIOUR: the question becomes the
+   * run's `finalText` and the run ends not-ok. That has to stay the default, because the
+   * eval harness and every CLI caller are headless and blocking on a human would hang
+   * them — a hung eval is worse than an unanswered question.
+   *
+   * Return the answer to continue, or `null` to decline and let the run end exactly as it
+   * would have with no channel. Implementations MUST be bounded: an unbounded wait holds
+   * the run, its sidecar, and any tool servers open indefinitely. Honour `signal` so a
+   * cancelled run stops waiting.
+   */
+  answer?: (
+    question: string,
+    options: { runId: string; iteration: number; signal?: AbortSignal },
+  ) => Promise<string | null>
   /** Skills to put in front of the model. Loading is the caller's job. */
   skills?: readonly Skill[]
   /** Resolved capability authority, recorded for audit; authorization stays in the dispatcher. */
@@ -230,6 +247,10 @@ export const TOOL_UNAVAILABLE_REASON =
 /** Fed back, and used as `finalText`, when the model asks a question. */
 export const ASK_UNSUPPORTED_REASON =
   'this run has no interactive channel, so a question cannot be answered mid-run'
+
+/** The same event's reason when the caller DID supply a channel and the run is waiting. */
+export const ASK_AWAITING_REASON =
+  'this run has an interactive channel and is waiting for an answer'
 
 function isBlank(text: string): boolean {
   return text.trim() === ''
@@ -893,22 +914,58 @@ export async function runTask(task: Task, deps: RunTaskDeps): Promise<RunResult>
         }
 
         case 'ask': {
-          // Phase 1 has no interactive channel: the CLI protocol is one frame per
-          // run and the eval harness is headless, so blocking on a human would
-          // hang every automated caller. The question is surfaced as the run's
-          // finalText and the run ends not-ok, which is honest — the task was not
-          // completed — and leaves the caller free to re-run with the answer
-          // appended to the prompt. The event is `ask`, its own kind since the
-          // `EventKind` amendment; it used to be a `think` with an
-          // `action: 'ask'` key, which put "the model was reasoning" and "the run
-          // needs a human" under one kind. `text` is kept alongside `question` so
-          // a consumer that reads a generic `text` still shows the question.
+          // The question is recorded either way. `ask` is its own kind since the
+          // `EventKind` amendment; it used to be a `think` with an `action: 'ask'`
+          // key, which put "the model was reasoning" and "the run needs a human"
+          // under one kind. `text` is kept alongside `question` so a consumer that
+          // reads a generic `text` still shows the question.
+          const channel = deps.answer
           await emit('ask', {
             iteration: iterations,
             question: action.question,
             text: action.question,
-            reason: ASK_UNSUPPORTED_REASON,
+            // Accurate per run: an interactive caller is not "unsupported".
+            reason: channel === undefined ? ASK_UNSUPPORTED_REASON : ASK_AWAITING_REASON,
           })
+
+          // NO CHANNEL MEANS THE ORIGINAL BEHAVIOUR, exactly. The eval harness and
+          // every CLI caller are headless, and blocking on a human would hang them.
+          // The question becomes the run's `finalText` and the run ends not-ok, which
+          // is honest — the task was not completed — and lets the caller re-run with
+          // the answer in the prompt.
+          if (channel !== undefined) {
+            let answer: string | null = null
+            try {
+              answer = await channel(action.question, {
+                runId,
+                iteration: iterations,
+                ...(signal !== undefined ? { signal } : {}),
+              })
+            } catch (err) {
+              // A broken channel must not be reported as a model failure. An abort
+              // during the wait is an abort, handled by the outer catch.
+              if (isAbort(err, signal)) throw err
+              answer = null
+            }
+            const reply = answer === null ? '' : answer.trim()
+            if (reply !== '') {
+              await emit('ask_answered', {
+                iteration: iterations,
+                question: action.question,
+                // The answer is conversation content the model is about to be shown,
+                // so it is on the log for the same reason the prompt is.
+                answer: reply,
+              })
+              messages.push({
+                role: 'user',
+                content: `Answer to your question ${JSON.stringify(action.question)}: ${reply}`,
+              })
+              break
+            }
+            // Declined, empty, or timed out. Falls through to the same terminal state
+            // as having no channel at all, rather than looping on an unanswered question.
+          }
+
           return finish(false, action.question, {
             reason: 'awaiting_human_input',
             question: action.question,

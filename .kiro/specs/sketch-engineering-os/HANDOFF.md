@@ -286,8 +286,12 @@ embeddings; budgeted context assembly that degrades detail before coverage; the 
 architecture generator and the Live Architecture panel.
 
 **Current limitations / unclosed evidence, with no implied completion:**
-- `ask` still terminates a run: there is no interactive reply channel, so a clarifying question
-  ends the run instead of pausing it. This remains unowned.
+- `ask` now has a reply channel. It is OPT-IN (`params.interactive`): absent, a question still ends
+  the run with `reason: "awaiting_human_input"`, which is what the eval harness and every CLI caller
+  need. With it, the run pauses, `reply` delivers the answer, `ask_answered` records it, and the loop
+  continues. The wait is bounded at ten minutes and an abort ends it, so an abandoned question cannot
+  hold the engine open. `ask_answered` was added to `EventKind` with the requirements and design
+  amendments in the same change; the union is now thirty-one kinds.
 - Cancellation IS now wired: the `cancel` method aborts an in-flight run by id, the caller may supply
   that id so a Stop control works before `run_started` arrives, and the run emits its own
   `run_failed{reason:"aborted"}`. The chat panel's send control becomes Stop while a run is live.

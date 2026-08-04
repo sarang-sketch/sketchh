@@ -38,12 +38,18 @@
 //   * `diagram_updated` — `architecture` is its only emitter; the key is
 //     provenance, not a discriminator.
 //
+// `ask_answered` is a DISTINCT FACT from `ask`, not a variant of it, so it gets a
+// kind rather than an `answered: true` payload key on `ask`. `ask` says the run
+// stopped needing a human; `ask_answered` says a human supplied an answer and the
+// run resumed — different causes, different actors, and a Timeline must be able to
+// tell "nobody ever answered" from "somebody did" without reading a payload.
+//
 // `context_loaded` is retained with no emitter. It is part of the published
 // contract and logs on disk contain it.
 export type EventKind =
   | "run_started" | "plan_written" | "skill_loaded" | "context_loaded" | "context_assembled"
   | "repo_indexed" | "context_retrieved" | "embedder_degraded"
-  | "llm_request" | "llm_response" | "think" | "ask"
+  | "llm_request" | "llm_response" | "think" | "ask" | "ask_answered"
   | "verify_started" | "verify_result"
   | "edit_proposed" | "edit_accepted" | "edit_rejected"
   | "tool_called" | "tool_denied"

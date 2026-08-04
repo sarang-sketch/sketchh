@@ -58,6 +58,12 @@ class FakeEventClient implements SketchClient {
     throw new Error('the editor never starts a run')
   }
 
+  /** This surface starts no interactive run, so nothing awaits an answer. */
+
+reply(): Promise<never> {
+    return Promise.reject(new Error('this surface never answers a question'))
+  }
+
   cancel(): Promise<never> {
     // The editor starts no run, so it has none to stop.
     return Promise.reject(new Error('the editor never cancels a run'))

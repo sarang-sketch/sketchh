@@ -8,6 +8,7 @@ export {
   PLAN_GATE_REASON,
   TOOL_UNAVAILABLE_REASON,
   ASK_UNSUPPORTED_REASON,
+  ASK_AWAITING_REASON,
   RETRIEVED_CONTEXT_HEADING,
 } from './agent.js'
 export type { RunTaskDeps, PlanGate, ToolDispatch, VerifyRunner } from './agent.js'

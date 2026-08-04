@@ -1,6 +1,7 @@
 import type {
   SketchClient,
   CancelResult,
+  ReplyResult,
   PingResult,
   EventHandler,
   Unsubscribe,
@@ -110,6 +111,7 @@ export class HttpSketchClient implements SketchClient {
           }
         : {}),
       ...(options.runId !== undefined ? { runId: options.runId } : {}),
+      ...(options.interactive !== undefined ? { interactive: options.interactive } : {}),
       ...(options.root !== undefined ? { root: options.root } : {}),
       ...(options.reviewEdits !== undefined ? { reviewEdits: options.reviewEdits } : {}),
       // Omitted means the single-agent path, unchanged. See the note on the stdio transport.
@@ -125,6 +127,10 @@ export class HttpSketchClient implements SketchClient {
 
   async cancel(runId: string): Promise<CancelResult> {
     return this.callMethod<CancelResult>('cancel', { runId })
+  }
+
+  async reply(runId: string, answer: string): Promise<ReplyResult> {
+    return this.callMethod<ReplyResult>('reply', { runId, answer })
   }
 
   async eval(cases: EvalCase[]): Promise<EvalResult[]> {

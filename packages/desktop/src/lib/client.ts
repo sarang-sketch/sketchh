@@ -528,6 +528,16 @@ export interface MemorySupersedeResult {
   reason: string | null
 }
 
+/** What the engine did with an answer to a mid-run question. */
+export interface ReplyResult {
+  runId: string
+  /** True only when a run was waiting and this answer was delivered to it. */
+  answered: boolean
+  detail?: string
+  /** The question the answer was matched to, when there was one. */
+  question?: string
+}
+
 /** What the engine did about a stop request. */
 export interface CancelResult {
   runId: string
@@ -568,6 +578,14 @@ export interface RunOptions {
   root?: string
   /** Leave emitted patches open for human hunk review instead of auto-applying. */
   reviewEdits?: boolean
+  /**
+   * Let a question pause this run instead of ending it.
+   *
+   * OMITTED means the original behaviour: an `ask` ends the run with the question as its
+   * final text. A surface that sets this MUST be able to show the question and call
+   * `reply`, otherwise the run just waits until it times out.
+   */
+  interactive?: boolean
   /**
    * Which strategy to run under. OMITTED is the single-agent path, unchanged.
    *
@@ -622,6 +640,15 @@ export interface SketchClient {
    * so a caller that never subscribed still gets the whole log.
    */
   run(task: Task, options?: RunOptions): Promise<RunResult>
+
+  /**
+   * Answer a question an interactive run is waiting on.
+   *
+   * `answered: false` means that run is not waiting for anything — a stale reply, a wrong
+   * id, or a question that already timed out. Only runs started with `interactive: true`
+   * ever wait; for every other run an `ask` still ends it.
+   */
+  reply(runId: string, answer: string): Promise<ReplyResult>
 
   /**
    * Ask the engine to stop an in-flight run.

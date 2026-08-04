@@ -556,6 +556,76 @@ function readRunId(params: Record<string, unknown>): string | undefined {
 }
 
 /**
+ * How long an interactive run waits for a human before giving up.
+ *
+ * Bounded on purpose. An unbounded wait holds the run, its event stream, its sidecar and
+ * any MCP servers open forever if the surface that asked the question goes away — a closed
+ * window or a reloaded webview would leak an engine per abandoned question. Ten minutes is
+ * long enough for somebody to read a question and type an answer, and short enough that an
+ * abandoned run is reclaimed the same session.
+ */
+const ASK_REPLY_TIMEOUT_MS = 600_000
+
+/** Questions waiting on a human, by run id. At most one per run: the loop asks serially. */
+const pendingQuestions = new Map<string, { question: string; settle: (answer: string | null) => void }>()
+
+/**
+ * Answer a question an interactive run is waiting on.
+ *
+ * `answered: false` when that run is not waiting for anything, which covers a stale reply,
+ * a wrong id, and a run that already timed out. A caller cannot distinguish those and
+ * should not: the actionable fact is whether the answer was used.
+ *
+ * An empty or whitespace-only answer is REFUSED rather than delivered. Delivering it would
+ * end the run through the decline path while looking to the user like they answered.
+ */
+async function reply(params: Record<string, unknown>, _ctx: MethodContext): Promise<unknown> {
+  const runId = optionalString(params, 'runId', 'params.runId')
+  if (runId === undefined) throw new InvalidParamsError('params.runId is required')
+  const answer = optionalString(params, 'answer', 'params.answer')
+  if (answer === undefined || answer.trim() === '') {
+    throw new InvalidParamsError('params.answer must be a non-empty string')
+  }
+  const waiting = pendingQuestions.get(runId)
+  if (waiting === undefined) {
+    return { runId, answered: false, detail: 'that run is not waiting for an answer' }
+  }
+  pendingQuestions.delete(runId)
+  waiting.settle(answer)
+  return { runId, answered: true, question: waiting.question }
+}
+
+/**
+ * The answer channel handed to an interactive run.
+ *
+ * Registers the question, waits for `reply`, and gives up on a bounded timeout or an
+ * abort. Always deregisters, so a timed-out question cannot be answered later by a reply
+ * that arrives after the loop moved on.
+ */
+function askChannel(runId: string) {
+  return (question: string, options: { signal?: AbortSignal }): Promise<string | null> =>
+    new Promise<string | null>((resolve) => {
+      let done = false
+      const settle = (answer: string | null) => {
+        if (done) return
+        done = true
+        clearTimeout(timer)
+        options.signal?.removeEventListener('abort', onAbort)
+        pendingQuestions.delete(runId)
+        resolve(answer)
+      }
+      const onAbort = () => settle(null)
+      const timer = setTimeout(() => settle(null), ASK_REPLY_TIMEOUT_MS)
+      // Node keeps the process alive for a pending timer; a run waiting on a human must
+      // not be the reason a CLI invocation refuses to exit.
+      timer.unref?.()
+      if (options.signal?.aborted) return settle(null)
+      options.signal?.addEventListener('abort', onAbort, { once: true })
+      pendingQuestions.set(runId, { question, settle })
+    })
+}
+
+/**
  * Stop an in-flight run.
  *
  * Idempotent and honest: `{ cancelled: false }` when no run is in flight under that id,
@@ -605,6 +675,9 @@ async function run(params: Record<string, unknown>, ctx: MethodContext): Promise
   const runId = readRunId(params) ?? newRunId()
   const controller = new AbortController()
   inFlightRuns.set(runId, controller)
+  // OPT-IN. Without it an `ask` ends the run exactly as it always has, which is what
+  // every headless caller and the eval harness need.
+  const interactive = optionalBoolean(params, 'interactive', 'params.interactive') ?? false
 
   const events = new StreamingEventStore(
     new JsonlEventStore({ baseDir: root, secrets: () => ctx.secrets() }),
@@ -655,6 +728,7 @@ async function run(params: Record<string, unknown>, ctx: MethodContext): Promise
     // which run a Stop request means.
     ids: () => runId,
     signal: controller.signal,
+    ...(interactive ? { answer: askChannel(runId) } : {}),
   }
 
   try {
@@ -693,6 +767,9 @@ async function run(params: Record<string, unknown>, ctx: MethodContext): Promise
     // A finished run is not cancellable, and the registry must not grow with every
     // completed run. Both are this one line.
     inFlightRuns.delete(runId)
+    // A question outlives its run only as a leak: nothing can ever answer it.
+    pendingQuestions.get(runId)?.settle(null)
+    pendingQuestions.delete(runId)
     // A server left running holds a pipe, a port, and often a lock. `close()` never
     // throws, but it is in `finally` so a failed run cannot leak one either.
     await toolLayer?.host.close()
@@ -2138,6 +2215,9 @@ export const METHODS: Readonly<Record<string, MethodHandler>> = {
   // Stopping a run. `runTask` accepted an `AbortSignal` from the beginning and no wire
   // could produce one, so a runaway run could only be ended by killing the process.
   cancel,
+  // Answering an `ask` mid-run. Only an interactive run waits; every other caller keeps
+  // the original behaviour where a question ends the run.
+  reply,
   eval: evalCases,
   'parse-skill': parseSkill,
   'capture-eval': captureEval,

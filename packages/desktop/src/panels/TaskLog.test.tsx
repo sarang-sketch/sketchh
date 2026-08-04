@@ -64,6 +64,12 @@ class StreamClient implements SketchClient {
   }
   /** This panel starts no run, so it has none to stop. */
   
+/** This surface starts no interactive run, so nothing awaits an answer. */
+
+reply(): Promise<never> {
+  return Promise.reject(new Error('this surface never answers a question'))
+}
+
 cancel(): Promise<never> {
     return Promise.reject(new Error('this surface never cancels a run'))
   }
