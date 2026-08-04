@@ -288,13 +288,18 @@ architecture generator and the Live Architecture panel.
 **Current limitations / unclosed evidence, with no implied completion:**
 - `ask` still terminates a run; the CLI wire still has no cancellation verb even though `runTask`
   accepts an `AbortSignal`.
-- Repository retrieval is opt-in through `contextBudgetTokens`, and the desktop does not enable it
-  by default. Versioned memory likewise is not automatically ingested from or injected into every
-  live run.
-- Budgets are enforced when configured, but the desktop does not yet supply a default budget.
+- Repository retrieval stays opt-in through `contextBudgetTokens` in the engine; the desktop now
+  supplies a default from `DESKTOP_RUN_DEFAULTS`. Versioned memory is still NOT automatically
+  ingested from or injected into every live run.
+- Budgets are enforced when configured, the `run` method now carries a strictly validated `budget`,
+  and the desktop supplies a default ceiling. There is no UI yet for changing that ceiling.
 - Ghost completions are implemented but off by default.
-- Hosted credentials can be persisted by the Rust host and presence can be reported, but no read
-  command returns a key; the hosted-key invocation crossing remains intentionally half-wired.
+- Hosted credentials are persisted by the Rust host, and `resolve_api_key` now resolves ONE stored
+  key per run so a saved key reaches the engine at invocation time (Requirement 17.4). That value
+  crosses the IPC boundary into the webview, which is a deliberate, documented concession over
+  presence-only: it is one validated id per call, stateless, non-enumerating, redacted by the engine
+  on arrival, and never placed in application state. Spawning the sidecar from Rust so the value
+  never enters the webview remains the better end state and is unowned.
 - The curated MCP catalog and local hang/contract scripts are not execution or audit evidence for
   the named third-party MCP packages.
 - The legacy `ProviderAdapter`/canonical `ChatAdapter` pair still coexists; convergence has no owning

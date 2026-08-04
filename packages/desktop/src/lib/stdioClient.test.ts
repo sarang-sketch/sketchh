@@ -158,6 +158,48 @@ describe('StdioSketchClient — framing', () => {
     await expect(pending).resolves.toMatchObject({ runId: 'r-provider' })
   })
 
+  it('merges the invocation-time key onto the wire provider and leaves the entry key-free', async () => {
+    const fake = new FakeSidecar()
+    const client = new StdioSketchClient({ spawn: fake.spawn, onDiagnostic: () => {} })
+    const provider = {
+      id: 'anthropic',
+      kind: 'anthropic-messages' as const,
+      baseUrl: '',
+      model: 'claude-sonnet-4',
+      label: 'Anthropic',
+    }
+
+    client.run({ id: 'keyed', prompt: 'authenticate', verify: [] }, {
+      provider,
+      apiKey: 'sk-ant-test-0123456789',
+    })
+    const request = await nextRequest(fake)
+
+    // Requirement 17.4: the key is on the request, which is the one place the engine
+    // scrubs it from everything downstream.
+    expect(request.params.provider).toEqual({ ...provider, apiKey: 'sk-ant-test-0123456789' })
+    // And the caller's persisted entry was not mutated into carrying a secret.
+    expect(Object.keys(provider)).not.toContain('apiKey')
+  })
+
+  it('sends no apiKey property when no key was resolved', async () => {
+    const fake = new FakeSidecar()
+    const client = new StdioSketchClient({ spawn: fake.spawn, onDiagnostic: () => {} })
+    const provider = {
+      id: 'local-ollama',
+      kind: 'openai-compatible' as const,
+      baseUrl: 'http://127.0.0.1:11434/v1',
+      model: 'qwen2.5-coder:7b',
+      label: 'Local Ollama',
+    }
+
+    // A local model needs no key, and an `apiKey: undefined` own property would still
+    // be a key on the wire for the engine to validate.
+    client.run({ id: 'keyless', prompt: 'run locally', verify: [] }, { provider })
+    const request = await nextRequest(fake)
+    expect(Object.keys(request.params.provider as object)).not.toContain('apiKey')
+  })
+
   it('forwards the retrieval and spend ceilings', async () => {
     const fake = new FakeSidecar()
     const client = new StdioSketchClient({ spawn: fake.spawn, onDiagnostic: () => {} })

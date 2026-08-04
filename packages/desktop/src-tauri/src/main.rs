@@ -295,17 +295,16 @@ fn run_command(
 // there is exactly one containment implementation in this project and it stays that
 // way.
 //
-// ── THE SPEC GAP THIS TASK FOUND ────────────────────────────────────────────
+// ── THE ONE EXCEPTION, AND WHY IT IS ONE ────────────────────────────────────
 //
-// Requirement 17.4 says a key is supplied to the engine AT INVOCATION TIME. The
-// engine side of that exists (`settings.resolveProviderConfig` / `toProviderConfig`
-// take the key as an argument for one call). What does not exist is a route from this
-// credential store to the engine process: the sidecar is spawned by the webview, so
-// with no read command the only key that can reach a run today is one the user typed
-// into the window for that call. Wiring stored keys into a run needs a decision that
-// is not in the spec — a single-use resolve scoped to one request, or moving the
-// sidecar spawn into Rust so the key never enters the webview. Recorded rather than
-// invented here.
+// `resolve_api_key` DOES return a value, because Requirement 17.4 says a key is
+// supplied to the engine at invocation time and a store nothing can read from is a
+// store that makes the app unusable: before it existed, the only key that could reach
+// a model was one the user typed again for that call. It is the single-use resolve
+// option recorded here previously, chosen over moving the sidecar spawn into Rust
+// because that is a transport rewrite and the webview already carries a typed key
+// along the identical path. The narrowing — one validated id per call, stateless, no
+// enumeration, `None` for absent — is on the function itself.
 
 /// Whether each named provider has a key in the OS credential store.
 ///
@@ -339,6 +338,28 @@ fn set_api_key(provider_id: String, api_key: String) -> Result<String, String> {
         // `SecretError` has no variant that can hold a value, so this cannot echo the
         // key even by accident. See secret_store.rs.
         .map_err(|e| e.to_string())
+}
+
+/// Resolve ONE provider's stored key so a run can use it, or `None` when none is stored.
+///
+/// THIS IS THE ONE COMMAND THAT RETURNS A SECRET VALUE, and it is the invocation-time
+/// half of Requirement 17.4. Without it a stored key was unusable: the only key that
+/// could reach a model was one the user typed again for that call.
+///
+/// The narrowing is the point. One id per call, `validate_id`'d like every other secret
+/// command, so nothing here can enumerate a keychain. Stateless, so no key is held in
+/// application state. `None` for absent, so a caller cannot confuse "no key" with "store
+/// broken". The caller must hand the value straight to the run and register it with the
+/// engine's redactor — see `resolveApiKey` in the desktop `secrets` module, which is the
+/// only caller and never puts the value in React state.
+///
+/// The better end state remains spawning the sidecar from Rust so the value never
+/// enters the webview at all. That is a transport rewrite; this is the honest interim,
+/// and the webview already carries a typed key along the same path today.
+#[tauri::command]
+fn resolve_api_key(provider_id: String) -> Result<Option<String>, String> {
+    let backend = os_credentials::backend();
+    secret_store::resolve_secret(backend.as_ref(), &provider_id).map_err(|e| e.to_string())
 }
 
 /// Remove one provider's key. Removing a key that is not there succeeds: the caller
@@ -379,6 +400,7 @@ fn main() {
             allowed_programs,
             list_providers,
             set_api_key,
+            resolve_api_key,
             remove_api_key,
         ])
         .run(tauri::generate_context!())

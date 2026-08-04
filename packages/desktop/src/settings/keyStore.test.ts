@@ -136,13 +136,21 @@ describe('the seam has no way to read a key back (Requirement 17.3)', () => {
     expect(seam).not.toContain('get_api_key')
     expect(seam).not.toContain('read_api_key')
 
+    // THE SETTINGS SEAM STAYS PRESENCE-ONLY. `resolve_api_key` exists for the run path
+    // (Requirement 17.4), and this seam must not reach it: a panel that can resolve a key
+    // is a panel that can render one.
+    expect(seam).not.toContain('resolve_api_key')
+    expect(seam).not.toContain('resolveProviderKey')
+    expect(seam).not.toContain('resolveApiKeyForRun')
+
     const wrappers = code(bridge)
     expect(wrappers).not.toContain('get_api_key')
     expect(wrappers).not.toContain('read_api_key')
-    // The three that do exist.
+    // The four that do exist.
     expect(wrappers).toContain("invoke<ProviderKeyPresence[]>('list_providers'")
     expect(wrappers).toContain("invoke<string>('set_api_key'")
     expect(wrappers).toContain("invoke<string>('remove_api_key'")
+    expect(wrappers).toContain("invoke<string | null>('resolve_api_key'")
   })
 
   it('has no state shape with room for a key value', () => {

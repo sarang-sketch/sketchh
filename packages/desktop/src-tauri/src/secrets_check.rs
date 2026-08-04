@@ -41,6 +41,12 @@ pub fn probe_set(provider_id: String, api_key: String) -> Result<String, String>
         .map_err(|e| e.to_string())
 }
 
+/// Mirrors `resolve_api_key`.
+pub fn probe_resolve(provider_id: String) -> Result<Option<String>, String> {
+    let backend = os_credentials::backend();
+    secret_store::resolve_secret(backend.as_ref(), &provider_id).map_err(|e| e.to_string())
+}
+
 /// Mirrors `remove_api_key`.
 pub fn probe_remove(provider_id: String) -> Result<String, String> {
     let backend = os_credentials::backend();

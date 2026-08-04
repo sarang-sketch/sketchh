@@ -535,6 +535,17 @@ export interface RunOptions {
    * offline fake switch is enabled. This type cannot carry an API key.
    */
   provider?: ProviderSettingsEntry
+  /**
+   * The provider credential for THIS CALL ONLY, resolved from the OS credential store
+   * at invocation time (Requirement 17.4).
+   *
+   * Deliberately a separate field rather than a key on `provider`: that entry is the
+   * persisted, key-free settings row and must stay incapable of carrying a secret. The
+   * transports merge this onto the outgoing provider object and nowhere else, and the
+   * engine registers it with its redactor the moment it parses it, so it cannot reach an
+   * event log. Never read this back out of state — see `lib/secrets.ts`.
+   */
+  apiKey?: string
   /** Project root for this run. Required by the desktop to match the open folder. */
   root?: string
   /** Leave emitted patches open for human hunk review instead of auto-applying. */

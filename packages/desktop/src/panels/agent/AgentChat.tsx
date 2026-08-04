@@ -9,6 +9,7 @@ import { useAppState, useAppDispatch } from '../../state/AppState';
 import { useFileActions } from '../../editor/useFileActions';
 import { useSketchClient } from '../../lib/ClientProvider';
 import { withDesktopRunDefaults } from '../../lib/runDefaults';
+import { resolveApiKeyForRun } from '../../lib/secrets';
 
 interface DisplayMessage {
   id: string;
@@ -55,17 +56,40 @@ export const AgentChat: React.FC = () => {
     setInputText('');
     dispatch({ type: 'SET_THINKING', payload: { isThinking: true, stage: 'Running task through the engine...' } });
 
-    client
-      .run(
-        { id: newId(), prompt, verify: [] },
-        // Retrieval and the spend ceiling come from one authority so this panel and its
-        // tests cannot drift. Without them a desktop run reaches the model with no
-        // repository context and no bill ceiling — see runDefaults.ts.
-        withDesktopRunDefaults({
-          ...(provider !== undefined ? { provider } : {}),
-          ...(state.projectRoot ? { root: state.projectRoot } : {}),
-          reviewEdits: true,
-        }),
+    // The stored key is resolved HERE, for this call, and held in nothing but the
+    // argument below (Requirement 17.4). A store that cannot be read is reported rather
+    // than swallowed: a local provider needs no key, so this must not fail the run.
+    const withKey = async () => {
+      if (provider === undefined) return undefined;
+      return resolveApiKeyForRun(provider.id, (reason) => {
+        dispatch({
+          type: 'ADD_MESSAGE',
+          payload: {
+            id: newId(),
+            role: 'system',
+            content: `Continuing without a stored key for ${provider.label}: ${reason}`,
+            timestamp: Date.now(),
+          },
+        });
+      });
+    };
+
+    withKey()
+      .then((apiKey) =>
+        client.run(
+          { id: newId(), prompt, verify: [] },
+          // Retrieval and the spend ceiling come from one authority so this panel and
+          // its tests cannot drift. Without them a desktop run reaches the model with no
+          // repository context and no bill ceiling — see runDefaults.ts.
+          withDesktopRunDefaults({
+            ...(provider !== undefined ? { provider } : {}),
+            // Present only when the store actually held one. `apiKey: undefined` would
+            // still be an own property on the wire object.
+            ...(apiKey !== null && apiKey !== undefined ? { apiKey } : {}),
+            ...(state.projectRoot ? { root: state.projectRoot } : {}),
+            reviewEdits: true,
+          }),
+        ),
       )
       .then((result) => {
         dispatch({ type: 'SET_THINKING', payload: { isThinking: false } });

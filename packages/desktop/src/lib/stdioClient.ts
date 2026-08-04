@@ -406,7 +406,17 @@ export class StdioSketchClient implements SketchClient {
   async run(task: Task, options: RunOptions = {}): Promise<RunResult> {
     return this.call<RunResult>('run', {
       task,
-      ...(options.provider !== undefined ? { provider: options.provider } : {}),
+      // The invocation-time credential is merged HERE and only here, so the persisted
+      // settings entry stays key-free. No provider means no key on the wire either:
+      // an apiKey with nothing to authenticate against is a secret with no purpose.
+      ...(options.provider !== undefined
+        ? {
+            provider: {
+              ...options.provider,
+              ...(options.apiKey !== undefined ? { apiKey: options.apiKey } : {}),
+            },
+          }
+        : {}),
       ...(options.root !== undefined ? { root: options.root } : this.root !== undefined ? { root: this.root } : {}),
       ...(options.reviewEdits !== undefined ? { reviewEdits: options.reviewEdits } : {}),
       // Omitted means the single-agent path, byte for byte what this transport sent before

@@ -182,8 +182,9 @@ phantom errors. §0.2's ordering was written before this bit, and this is the co
 
 1. **The loop can be handed retrieved context** (`RunTaskDeps.retrievedContext`), rendered as its own
    system message and kept distinct from `AGENTS.md`. The `run` RPC assembles it **only** when given
-   `contextBudgetTokens`, and the desktop does not pass it yet — so a default desktop run still sends
-   no repository context. That stays true until Phase 8's cost guard exists.
+   `contextBudgetTokens`. The engine still defaults to off; the desktop now passes a value from
+   `DESKTOP_RUN_DEFAULTS` alongside a default spend ceiling, which is the condition this originally
+   waited on.
 2. **The lexical channel searches query terms, not the whole prompt.** It used to search for the
    entire task prompt as one fixed string, which matched nothing, which made hybrid retrieval
    silently vector-only for every natural-language task. If you touch `queryTerms`, `termsMatched` or
@@ -236,9 +237,9 @@ phantom errors. §0.2's ordering was written before this bit, and this is the co
 | Run cancellation | `runTask` accepts an `AbortSignal` the CLI wire cannot reach | unowned |
 | Ghost completions | Implemented and off by default | no default provider path |
 | Monaco widget | Doubled in jsdom; `ModelRegistry` owns tested state synchronization | test-environment limit |
-| Provider settings / selector | Real key-free persisted entries and selection; local provider forwarding works | hosted stored-key invocation remains half-wired |
-| Cost guard | Enforced before calls when configured; no default desktop budget | desktop default open |
-| Retrieval | Graph/search/assembly are real, but desktop does not send `contextBudgetTokens` by default | default wiring open |
+| Provider settings / selector | Real key-free persisted entries and selection; a stored key is resolved per run through `resolve_api_key` and reaches the engine at invocation time | no real hosted-provider run has been made |
+| Cost guard | Enforced before calls, carried by the `run` method, and defaulted for desktop runs | no UI to change the default yet |
+| Retrieval | Graph/search/assembly are real and the desktop sends `contextBudgetTokens` by default | no UI to change the default yet |
 | Versioned memory | Persistence, hygiene, retrieval, and panel are real | automatic live-run ingestion/injection open |
 | Native/release/offline evidence | Verified installers exist from run `30936156941`; deterministic release gates exist | evidence-gated 12.2–12.3 |
 | Third-party community flywheel | Exact licensed third-party Git blob bytes pass production install/run/capture/train/promote/replay | complete (12.4); scripted-quality and no-real-provider limits remain |

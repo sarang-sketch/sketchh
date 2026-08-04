@@ -155,11 +155,26 @@ export interface ProviderKeyPresence {
 /**
  * Which of the given providers have a key stored.
  *
- * PRESENCE ONLY — an id and a boolean. There is no command that returns a key value,
- * not even truncated, so there is no wrapper here that could.
+ * PRESENCE ONLY — an id and a boolean. This is what the settings surface asks for, and
+ * it stays presence-only: a panel rendering a list has no business holding a value.
  */
 export async function listProviderKeys(providerIds: string[]): Promise<ProviderKeyPresence[]> {
   return invoke<ProviderKeyPresence[]>('list_providers', { providerIds })
+}
+
+/**
+ * Resolve ONE provider's stored key for ONE run. `null` when nothing is stored.
+ *
+ * THE ONLY WRAPPER THAT RETURNS A VALUE, and the only reason it exists is Requirement
+ * 17.4: a key is supplied to the engine at invocation time, and before this a stored key
+ * could not reach a model at all. Its single caller is the run path in `lib/secrets.ts`.
+ *
+ * Whoever calls it must put the value straight on the outgoing request and nowhere else
+ * — not in React state, not in AppState, not in a log line. There is still no command
+ * that enumerates the store and none that returns a prefix or a preview.
+ */
+export async function resolveProviderKey(providerId: string): Promise<string | null> {
+  return invoke<string | null>('resolve_api_key', { providerId })
 }
 
 /**

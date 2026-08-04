@@ -8,6 +8,12 @@ import type { ProviderSettingsEntry, RunResult, Task } from '../../lib/contracts
 import { AppStateProvider } from '../../state/AppState'
 import { AgentChat } from './AgentChat'
 
+// The credential store is native, so the resolve seam is the boundary a webview test can
+// stand at. What matters here is that the panel ASKS for the selected provider's key and
+// puts the answer on the run — not how Rust reads it.
+const resolveApiKeyForRun = vi.hoisted(() => vi.fn<(id: string, onProblem?: (reason: string) => void) => Promise<string | null>>())
+vi.mock('../../lib/secrets', () => ({ resolveApiKeyForRun }))
+
 const ollama: ProviderSettingsEntry = {
   id: 'ollama-local',
   kind: 'openai-compatible',
@@ -58,6 +64,8 @@ function send(client: SketchClient, initial: Parameters<typeof AppStateProvider>
 
 beforeEach(() => {
   Element.prototype.scrollIntoView = vi.fn()
+  resolveApiKeyForRun.mockReset()
+  resolveApiKeyForRun.mockResolvedValue(null)
 })
 
 afterEach(() => cleanup())
@@ -85,6 +93,47 @@ describe('AgentChat provider selection', () => {
     expect(options?.contextBudgetTokens).toBeGreaterThan(0)
     expect(options?.budget).toEqual({ ...DESKTOP_RUN_DEFAULTS.budget })
     expect(options?.budget?.onBreach).toBe('stop')
+  })
+
+  it('resolves the stored key for the selected provider at invocation time', async () => {
+    resolveApiKeyForRun.mockResolvedValue('sk-stored-0123456789')
+    const run = vi.fn(async (_task: Task, _options?: RunOptions) => result())
+    send(clientWith(run), {
+      projectRoot: 'C:\\workspace',
+      providerSettingsPath: 'C:\\Users\\test\\.sketch\\providers.json',
+      providers: [other, ollama],
+      selectedProvider: ollama.id,
+      selectedModel: ollama.model,
+    })
+
+    await waitFor(() => expect(run).toHaveBeenCalledTimes(1))
+    // Asked for exactly the selected provider, and only that one.
+    expect(resolveApiKeyForRun).toHaveBeenCalledTimes(1)
+    expect(resolveApiKeyForRun.mock.calls[0]![0]).toBe(ollama.id)
+
+    // A key saved before a restart now reaches the run (Requirement 17.4). Before this
+    // path existed, only a key typed for that call could.
+    const options = run.mock.calls[0]![1]
+    expect(options?.apiKey).toBe('sk-stored-0123456789')
+    // And the persisted entry is still the key-free row from settings.
+    expect(JSON.stringify(options?.provider)).not.toContain('sk-stored')
+    expect(options?.provider).toBe(ollama)
+  })
+
+  it('runs key-free when nothing is stored, without an apiKey property', async () => {
+    resolveApiKeyForRun.mockResolvedValue(null)
+    const run = vi.fn(async (_task: Task, _options?: RunOptions) => result())
+    send(clientWith(run), {
+      providerSettingsPath: 'C:\\Users\\test\\.sketch\\providers.json',
+      providers: [ollama],
+      selectedProvider: ollama.id,
+      selectedModel: ollama.model,
+    })
+
+    await waitFor(() => expect(run).toHaveBeenCalledTimes(1))
+    // The common local case. An `apiKey: undefined` own property would still be a key
+    // on the wire for the engine to validate.
+    expect(Object.keys(run.mock.calls[0]![1] ?? {})).not.toContain('apiKey')
   })
 
   it('passes no fabricated fallback when the selected id resolves to no entry', async () => {

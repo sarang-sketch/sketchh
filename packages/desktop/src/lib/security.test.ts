@@ -307,35 +307,89 @@ describe('Requirements 17.3, 17.4 — secrets live in the OS store and never com
   const rustCode = (text: string) =>
     text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
 
-  it('registers exactly the three credential commands the settings surface needs', () => {
-    for (const command of ['list_providers', 'set_api_key', 'remove_api_key']) {
+  const CREDENTIAL_COMMANDS = [
+    'list_providers',
+    'set_api_key',
+    'resolve_api_key',
+    'remove_api_key',
+  ];
+
+  it('registers exactly the four credential commands and no others', () => {
+    for (const command of CREDENTIAL_COMMANDS) {
       expect(mainRs, `${command} is not defined`).toMatch(new RegExp(`fn ${command}\\s*\\(`));
       expect(mainRs, `${command} is not registered`).toMatch(
         new RegExp(`generate_handler!\\[[\\s\\S]*?${command},`),
       );
     }
+    // The inventory is closed. A fifth secret-shaped command must be a deliberate edit
+    // to this list, not something that arrives alongside an unrelated change.
+    const declared = [...rustCode(mainRs).matchAll(/fn (\w*(?:api_key|providers|secret)\w*)\s*\(/g)]
+      .map((match) => match[1]!)
+      .sort();
+    expect(declared).toEqual([...CREDENTIAL_COMMANDS].sort());
   });
 
-  it('exposes no command that returns a key value', () => {
+  it('returns a key value from exactly one command, for one id, and never a preview', () => {
     const code = rustCode(mainRs);
-    // Not a read command, not a truncated one, not a "verify this prefix" one.
+
+    // `resolve_api_key` is the one exception, and it exists because Requirement 17.4
+    // needs a key at invocation time — a store nothing can read made every stored key
+    // useless. What stays forbidden is everything that was never necessary for that:
+    // a preview, a truncation, a "reveal", or a bulk read.
     for (const forbidden of [
       'fn get_api_key',
       'fn read_api_key',
-      'fn api_key(',
       'fn reveal',
       'key_prefix',
       'last_four',
     ]) {
       expect(code, forbidden).not.toContain(forbidden);
     }
-    // The presence shape is an id, a bool and the store's NAME — no fourth field.
+
+    // ONE ID IN, ONE OPTIONAL VALUE OUT. A `Vec<String>` argument or a collection return
+    // would be enumeration of the user's keychain, which nothing here may do.
+    const resolve = /fn resolve_api_key\s*\(([\s\S]*?)\)\s*->\s*([^{]+)\{/.exec(mainRs);
+    expect(resolve).not.toBeNull();
+    expect(resolve![1]!.trim()).toBe('provider_id: String');
+    expect(resolve![2]!.trim()).toBe('Result<Option<String>, String>');
+    expect(resolve![1]).not.toContain('Vec');
+
+    // Only `resolve_api_key` may return a secret value at all.
+    for (const command of CREDENTIAL_COMMANDS.filter((name) => name !== 'resolve_api_key')) {
+      const signature = new RegExp(`fn ${command}\\s*\\([\\s\\S]*?\\)\\s*->\\s*([^{]+)\\{`).exec(mainRs);
+      expect(signature, command).not.toBeNull();
+      expect(signature![1], command).not.toContain('Option<String>');
+    }
+
+    // The presence shape is an id, a bool and the store's NAME — no fourth field. The
+    // settings surface still cannot reach a value.
     const presence = /struct ProviderKeyPresence \{[\s\S]*?\n\}/.exec(mainRs);
     expect(presence).not.toBeNull();
     expect(presence![0]).toContain('has_key: bool');
     for (const forbidden of ['api_key', 'secret', 'value', 'preview']) {
       expect(presence![0], forbidden).not.toContain(forbidden);
     }
+  });
+
+  it('keeps the resolved key out of application state and out of any log', () => {
+    const secretsTs = fs.readFileSync(path.resolve(__dirname, 'secrets.ts'), 'utf8');
+    const seam = secretsTs.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
+
+    // The value's whole lifetime is one local and one outgoing request. Any of these
+    // would extend it: a module cache, a dispatch into the store, or a console line.
+    for (const forbidden of ['useState', 'localStorage', 'sessionStorage', 'dispatch(', 'console.']) {
+      expect(seam, forbidden).not.toContain(forbidden);
+    }
+    // No module-level mutable holder either.
+    expect(seam).not.toMatch(/^(let|var)\s/m);
+
+    // The engine redacts it on arrival, which is what makes the run request a safe
+    // carrier. If that call ever goes, a key can reach an event log.
+    const methods = fs.readFileSync(
+      path.resolve(__dirname, '../../../core/src/rpc/methods.ts'),
+      'utf8',
+    );
+    expect(methods).toContain('ctx.rememberSecret(apiKey)');
   });
 
   it('holds no key in application state', () => {
@@ -381,7 +435,7 @@ describe('Requirements 17.3, 17.4 — secrets live in the OS store and never com
     expect(rustCode(secretRs)).not.toContain('canonicalize');
 
     // No credential command takes a path-shaped argument.
-    for (const command of ['list_providers', 'set_api_key', 'remove_api_key']) {
+    for (const command of CREDENTIAL_COMMANDS) {
       const signature = new RegExp(`fn ${command}\\s*\\(([\\s\\S]*?)\\)`).exec(mainRs);
       expect(signature, command).not.toBeNull();
       for (const forbidden of ['path', 'project_root', 'cwd', 'PathBuf']) {

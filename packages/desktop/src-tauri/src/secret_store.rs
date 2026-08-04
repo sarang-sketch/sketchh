@@ -199,10 +199,10 @@ pub fn remove_secret<B: CredentialBackend + ?Sized>(
 
 /// Which of the given providers have a key stored.
 ///
-/// PRESENCE ONLY. This is what `list_providers` answers with, and it is why there is
-/// no read command: the settings surface needs to know whether to offer "Remove", and
-/// that is a bool. Resolving a key for an actual model call is a separate path that
-/// does not exist yet — see the spec-gap note in main.rs above `list_providers`.
+/// PRESENCE ONLY, and still the only thing the settings surface asks for: it needs to
+/// know whether to offer "Remove", and that is a bool. Resolving a value for one model
+/// call is `resolve_secret`, which is deliberately a different function with a different
+/// caller — a panel rendering a list must not be able to reach a key by accident.
 pub fn list_presence<B: CredentialBackend + ?Sized>(
     backend: &B,
     ids: &[String],
@@ -223,6 +223,54 @@ pub fn list_presence<B: CredentialBackend + ?Sized>(
         out.push(KeyPresence { id: account, has_key });
     }
     Ok(out)
+}
+
+/// Resolve ONE provider's stored key, for ONE model call.
+///
+/// ── WHY THIS EXISTS, HAVING BEEN REFUSED ONCE ───────────────────────────────
+///
+/// Requirement 17.4 says a key is supplied to the engine AT INVOCATION TIME. Storing a
+/// key with no way to resolve it satisfies the storage half and none of the invocation
+/// half: the user saved a key, restarted, and the only key that could actually reach a
+/// model was one they typed again for that call. That is not a hardened app, it is a
+/// broken one with a hardened credential store attached.
+///
+/// ── WHAT IS AND IS NOT CONCEDED ─────────────────────────────────────────────
+///
+/// The value crosses the IPC boundary into the webview, and that is a real change from
+/// presence-only. It is bounded on purpose:
+///
+///   * ONE ID PER CALL, and the id is `validate_id`'d exactly as everywhere else. There
+///     is still no enumeration: nothing here can walk the user's keychain.
+///   * STATELESS. No cache, no `AppState`, no `Mutex<HashMap<String, String>>`. Each
+///     call opens the store, reads one record, and drops everything.
+///   * ABSENT IS `Ok(None)`, NOT AN ERROR. "No key stored" is a normal answer that the
+///     caller turns into the engine's existing refusal; making it an error would push
+///     callers into treating a missing key and a broken store the same way.
+///   * NO VALUE IN ANY ERROR, unchanged. `SecretError` still has no variant that can
+///     hold one.
+///
+/// What it does NOT concede: the key is not persisted anywhere by Sketch, is not put in
+/// application state, and is registered with the engine's redactor by the caller so it
+/// cannot reach an event log. The alternative design — moving the sidecar spawn into
+/// Rust so the value never enters the webview at all — is strictly better and stays the
+/// right end state; it is a transport rewrite, not this function, and the webview
+/// already carries a typed key for exactly this purpose today.
+pub fn resolve_secret<B: CredentialBackend + ?Sized>(
+    backend: &B,
+    id: &str,
+) -> Result<Option<String>, SecretError> {
+    let account = validate_id(id)?;
+    let found = backend.get(SERVICE, &account).map_err(|detail| SecretError::Backend {
+        id: account,
+        operation: "read".to_string(),
+        detail,
+    })?;
+    // A stored empty or whitespace-only value is not a key. `set_secret` cannot write
+    // one, but a record written by an older build or by hand must not be handed onward
+    // as if it were usable — the engine would send an empty Authorization header and
+    // report a provider error instead of "no key".
+    Ok(found.filter(|value| !value.trim().is_empty()))
 }
 
 /// An in-process backend for tests and for a build with no OS store available.
@@ -462,6 +510,69 @@ mod tests {
         let err = list_presence(&backend, &["openai".to_string(), "../etc".to_string()])
             .unwrap_err();
         assert!(matches!(err, SecretError::InvalidId(_)), "{:?}", err);
+    }
+
+    #[test]
+    fn resolves_exactly_the_stored_key_for_one_named_provider() {
+        let backend = MemoryBackend::new();
+        set_secret(&backend, "openai", KEY).unwrap();
+        set_secret(&backend, "anthropic", "sk-other-0123456789abcdef").unwrap();
+
+        // The invocation-time half of Requirement 17.4: the key the user saved is the
+        // key a later run can use, without them typing it again.
+        assert_eq!(resolve_secret(&backend, "openai").unwrap().as_deref(), Some(KEY));
+
+        // One id per call. Asking for one provider cannot return another's.
+        assert_eq!(
+            resolve_secret(&backend, "anthropic").unwrap().as_deref(),
+            Some("sk-other-0123456789abcdef"),
+        );
+    }
+
+    #[test]
+    fn a_missing_key_resolves_to_nothing_rather_than_failing() {
+        let backend = MemoryBackend::new();
+        // Not an error: "no key stored" is a normal answer the caller turns into the
+        // engine's own refusal. An error here would be indistinguishable from a store
+        // that is broken, which is a different problem with a different remedy.
+        assert_eq!(resolve_secret(&backend, "openai").unwrap(), None);
+
+        set_secret(&backend, "openai", KEY).unwrap();
+        remove_secret(&backend, "openai").unwrap();
+        assert_eq!(resolve_secret(&backend, "openai").unwrap(), None);
+    }
+
+    #[test]
+    fn resolve_refuses_an_id_that_could_address_another_record() {
+        let backend = MemoryBackend::new();
+        for id in ["", "  ", "../etc", "openai\0", "open ai", ".hidden"] {
+            let err = resolve_secret(&backend, id).unwrap_err();
+            assert!(matches!(err, SecretError::InvalidId(_)), "{id:?} -> {err:?}");
+        }
+    }
+
+    #[test]
+    fn a_blank_stored_record_is_not_handed_on_as_a_key() {
+        // `set_secret` cannot write this, but an older build or a hand-edited store
+        // could. Returning it would make the engine send an empty credential and
+        // report a provider error instead of an honest "no key".
+        let backend = MemoryBackend::new();
+        backend.set(SERVICE, "openai", "   ").unwrap();
+        assert_eq!(resolve_secret(&backend, "openai").unwrap(), None);
+    }
+
+    #[test]
+    fn a_broken_store_is_an_error_that_still_cannot_carry_a_value() {
+        let backend = UnsupportedBackend { detail: "libsecret is not installed".to_string() };
+        let err = resolve_secret(&backend, "openai").unwrap_err();
+        match &err {
+            SecretError::Backend { id, operation, .. } => {
+                assert_eq!(id, "openai");
+                assert_eq!(operation, "read");
+            }
+            other => panic!("expected a backend error, got {other:?}"),
+        }
+        assert!(!format!("{err}").contains(KEY));
     }
 
     // NOTE: that this module owns no path and no second containment primitive is
