@@ -229,10 +229,29 @@ describe('hybrid retrieval on a real repository', () => {
     expect(emitted[0]!.payload.lexicalEngine).toBe(result.lexicalEngine)
     expect(emitted[0]!.payload.vectorOnly).toBe(false)
     expect(emitted[0]!.payload.rrfK).toBe(RRF_K)
-    expect(emitted[0]!.payload.channels).toEqual([
-      { channel: 'lexical', ran: true, engine: result.lexicalEngine, hits: expect.any(Number), degraded: false, reason: null },
-      { channel: 'vector', ran: true, engine: 'vector-store', hits: expect.any(Number), degraded: false, reason: null },
-    ])
+    expect(emitted[0]!.payload.channels).toEqual(result.channels)
+
+    const lexicalReport = result.channels.find(c => c.channel === 'lexical')!
+    expect(lexicalReport.engine).toBe(result.lexicalEngine)
+    if (result.lexicalEngine === 'ripgrep') {
+      expect(lexicalReport.degraded).toBe(false)
+      expect(lexicalReport.reason).toBeNull()
+      expect(result.degraded).toBe(false)
+    } else {
+      expect(lexicalReport.degraded).toBe(true)
+      expect(lexicalReport.reason).toContain('scanning the indexed file list')
+      expect(result.degraded).toBe(true)
+    }
+
+    const vectorReport = result.channels.find(c => c.channel === 'vector')!
+    expect(vectorReport).toEqual({
+      channel: 'vector',
+      ran: true,
+      engine: 'vector-store',
+      hits: expect.any(Number),
+      degraded: false,
+      reason: null,
+    })
     // The query text itself is never logged.
     expect(JSON.stringify(emitted[0]!.payload)).not.toContain('parse_retry_budget')
   })
