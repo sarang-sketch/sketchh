@@ -33,7 +33,10 @@ const endpoint = new URL(args.get('--endpoint') ?? process.env.SKETCH_OLLAMA_END
 
 function assertLoopback(url) {
   const host = url.hostname.replace(/^\[/, '').replace(/\]$/, '').toLowerCase()
-  const loopback = host === 'localhost' || host === '::1' || /^127(?:\.\d{1,3}){3}$/.test(host)
+  if (host === 'localhost') {
+    throw new Error('Ollama endpoint must use a numeric loopback address (127.0.0.0/8 or ::1), not localhost')
+  }
+  const loopback = host === '::1' || /^127(?:\.\d{1,3}){3}$/.test(host)
   if (!loopback) throw new Error(`refusing non-loopback Ollama endpoint: ${url.origin}`)
   if (url.protocol !== 'http:') throw new Error('local Ollama endpoint must use http:')
   if (url.username || url.password || url.search || url.hash) {

@@ -20,11 +20,13 @@ npm run build:sidecar -w @sketch/desktop
 npm run preflight:ollama -- --model llama3.2
 ```
 
-Use `--endpoint http://127.0.0.1:11434/v1` only to override the default. Non-loopback endpoints,
-credentials in URLs, non-`/v1` paths, missing Ollama `/api/version`, and absent exact model names are
-refused. A passing run drives the production sidecar through `ping`, indexes a temporary fixture,
-runs an editing task with the explicit key-free provider, verifies exact final bytes, and retains a
-JSON preflight artifact under `.sketch/preflight/`.
+Use `--endpoint http://127.0.0.1:11434/v1` only to override the default. Hostname aliases,
+including `localhost`, are refused because their resolved addresses were not observed; use numeric
+IPv4 loopback (`127.0.0.0/8`) or IPv6 loopback (`::1`). Non-loopback endpoints, credentials in URLs,
+non-`/v1` paths, missing Ollama `/api/version`, and absent exact model names are refused. A passing
+run drives the production sidecar through `ping`, indexes a temporary fixture, runs an editing task
+with the explicit key-free provider, verifies exact final bytes, and retains a JSON preflight artifact
+under `.sketch/preflight/`.
 
 A preflight artifact labels itself non-evidence and records its limitations. It must never be cited
 as an installed-app, clean-machine, or no-egress result.
