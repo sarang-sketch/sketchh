@@ -1,0 +1,52 @@
+name: Feature or change proposal
+description: Propose something new, or a change in behaviour. Agree the approach here before writing code.
+labels: [proposal]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Open this **before** the pull request for anything non-trivial. A design conversation first
+        saves both of us a rewrite, and every PR is reviewed personally.
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What is hard or impossible today. Describe the situation, not the solution.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you propose
+      description: Which surface, which module, and what the observable behaviour becomes.
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: How it would be verified
+      description: >
+        This project treats a claim as unproven until a test can fail for it. What test proves this
+        works, and what would you break to show the test is real?
+    validations:
+      required: true
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Constraints it stays inside
+      description: These are architectural, not style preferences.
+      options:
+        - label: Needs no new runtime dependency in `packages/core` (zero-dependency engine)
+        - label: Adds no outbound network path, or updates `PRIVACY.md` in the same change
+        - label: Weakens no gate, guard, or redaction
+        - label: Runs offline with no account and no Sketch-hosted service
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+  - type: checkboxes
+    id: offer
+    attributes:
+      label: Implementation
+      options:
+        - label: I would like to implement this myself

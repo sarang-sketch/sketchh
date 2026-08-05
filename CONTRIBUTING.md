@@ -32,7 +32,12 @@ npm test
 ```
 
 Node 20+. Rust is needed only for the Tauri desktop build, not for the engine or the test suite.
-Everything runs offline with no API key.
+Everything runs offline with no API key. Native-build toolchain prerequisites per platform are in the
+[README](README.md#requirements) — on Windows `cargo` cannot link without the MSVC Build Tools C++
+workload.
+
+Two more documents govern participation: [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) for behaviour, and
+[`SECURITY.md`](SECURITY.md) for anything that must not be filed as a public issue.
 
 ## The five rules that are not style preferences
 

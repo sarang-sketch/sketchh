@@ -134,7 +134,7 @@ Look closely at that AI Team panel, because it is the whole design philosophy in
 │    │ ROLES                    │ command in.                  │ check generated    │
 │    │ ✓ VERIFIABLE  CEO        │ $ Open a folder to run       │ code.              │
 └────┴──────────────────────────┴──────────────────────────────┴────────────────────┘
-                                              TSX  Ln 42, Col 15  UTF-8  ✦ Cost  IDE
+
 ```
 
 </details>
@@ -371,6 +371,15 @@ Full detail, including the state directory layout and every seam, is in
 - **Rust stable** — only for the native Tauri build, not for the engine or the tests
 - **ripgrep** *(optional)* — fast lexical retrieval; a bounded scanner takes over when absent
 
+Cloning, building, typechecking and running the whole test suite needs **nothing but Node**. The
+native toolchain below is required only once you build or package the Tauri app:
+
+| Host | Also needed for the native build |
+|---|---|
+| Windows | Visual Studio Build Tools with the **Desktop development with C++** workload (`cargo` cannot link without the MSVC linker), plus the WebView2 runtime — already present on Windows 11 |
+| macOS | Xcode Command Line Tools (`xcode-select --install`) |
+| Linux | `libwebkit2gtk-4.1-dev`, `libgtk-3-dev`, `libayatana-appindicator3-dev`, `librsvg2-dev`, `build-essential` |
+
 ### Clone and verify — offline, no key, $0
 
 ```bash
@@ -591,7 +600,8 @@ that usually takes years.
    git checkout -b feat/short-description
    ```
 3. **Read the ground rules** in [CONTRIBUTING.md](CONTRIBUTING.md). The five non-negotiables are
-   there, and each exists because something broke.
+   there, and each exists because something broke. Behaviour in the project's spaces is covered by
+   [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
 4. **Write the test first** where you can, and keep one task per commit.
 5. **Verify before you open the PR:**
    ```bash
@@ -603,7 +613,12 @@ that usually takes years.
    Run the suite **twice** — once with `SKETCH_FAKE_PROVIDER=1`, once with it unset.
 6. **Prove your guard works.** If you touched a gate, guard, or redaction: break it, paste the
    failing output, restore it, paste the passing output. Green output alone is not evidence.
-7. **Open the PR** with what changed, why, what you tested, and what you could *not* verify.
+7. **Open the PR** with what changed, why, what you tested, and what you could *not* verify. The
+   pull request template asks for exactly that.
+
+**Found a vulnerability?** Do not open a public issue —
+[report it privately](https://github.com/sarang-sketch/sketch/security/advisories/new). Scope, and
+the hardening that is honestly unfinished, are in [SECURITY.md](SECURITY.md).
 
 ### The five rules that are not style preferences
 
@@ -640,6 +655,8 @@ terms. Say "seam" where it is a seam and "stub" where it is a stub — in code, 
 | [architecture.md](architecture.md) | Layers, seams, state directory, data flow, technology boundaries |
 | [PRIVACY.md](PRIVACY.md) | Every outbound path in the source, and the tests that enforce it |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Ground rules, verification ritual, environment quirks |
+| [SECURITY.md](SECURITY.md) | Private reporting, what is in scope, what hardening is unfinished |
+| [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | How we behave in issues, PRs, and reviews |
 | [EXTENSIBILITY.md](EXTENSIBILITY.md) | What is a real extension contract and what is closed |
 | [PACKAGING.md](PACKAGING.md) | Native matrix, size budget, retained artifact evidence |
 | [RELEASES.md](RELEASES.md) | Release provenance, and what it is *not* |

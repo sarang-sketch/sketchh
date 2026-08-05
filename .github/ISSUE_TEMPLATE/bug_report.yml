@@ -1,0 +1,83 @@
+name: Bug report
+description: Something behaves differently from what the docs or the UI claim.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Not for vulnerabilities.** Use
+        [private reporting](https://github.com/sarang-sketch/sketch/security/advisories/new) instead.
+
+        **Redact before you paste.** No API keys, private repository names, or customer paths in
+        logs or screenshots.
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Where it happens
+      options:
+        - Cowork (agent surface)
+        - Code (IDE surface)
+        - Engine / CLI (packages/core)
+        - Native host (Tauri commands, packaged app)
+        - Build, tests, or CI
+        - Docs
+    validations:
+      required: true
+  - type: dropdown
+    id: how
+    attributes:
+      label: How you were running it
+      options:
+        - Packaged app (installer)
+        - npm run dev:desktop (Vite dev server)
+        - npm run tauri dev
+        - node packages/core/dist/cli.js
+        - Tests only
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected, and where that expectation came from
+      description: Quote the doc line, the UI label, or the test that says it should work this way.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What actually happened
+      description: Exact error text and exit codes beat a paraphrase. Redact secrets.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. …
+        2. …
+        3. …
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: OS, Node version, and commit
+      placeholder: "Windows 11, Node 22.11.0, commit a983300"
+    validations:
+      required: true
+  - type: input
+    id: provider
+    attributes:
+      label: Model provider, if relevant
+      description: Kind and model only — never the key.
+      placeholder: "Ollama, llama3.2 (local)"
+  - type: checkboxes
+    id: hygiene
+    attributes:
+      label: Before filing
+      options:
+        - label: I ran `npm run build` before `npm test` (a cold `dist` silently skips 20 CLI tests)
+        - label: I searched existing issues
+        - label: This paste contains no credential, private path, or private repository name
+          required: true

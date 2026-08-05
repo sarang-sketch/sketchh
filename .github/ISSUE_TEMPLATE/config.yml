@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Report a security vulnerability (private)
+    url: https://github.com/sarang-sketch/sketch/security/advisories/new
+    about: Never file a vulnerability as a public issue. This opens a private advisory instead.
+  - name: Contributing guide
+    url: https://github.com/sarang-sketch/sketch/blob/main/CONTRIBUTING.md
+    about: Setup, the five rules, and what to run before opening a pull request.
