@@ -421,6 +421,7 @@ export class StdioSketchClient implements SketchClient {
         : {}),
       ...(options.runId !== undefined ? { runId: options.runId } : {}),
       ...(options.interactive !== undefined ? { interactive: options.interactive } : {}),
+      ...(options.rememberRun !== undefined ? { rememberRun: options.rememberRun } : {}),
       ...(options.root !== undefined ? { root: options.root } : this.root !== undefined ? { root: this.root } : {}),
       ...(options.reviewEdits !== undefined ? { reviewEdits: options.reviewEdits } : {}),
       // Omitted means the single-agent path, byte for byte what this transport sent before

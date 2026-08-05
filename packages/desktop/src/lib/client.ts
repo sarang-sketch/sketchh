@@ -587,6 +587,15 @@ export interface RunOptions {
    */
   interactive?: boolean
   /**
+   * Write what this run established into the project's memory when it finishes.
+   *
+   * OMITTED means nothing is written, which is the engine's default: a run must not have a
+   * side effect on somebody's repository unless the caller asked for it. The desktop asks,
+   * because a project that only remembers what a human typed into a panel does not
+   * compound.
+   */
+  rememberRun?: boolean
+  /**
    * Which strategy to run under. OMITTED is the single-agent path, unchanged.
    *
    * Naming one — including `single` — opts into the dispatcher and its ladder record.

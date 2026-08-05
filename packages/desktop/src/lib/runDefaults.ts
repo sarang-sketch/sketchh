@@ -61,7 +61,23 @@ export const DESKTOP_RUN_DEFAULTS = {
     maxUsd: 2,
     onBreach: 'stop',
   },
-} as const satisfies Pick<RunOptions, 'contextBudgetTokens' | 'budget'>
+
+  /**
+   * Write what each finished run established into the project's memory.
+   *
+   * On for the desktop and off in the engine, for the same reason the other two defaults
+   * are: the engine serves the eval harness, which scores thousands of runs whose plans and
+   * verify outcomes are fixture noise, and it must not write to anybody's repository as a
+   * side effect of being called. A desktop run is a person working on their own project,
+   * and "each project gets smarter as you work on it" is not true unless something writes.
+   *
+   * What gets written is narrow and derived, never summarised or model-generated, and it is
+   * keyed so a later run supersedes the earlier one instead of accumulating duplicates. It
+   * lands in the project's own memory log, which is append-only and reviewable in the
+   * Memory panel.
+   */
+  rememberRun: true,
+} as const satisfies Pick<RunOptions, 'contextBudgetTokens' | 'budget' | 'rememberRun'>
 
 /**
  * Apply the desktop defaults under any explicit choices the caller made.
@@ -73,6 +89,7 @@ export function withDesktopRunDefaults(overrides: RunOptions = {}): RunOptions {
   return {
     contextBudgetTokens: DESKTOP_RUN_DEFAULTS.contextBudgetTokens,
     budget: { ...DESKTOP_RUN_DEFAULTS.budget },
+    rememberRun: DESKTOP_RUN_DEFAULTS.rememberRun,
     ...overrides,
   }
 }

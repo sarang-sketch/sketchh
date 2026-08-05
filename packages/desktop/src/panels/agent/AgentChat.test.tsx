@@ -93,6 +93,8 @@ describe('AgentChat provider selection', () => {
     expect(options?.contextBudgetTokens).toBeGreaterThan(0)
     expect(options?.budget).toEqual({ ...DESKTOP_RUN_DEFAULTS.budget })
     expect(options?.budget?.onBreach).toBe('stop')
+    // Without this the project never remembers anything it was not told by hand.
+    expect(options?.rememberRun).toBe(true)
   })
 
   it('resolves the stored key for the selected provider at invocation time', async () => {

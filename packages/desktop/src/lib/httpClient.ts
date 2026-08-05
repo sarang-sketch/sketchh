@@ -112,6 +112,7 @@ export class HttpSketchClient implements SketchClient {
         : {}),
       ...(options.runId !== undefined ? { runId: options.runId } : {}),
       ...(options.interactive !== undefined ? { interactive: options.interactive } : {}),
+      ...(options.rememberRun !== undefined ? { rememberRun: options.rememberRun } : {}),
       ...(options.root !== undefined ? { root: options.root } : {}),
       ...(options.reviewEdits !== undefined ? { reviewEdits: options.reviewEdits } : {}),
       // Omitted means the single-agent path, unchanged. See the note on the stdio transport.
