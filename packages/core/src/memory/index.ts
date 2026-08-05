@@ -34,6 +34,12 @@ export {
   asMemoryOp,
   memoryDir,
 } from './store.js'
+export {
+  ingestRunMemory,
+  PLAN_MEMORY_KEY,
+  VERIFICATION_MEMORY_KEY,
+} from './ingest.js'
+export type { IngestResult } from './ingest.js'
 export { MemoryStoreRegistry } from './registry.js'
 export type { MemoryStoreFactory, MemoryStoreRegistration } from './registry.js'
 export type {

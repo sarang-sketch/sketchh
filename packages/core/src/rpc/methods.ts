@@ -753,8 +753,15 @@ async function run(params: Record<string, unknown>, ctx: MethodContext): Promise
     // is the record: a `strategy_selected` ladder under a dispatch id saying which strategy
     // was tried and which succeeded. That is what `escalate` needs and what the AI Team
     // panel renders.
-    if (strategy === undefined) return await runTask(task, loopDeps)
+    if (strategy === undefined) {
+      return await ingestAfter(root, params, ctx, await runTask(task, loopDeps))
+    }
 
+    // NO INGESTION ON THE DISPATCHER PATH. A `DispatchResult` has a `dispatchId`, not a
+    // run id, and its `events` are the dispatcher's own slice rather than any sub-run's —
+    // so ingesting here would file a plan and a verify outcome it cannot see under an id
+    // that is not a run. Getting that right needs a decision about which attempt's facts
+    // are the project's, which is a spec question, not something to guess at here.
     return await dispatch(task, {
       ...loopDeps,
       strategy,
@@ -917,6 +924,47 @@ async function openToolLayerFor(
 // are reads. `memory-remember` and `memory-supersede` are user actions, and the second
 // requires a reason on the wire — there is no way to close an entry silently, because
 // "superseded, no reason given" is indistinguishable from a bug months later.
+
+/**
+ * Write what a finished run established into project memory, when the caller asked.
+ *
+ * OPT-IN through `params.rememberRun`. Off by default because writing to a user's project
+ * memory is a side effect on their repository, and the eval harness scores thousands of
+ * runs whose plans and verify outcomes are fixture noise, not project knowledge.
+ *
+ * NEVER FAILS THE RUN. The run already happened and its result is already correct; losing
+ * a memory write is a smaller problem than turning a successful run into an error, so a
+ * failure is logged and the result passes through untouched.
+ */
+async function ingestAfter<T extends { runId: string; events: SketchEvent[] }>(
+  root: string,
+  params: Record<string, unknown>,
+  ctx: MethodContext,
+  result: T,
+): Promise<T> {
+  if ((optionalBoolean(params, 'rememberRun', 'params.rememberRun') ?? false) !== true) return result
+  try {
+    const task = readTask(params['task'], 'params.task')
+    // The plan's PROSE is on disk, not in `plan_written` (which carries the directory and
+    // the document ids). Read it from the same writer the run wrote it with, so ingestion
+    // files what the run actually committed to rather than a shape guessed from an event.
+    const planDocuments = await new PlanWriter({ baseDir: root }).readPlan(result.runId)
+    const outcome = await memory.ingestRunMemory({
+      store: memoryStore(root, params, ctx),
+      runId: result.runId,
+      events: result.events,
+      task: task.prompt,
+      ...(planDocuments.prd !== undefined ? { plan: planDocuments.prd } : {}),
+    })
+    if (outcome.reason !== null) ctx.log(`memory not written for ${result.runId}: ${outcome.reason}`)
+    else ctx.log(`memory written for ${result.runId}: ${outcome.written.length} entry/entries`)
+  } catch (error) {
+    ctx.log(
+      `memory ingestion failed for ${result.runId}: ${error instanceof Error ? error.message : String(error)}`,
+    )
+  }
+  return result
+}
 
 /** The store selected for this call. No selector preserves the Jsonl default. */
 function memoryStore(root: string, params: Record<string, unknown>, ctx: MethodContext): memory.MemoryStore {

@@ -296,8 +296,14 @@ architecture generator and the Live Architecture panel.
   that id so a Stop control works before `run_started` arrives, and the run emits its own
   `run_failed{reason:"aborted"}`. The chat panel's send control becomes Stop while a run is live.
 - Repository retrieval stays opt-in through `contextBudgetTokens` in the engine; the desktop now
-  supplies a default from `DESKTOP_RUN_DEFAULTS`. Versioned memory is still NOT automatically
-  ingested from or injected into every live run.
+  supplies a default from `DESKTOP_RUN_DEFAULTS`.
+- Memory can now be WRITTEN from a finished run through `params.rememberRun`, which files the run's
+  verification outcome and its on-disk plan, both `source: 'run'` and both keyed so a later run
+  supersedes rather than accumulating. Deliberately narrow: no model call, no summarising, no `bug`
+  or `architecture` entries, because those would require judgement this path is not entitled to make.
+  Still open: nothing INJECTS memory into a live run (the `assembleContext({ memory })` seam is still
+  unpassed by the `run` method), the desktop does not yet set `rememberRun`, and the dispatcher path
+  does not ingest because a `DispatchResult` carries a dispatch id rather than a run id.
 - Budgets are enforced when configured, the `run` method now carries a strictly validated `budget`,
   and the desktop supplies a default ceiling. There is no UI yet for changing that ceiling.
 - Ghost completions are implemented but off by default.
