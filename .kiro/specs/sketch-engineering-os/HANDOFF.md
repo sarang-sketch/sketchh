@@ -311,7 +311,13 @@ architecture generator and the Live Architecture panel.
   rather than a run id and its events are the dispatcher's own slice.
 - Budgets are enforced when configured, the `run` method now carries a strictly validated `budget`,
   and the desktop supplies a default ceiling. There is no UI yet for changing that ceiling.
-- Ghost completions are implemented but off by default.
+- Ghost completions are implemented, off by default, and **inert in production**: `CodeEditor` takes
+  a `completionProvider` seam and only the tests supply one, so enabling the toggle in the shipped app
+  produces nothing. The blocker is NOT the missing desktop spend default, which now exists — that
+  default bounds a RUN, and a completion is not a run, so it would not pass through the loop's guard
+  at all. What is missing is an engine completion capability plus spend accounting for high-frequency
+  per-keystroke calls. Wiring a provider without that would put an unbounded stream of model calls
+  behind a keystroke, so this stays unowned and needs a spec decision, not wiring.
 - Hosted credentials are persisted by the Rust host, and `resolve_api_key` now resolves ONE stored
   key per run so a saved key reaches the engine at invocation time (Requirement 17.4). That value
   crosses the IPC boundary into the webview, which is a deliberate, documented concession over
