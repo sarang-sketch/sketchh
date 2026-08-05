@@ -412,12 +412,18 @@ describe('engine writes — Requirement 15.3', () => {
       expect(screen.getByText('Reload from disk')).toBeDefined()
     })
     fireEvent.click(screen.getByText('Reload from disk'))
+    // Both halves are awaited together. The model is a PROJECTION of state, so it lands
+    // in a later commit than the state write — asserting it the instant state agrees is
+    // a race on scheduling, not a check on behaviour, and it failed exactly that way on
+    // a slower CI runner while passing locally.
     await waitFor(() => {
       expect(snapshot().files[A]!.content).toBe('theirs')
+      expect(monaco.model(A).getValue()).toBe('theirs')
     })
+    // Asserted only AFTER the sync has provably reached the model, which is what makes it
+    // load-bearing: had `sync` reported its own `setValue` back as a user edit, the buffer
+    // would be dirty again by now.
     expect(snapshot().files[A]!.isDirty).toBe(false)
-    // The reload reached the model too, and was not reported back as a user edit.
-    expect(monaco.model(A).getValue()).toBe('theirs')
     expectOneCache(A)
   })
 
