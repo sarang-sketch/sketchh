@@ -49,8 +49,18 @@ hidden in a footnote.
 The agent-first workspace. Delegate a task, watch it work, review artifacts, replay the timeline.
 
 <div align="center">
-  <img src="docs/assets/sketch-agent-cowork.png" alt="Sketch Cowork — the agent surface: task input, projects, artifacts, scheduled runs, timeline, agent console, and model selector" width="100%" />
+  <img src="docs/assets/sketch-agent-cowork.png" alt="Sketch Cowork — the agent surface: New task, Projects, Artifacts, Scheduled, Timeline, Agent Console and Customize in the sidebar; the centre asks 'What can I take off your plate?' above a prompt box reporting 'No model configured', a 'Work in a project or folder' button, and a task picker" width="100%" />
 </div>
+
+- **New task** starts a delegated run; **Recents** keeps every prior conversation.
+- **Artifacts** holds what a run produced. **Timeline** and **Agent Console** are projections of the
+  event log, so you can replay exactly what happened rather than trusting a summary.
+- The composer reports **`No model configured`** when nothing is configured. It does not silently
+  fall back to a default — an unconfigured run is refused, not faked.
+- **Work in a project or folder** scopes the agent to a real directory through the native picker.
+
+<details>
+<summary>Text layout of the same screen</summary>
 
 ```
 ┌───────────────────────────────────────────────────────────────────────────────┐
@@ -75,14 +85,30 @@ The agent-first workspace. Delegate a task, watch it work, review artifacts, rep
                                                           ✦ Cost      AGENT
 ```
 
+</details>
+
 ### 2. Code — the IDE surface
 
 The full engineering surface. AI Team shows which of the 13 roles this project can actually verify,
 and says so when it cannot.
 
 <div align="center">
-  <img src="docs/assets/sketch-ide-code.png" alt="Sketch IDE — the code surface: AI Team strategy panel, editor, allowlisted terminal, and agent sidebar" width="100%" />
+  <img src="docs/assets/sketch-ide-code.png" alt="Sketch IDE — the code surface: the AI TEAM panel showing 5 of 13 roles verifiable with the single, plan-then-code and swarm strategies and a note explaining that swarm is off, a centre pane offering Open Folder and Clone Repository, an allowlisted no-shell terminal, and the Agent sidebar" width="100%" />
 </div>
+
+Look closely at that AI Team panel, because it is the whole design philosophy in one screenshot:
+
+- **"5 of 13 roles verifiable in this project"** — the panel refuses to pretend. A role with no
+  distinct verification signal is reported as unverifiable instead of being shown as working.
+- **`single` is `DEFAULT`**, and every measurement is compared against it.
+- **`swarm` is off**, and the panel says exactly why: no pass@k lift has been measured in this
+  project, so the cheaper default stands.
+- The terminal labels itself **"allowlisted, no shell — not a sandbox."** That is the honest
+  description of what the boundary actually is.
+- With no folder open, the terminal says so rather than presenting a fake prompt.
+
+<details>
+<summary>Text layout of the same screen</summary>
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────────────┐
@@ -111,9 +137,7 @@ and says so when it cannot.
                                               TSX  Ln 42, Col 15  UTF-8  ✦ Cost  IDE
 ```
 
-> **Note on the images:** the two `docs/assets/*.png` files are the real product screenshots. If you
-> are viewing a fork that did not fetch them, the ASCII layouts above describe the same surfaces
-> exactly.
+</details>
 
 ---
 
