@@ -238,23 +238,34 @@ outbound path in the source.
 
 ## Codebase at a glance
 
-Measured on this repository, first-party source only — `dist/`, `target/`, `node_modules/`, and
-generated bundles excluded.
+Measured on the tracked tree, so `dist/`, `target/`, `node_modules/` and generated bundles cannot
+inflate it — none of them are tracked. **Code** means `.ts`, `.tsx`, `.rs`, `.mjs`, `.css`, `.html`,
+`.yml`; **test** means any `*.test.ts(x)` plus everything under `packages/core/test/`. Lines are
+physical lines, blanks and comments included.
 
 | Metric | Count |
 |---|---:|
-| First-party source + test files | **370** |
-| Source files (`src/`, `scripts/`, CI) | **302** |
-| **Lines of source code** | **64,418** |
-| Test files | **121** |
-| Lines of test code | **37,368** |
-| Core engine tests passing | **1,087** (59 files) |
-| Desktop tests passing | **523** (55 files) |
-| Rust policy + credential tests | **32** |
+| First-party code files | **374** |
+| Source files | **259** |
+| **Lines of source code** | **59,186** |
+| Test files | **115** |
+| Lines of test code | **41,564** |
+| Core engine tests passing | **1,087** (59 suites) |
+| Desktop tests passing | **523** (55 suites) |
+| Rust policy + credential tests | **32** (standalone `rustc --test`) |
 | Runtime dependencies in `@sketch/core` | **0** |
 
-Roughly **0.58 lines of test for every line of source**, and the tests are mostly invariant gates
-rather than snapshots.
+**0.70 lines of test for every line of source**, and the tests are mostly invariant gates rather than
+snapshots.
+
+Reproduce the file and line counts yourself — no tool to install, it reads only what git tracks:
+
+```bash
+node -e "const{execSync}=require('node:child_process'),fs=require('node:fs');const all=execSync('git ls-files').toString().split('\n').filter(p=>/\.(ts|tsx|rs|mjs|css|html|yml)$/.test(p));const isTest=p=>/\.test\.tsx?$/.test(p)||p.startsWith('packages/core/test/');const L=a=>a.reduce((n,p)=>n+fs.readFileSync(p,'utf8').split('\n').length-1,0);const t=all.filter(isTest),s=all.filter(p=>!isTest(p));console.log({files:all.length,src:s.length,srcLines:L(s),test:t.length,testLines:L(t)})"
+```
+
+The test totals come from the suites themselves: `npm test -w @sketch/core` and
+`npm test -w @sketch/desktop`.
 
 ### Languages and stack
 
