@@ -70,7 +70,7 @@ export default function IdeChatSidebar() {
       <div className={styles.mainCanvas}>
         <div className={styles.brandWatermark}>
           <Sparkles className={styles.sparkleLogo} size={24} />
-          <h2 className={styles.watermarkTitle}>Sketch Aman</h2>
+          <h2 className={styles.watermarkTitle}>Sketch</h2>
         </div>
 
         {/* Chat Messages */}
@@ -78,7 +78,7 @@ export default function IdeChatSidebar() {
           {state.chatMessages.map((msg) => (
             <div key={msg.id} className={`${styles.messageRow} ${msg.role === 'user' ? styles.userRow : styles.agentRow}`}>
               <div className={styles.messageBubble}>
-                <span className={styles.roleLabel}>{msg.role === 'user' ? 'You' : 'Sketch Aman Agent'}</span>
+                <span className={styles.roleLabel}>{msg.role === 'user' ? 'You' : 'Sketch Agent'}</span>
                 <p className={styles.msgText}>{msg.content}</p>
               </div>
             </div>

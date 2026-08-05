@@ -35,7 +35,7 @@ skills, and plans are separate projections/artifacts under the same project-loca
 ```
 sketch/
 ├── package.json                       # npm workspaces root
-├── architecture.md  trd.md  prd.md   # repository-level documents
+├── architecture.md  README.md        # repository-level documents
 └── packages/
     ├── core/                          # @sketch/core
     │   ├── src/                       # engine and replaceable contracts

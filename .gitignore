@@ -36,3 +36,24 @@ Thumbs.db
 
 # Local screen recordings / large media captures
 *.mp4
+
+# Internal working notes, audits and agent scratch files.
+# The published documentation set is README, CONTRIBUTING, architecture, PRIVACY,
+# EXTENSIBILITY, PACKAGING, RELEASES and OFFLINE-PROOF. Everything below is a
+# private planning or review artifact and is deliberately not part of the repo.
+sol.md
+antigravity-review.md
+codex-review.md
+claude.md
+NEED-TO-DO.md
+tasks-executed.md
+rules.md
+prd.md
+trd.md
+what-we-are-building.md
+what-not-we-are-building.md
+
+# Local developer helper scripts (machine-specific)
+install_sdk.bat
+packages/desktop/build.bat
+.kiro/specs/sketch-engineering-os/HANDOFF.md

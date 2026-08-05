@@ -35,30 +35,33 @@ export function TitleBar() {
     </div>
   );
 
-  const handleMinimize = async () => {
+  const handleMinimize = async (e: React.MouseEvent) => {
+    e.stopPropagation();
     try {
       const { getCurrentWindow } = await import('@tauri-apps/api/window');
       await getCurrentWindow().minimize();
-    } catch {
-      // Browser fallback
+    } catch (err) {
+      console.error('Failed to minimize:', err);
     }
   };
 
-  const handleMaximize = async () => {
+  const handleMaximize = async (e: React.MouseEvent) => {
+    e.stopPropagation();
     try {
       const { getCurrentWindow } = await import('@tauri-apps/api/window');
       await getCurrentWindow().toggleMaximize();
-    } catch {
-      // Browser fallback
+    } catch (err) {
+      console.error('Failed to maximize:', err);
     }
   };
 
-  const handleClose = async () => {
+  const handleClose = async (e: React.MouseEvent) => {
+    e.stopPropagation();
     try {
       const { getCurrentWindow } = await import('@tauri-apps/api/window');
       await getCurrentWindow().close();
-    } catch {
-      // Browser fallback
+    } catch (err) {
+      console.error('Failed to close:', err);
     }
   };
 

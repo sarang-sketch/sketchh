@@ -28,7 +28,8 @@ attestations are independently verified. Workflow configuration is not signed-re
 6. GitHub attests every validated release asset. The same job verifies every attestation before
    `gh release create --verify-tag` publishes anything.
 7. Retain the release URL, tag, commit, workflow run, installer names/sizes/digests, canonical manifest
-   digest, and independent verifier output in `tasks-executed.md` before marking task 12.3 complete.
+   digest, and independent verifier output in the maintainer's release record before declaring the
+   release verified.
 
 ## Consumer verification
 

@@ -70,7 +70,7 @@ export default function EditorArea() {
             <span className={styles.agLogoText}>S</span>
           </div>
 
-          <h1 className={styles.agTitle}>Sketch Aman IDE</h1>
+          <h1 className={styles.agTitle}>Sketch IDE</h1>
 
           <div className={styles.agBtnRow}>
             <button className={styles.agPrimaryBtn} onClick={() => void actions.openFolder()}>

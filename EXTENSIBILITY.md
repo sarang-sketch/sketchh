@@ -1,6 +1,6 @@
 # Extensibility
 
-This is the completed Phase 12.5 audit for Requirement 26.5. Every named category has a production-consumed runtime-configuration, filesystem-discovery, or host code-registration contract. These contracts are **not** a plugin store, package installer, or filesystem loader for executable plugins; `what-not-we-are-building.md` keeps a plugin store out of v1.
+This audit records how Sketch may be extended. Every named category has a production-consumed runtime-configuration, filesystem-discovery, or host code-registration contract. These contracts are **not** a plugin store, package installer, or filesystem loader for executable plugins: an arbitrary executable plugin loader is deliberately out of scope for v1.
 
 ## Contract vocabulary
 

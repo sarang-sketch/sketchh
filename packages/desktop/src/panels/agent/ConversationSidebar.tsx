@@ -115,7 +115,7 @@ export const ConversationSidebar: React.FC = () => {
       <div className={styles.bottomFooter}>
         <div className={styles.userBadge}>
           <div className={styles.orangeDot}>S</div>
-          <span className={styles.userNameText}>Sketch Aman</span>
+          <span className={styles.userNameText}>Sketch</span>
           <ChevronDown size={13} className={styles.chevronIcon} />
         </div>
       </div>

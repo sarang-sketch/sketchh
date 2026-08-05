@@ -237,7 +237,7 @@ export const AgentChat: React.FC = () => {
           
           {/* Headline with Asterisk/Sparkle */}
           <div className={styles.headerTitleRow}>
-            <span className={styles.asteriskIcon}>✳</span>
+            <span className={styles.asteriskIcon} style={{ background: '#E8631A', color: '#fff', borderRadius: '6px', padding: '2px 8px', fontWeight: 'bold', fontSize: '1.2rem' }}>S</span>
             <h1 className={styles.heroTitle}>What can I take off your plate?</h1>
           </div>
           <p className={styles.heroSubtitle}>Learn how to use Cowork safely.</p>
@@ -336,7 +336,7 @@ export const AgentChat: React.FC = () => {
             
             <div className={`${styles.messageBubble} ${msg.role === 'user' ? styles.userBubble : styles.assistantBubble}`}>
               {msg.role === 'agent' && (
-                <div className={styles.agentName}>Sketch Cowork</div>
+                <div className={styles.agentName}>Sketch</div>
               )}
               
               <MessageContent content={msg.content} />

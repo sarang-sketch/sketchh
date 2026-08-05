@@ -251,11 +251,29 @@ describe('Requirement 17.7 — the window loads no subresource from off this mac
     for (const hint of ['preconnect', 'dns-prefetch', 'prefetch', 'preload', 'modulepreload']) {
       expect(code.toLowerCase(), `index.html declares rel="${hint}"`).not.toContain(hint)
     }
-    // And the only tag left that loads anything is the local module entry point.
+    // Every remaining tag that loads anything must be an ALLOWLISTED, ROOT-RELATIVE
+    // asset served by the app itself. The list is explicit rather than a count, so
+    // adding a tag is a deliberate edit here and not something a diff can smuggle in.
+    //
+    // The per-tag `//` assertion is the property that actually matters and it applies
+    // to every entry: it rejects `https://host/x`, `http://host/x` and the
+    // protocol-relative `//host/x` alike, so no tag can address another machine.
+    // Order-independent: document order is a formatting detail, but the SET of things
+    // the window loads is the security property.
+    const ALLOWED_LOCAL_SUBRESOURCES = ['src="/src/main.tsx"', 'href="/favicon.svg"']
     const tags = code.match(HTML_SUBRESOURCE_TAG) ?? []
-    expect(tags).toHaveLength(1)
-    expect(tags[0]).toContain('src="/src/main.tsx"')
-    expect(tags[0]).not.toContain('//')
+    expect(tags).toHaveLength(ALLOWED_LOCAL_SUBRESOURCES.length)
+    for (const tag of tags) {
+      const matched = ALLOWED_LOCAL_SUBRESOURCES.filter((allowed) => tag.includes(allowed))
+      expect(matched, `index.html loads an unlisted subresource: ${tag}`).toHaveLength(1)
+      // Same rule as the repository-wide scan: no scheme, no protocol-relative host.
+      expect(tag, `index.html subresource addresses another host: ${tag}`).not.toContain('//')
+    }
+    // Every allowlisted asset is actually present, so deleting the entry point cannot
+    // pass by making the set trivially smaller.
+    for (const allowed of ALLOWED_LOCAL_SUBRESOURCES) {
+      expect(tags.some((tag) => tag.includes(allowed)), `index.html is missing ${allowed}`).toBe(true)
+    }
   })
 })
 

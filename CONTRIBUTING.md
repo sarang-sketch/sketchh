@@ -1,8 +1,27 @@
 # Contributing to Sketch
 
-Requirement 26.3 asks for this file alongside `README.md`, `PRIVACY.md` and `LICENSE`. It is short
-on purpose: the long version lives in `NEED-TO-DO.md` (the working plan) and
-`.kiro/specs/sketch-engineering-os/` (the contract).
+Contributions are welcome. Read this file before opening a pull request — the rules below are short,
+and each one exists because something broke.
+
+## Review policy — please read this first
+
+> **Every pull request is reviewed personally by the maintainer.** There is no bot merge, no
+> auto-approve, and no second reviewer.
+>
+> **Review will take time.** Sometimes days, and longer when a change touches security, the event
+> log, capabilities, the native host, or any gate. A slow review is not disinterest: this project's
+> whole value is that its guarantees are real, and that only stays true if one person actually reads
+> every line that changes them.
+>
+> Your PR has not been forgotten. You will get specifics — the code read, the change run, and the
+> guards you touched deliberately broken to confirm they still hold.
+
+To make review fast for both of us:
+
+- **Open an issue first** for anything non-trivial, and agree the approach before writing code.
+- **One task per commit**, and one concern per pull request. A 40-file PR mixing a refactor with a
+  behaviour change will sit unreviewed far longer than three focused ones.
+- **Say what you could not verify.** An honest gap is useful; a silent one costs trust.
 
 ## Setup
 
