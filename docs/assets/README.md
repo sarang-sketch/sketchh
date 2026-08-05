@@ -16,13 +16,22 @@ UI changes.
 From the repository root:
 
 ```powershell
+# both surfaces
 ./docs/assets/add-screenshots.ps1 -Agent "C:\path\to\cowork.png" -Ide "C:\path\to\ide.png"
+
+# just one, when you have retaken a single screen
+./docs/assets/add-screenshots.ps1 -Agent "C:\path\to\cowork.png"
 ```
 
-The script copies both captures into place under the exact names above, verifies each one is a real
-PNG or JPEG by its magic bytes, runs the egress guard, then commits and pushes. Add `-NoPush` to stop
-before pushing. It refuses rather than committing a broken image, because a renamed error page or a
-zero-byte placeholder passes a size check and then renders as a broken image on GitHub.
+The script copies each capture into place under the exact name above, verifies it is a real PNG or
+JPEG by its magic bytes, runs the egress guard, then commits and pushes. Add `-NoPush` to stop before
+pushing.
+
+Both switches are optional so one surface can be replaced without re-supplying the other — retaking a
+single screen is the common case, and demanding both invites passing a stale file just to satisfy the
+signature. The script refuses rather than committing a broken image, because a renamed error page or a
+zero-byte placeholder passes a size check and then renders as a broken image on GitHub. If a capture is
+byte-identical to what is already committed, it says so and commits nothing.
 
 Doing it by hand instead is fine — save both files here under those names, then check the rendered
 README before pushing.

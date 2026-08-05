@@ -8,12 +8,16 @@
 #
 #   ./docs/assets/add-screenshots.ps1 -Agent "C:\path\to\cowork.png" -Ide "C:\path\to\ide.png"
 #
+# Either switch may be omitted, so one surface can be replaced without re-supplying the
+# other. Retaking a single screenshot is the common case; demanding both invites passing a
+# stale file just to satisfy the signature.
+#
 # Add -NoPush to stage and commit without pushing.
 
 [CmdletBinding()]
 param(
-  [Parameter(Mandatory = $true)][string] $Agent,
-  [Parameter(Mandatory = $true)][string] $Ide,
+  [string] $Agent,
+  [string] $Ide,
   [switch] $NoPush
 )
 
@@ -22,10 +26,13 @@ $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $assets = Join-Path $repo 'docs\assets'
 
-$targets = @(
-  @{ Source = $Agent; Name = 'sketch-agent-cowork.png'; Label = 'Cowork (agent surface)' }
-  @{ Source = $Ide;   Name = 'sketch-ide-code.png';     Label = 'Code (IDE surface)' }
-)
+$targets = @()
+if ($Agent) { $targets += @{ Source = $Agent; Name = 'sketch-agent-cowork.png'; Label = 'Cowork (agent surface)' } }
+if ($Ide)   { $targets += @{ Source = $Ide;   Name = 'sketch-ide-code.png';     Label = 'Code (IDE surface)' } }
+
+if ($targets.Count -eq 0) {
+  throw 'Nothing to do. Pass -Agent and/or -Ide with a path to a capture.'
+}
 
 # PNG and JPEG magic bytes. A renamed HTML error page or a zero-byte placeholder passes a
 # size check and then renders as a broken image on GitHub, so check the signature instead.
@@ -55,6 +62,13 @@ foreach ($t in $targets) {
   }
 
   $dest = Join-Path $assets $t.Name
+
+  # Copying a file onto itself throws, and would be a silent no-op if it did not.
+  if ((Resolve-Path -LiteralPath $t.Source).Path -eq $dest) {
+    Write-Host "skip  $($t.Label) is already in place" -ForegroundColor DarkGray
+    continue
+  }
+
   Copy-Item -LiteralPath $t.Source -Destination $dest -Force
   $kb = [math]::Round((Get-Item -LiteralPath $dest).Length / 1KB, 1)
   Write-Host "ok  $($t.Label) -> docs/assets/$($t.Name) ($kb KB, $kind)" -ForegroundColor Green
@@ -69,8 +83,16 @@ try {
   npm test -w @sketch/desktop -- src/privacy.egress.test.ts
   if ($LASTEXITCODE -ne 0) { throw 'the egress guard failed. Nothing was committed.' }
 
-  git add docs/assets/sketch-agent-cowork.png docs/assets/sketch-ide-code.png README.md
-  git commit -m "docs: add the Cowork and IDE screenshots to the README"
+  foreach ($t in $targets) { git add ("docs/assets/" + $t.Name) }
+  git add README.md
+
+  if (-not (git diff --cached --name-only)) {
+    Write-Host "`nno change: the captures are byte-identical to what is committed." -ForegroundColor Yellow
+    return
+  }
+
+  $what = ($targets | ForEach-Object { $_.Label }) -join ' and '
+  git commit -m "docs: update the README screenshot for $what"
 
   if ($NoPush) {
     Write-Host "`ncommitted. Push when ready:  git push origin main" -ForegroundColor Yellow
