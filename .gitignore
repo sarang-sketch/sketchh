@@ -56,4 +56,7 @@ what-not-we-are-building.md
 # Local developer helper scripts (machine-specific)
 install_sdk.bat
 packages/desktop/build.bat
+
+# Scratch folder for raw captures. Published screenshots live in docs/assets/.
+picture/
 .kiro/specs/sketch-engineering-os/HANDOFF.md
