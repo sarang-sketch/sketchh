@@ -302,9 +302,13 @@ architecture generator and the Live Architecture panel.
   supersedes rather than accumulating. Deliberately narrow: no model call, no summarising, no `bug`
   or `architecture` entries, because those would require judgement this path is not entitled to make.
   The desktop sets `rememberRun` by default, so a desktop project does accumulate its own record.
-  Still open: nothing INJECTS memory into a live run (the `assembleContext({ memory })` seam is still
-  unpassed by the `run` method), and the dispatcher path does not ingest because a `DispatchResult`
-  carries a dispatch id rather than a run id.
+- Memory is also READ into a live run: the `assembleContext({ memory })` seam that had sat unpassed
+  since Phase 5 is now filled by the `run` method, so the model is shown the project's current
+  decisions, standards and past bugs. It rides inside the retrieval token budget rather than as a
+  second prompt channel, is on by default whenever retrieval is on, and `recallMemory: false` opts
+  out. An unreadable store logs a reason and the run continues on code context alone.
+  Still open: the dispatcher path does not ingest, because a `DispatchResult` carries a dispatch id
+  rather than a run id and its events are the dispatcher's own slice.
 - Budgets are enforced when configured, the `run` method now carries a strictly validated `budget`,
   and the desktop supplies a default ceiling. There is no UI yet for changing that ceiling.
 - Ghost completions are implemented but off by default.

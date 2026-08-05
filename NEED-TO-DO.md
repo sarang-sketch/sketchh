@@ -240,7 +240,7 @@ phantom errors. §0.2's ordering was written before this bit, and this is the co
 | Provider settings / selector | Real key-free persisted entries and selection; a stored key is resolved per run through `resolve_api_key` and reaches the engine at invocation time | no real hosted-provider run has been made |
 | Cost guard | Enforced before calls, carried by the `run` method, and defaulted for desktop runs | no UI to change the default yet |
 | Retrieval | Graph/search/assembly are real and the desktop sends `contextBudgetTokens` by default | no UI to change the default yet |
-| Versioned memory | Persistence, hygiene, retrieval, panel, and opt-in write-back from a finished run (`rememberRun`) are real | injection into a live run still open; desktop does not set `rememberRun` yet |
+| Versioned memory | Persistence, hygiene, retrieval, panel, write-back from a finished run (`rememberRun`, on by default on the desktop), and injection into a live run inside the retrieval budget are all real | dispatcher-path ingestion still open |
 | Native/release/offline evidence | Verified installers exist from run `30936156941`; deterministic release gates exist | evidence-gated 12.2–12.3 |
 | Third-party community flywheel | Exact licensed third-party Git blob bytes pass production install/run/capture/train/promote/replay | complete (12.4); scripted-quality and no-real-provider limits remain |
 | Legacy compatibility paths | `ProviderAdapter` coexists with `ChatAdapter` | convergence unowned |

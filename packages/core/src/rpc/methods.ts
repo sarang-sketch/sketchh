@@ -686,6 +686,12 @@ async function run(params: Record<string, unknown>, ctx: MethodContext): Promise
 
   const skills = await loadRequestedSkills(root, params, task, ctx)
   const granted = await grantForRun(root, skills, ctx)
+  // Project memory travels with retrieval, because it IS context and belongs inside the
+  // same token budget. On by default whenever retrieval is on — a caller that asked to be
+  // shown the project should not have to ask separately to be shown what the project
+  // already decided — and `recallMemory: false` opts out. A project with an empty store
+  // is unaffected either way.
+  const recallMemory = optionalBoolean(params, 'recallMemory', 'params.recallMemory') ?? true
   const retrievedContext = await retrieveContextFor(
     root,
     task,
@@ -693,6 +699,7 @@ async function run(params: Record<string, unknown>, ctx: MethodContext): Promise
     contextBudgetTokens,
     events,
     ctx,
+    recallMemory ? () => memoryStore(root, params, ctx) : undefined,
   )
 
   // THE VERIFICATION CONTRACT (Requirement 4.5). Resolved from `verify.yaml` when the
@@ -1560,6 +1567,18 @@ async function resolveVerifyPolicyFor(
  * not a dead one, and a corrupt index is a live possibility (`loadRepoGraph`
  * already treats one as "no graph"). The reason is logged through `ctx.log`, which
  * is stderr on the wire, so it never contaminates the event stream on stdout.
+ *
+ * ── MEMORY IS PART OF THE CONTEXT, NOT A SECOND CHANNEL ─────────────────────
+ *
+ * `assembleContext` has had a `memory` input since Phase 5 and nothing ever filled it, so
+ * the store was write-only: a project accumulated decisions, standards and past bugs that
+ * no run ever saw. Filling the existing seam is deliberate — a separate prompt section
+ * would put memory outside the token budget that is supposed to bound the whole prompt,
+ * and memory is the FIRST thing assembly degrades, which is the right priority when a
+ * budget is tight: the code being changed matters more than the project's history of it.
+ *
+ * A digest read failure is logged and the run continues with code context alone, for the
+ * same reason retrieval failure does not fail the run.
  */
 async function retrieveContextFor(
   root: string,
@@ -1568,6 +1587,10 @@ async function retrieveContextFor(
   budgetTokens: number | undefined,
   events: EventStore,
   ctx: MethodContext,
+  // A THUNK, not a store. Resolving it eagerly would build a store for a run that never
+  // retrieves, and would turn a bad `memoryStore` id into a failure BEFORE the run instead
+  // of a logged reason — which is the opposite of "reading memory must not fail the run".
+  memoryStoreForRun?: () => memory.MemoryStore,
 ): Promise<string | undefined> {
   if (budgetTokens === undefined) return undefined
   if (!Number.isFinite(budgetTokens) || budgetTokens <= 0) {
@@ -1584,6 +1607,15 @@ async function retrieveContextFor(
     return undefined
   }
 
+  let digest = ''
+  if (memoryStoreForRun !== undefined) {
+    try {
+      digest = await memory.memoryDigest({ store: memoryStoreForRun() })
+    } catch (err) {
+      ctx.log(`project memory not included, continuing without it: ${messageOf(err)}`)
+    }
+  }
+
   try {
     const assembled = await assembleContext({
       root,
@@ -1594,6 +1626,9 @@ async function retrieveContextFor(
       skills,
       events,
       runId: task.id,
+      // Empty stays empty: assembly adds no memory section for a project that has none,
+      // rather than a heading with nothing under it.
+      ...(digest.trim() === '' ? {} : { memory: digest }),
     })
     if (assembled.text === '') {
       ctx.log('context retrieval produced nothing: no chunk matched the task prompt')
