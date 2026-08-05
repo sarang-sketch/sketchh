@@ -57,6 +57,7 @@ what-not-we-are-building.md
 install_sdk.bat
 packages/desktop/build.bat
 
-# Scratch folder for raw captures. Published screenshots live in docs/assets/.
+# Scratch folder and loose captures. Published screenshots live in docs/assets/.
 picture/
+/image.png
 .kiro/specs/sketch-engineering-os/HANDOFF.md
