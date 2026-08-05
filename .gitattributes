@@ -1,3 +1,15 @@
+# Every text file is stored LF in the index, whatever the contributor's core.autocrlf is set to.
+# Without this, a Windows clone with autocrlf=false commits CRLF and every line of the file shows as
+# changed — and a CRLF checkout of a hash-pinned skill no longer matches its digest.
+* text=auto eol=lf
+
+# Binary: never touch these bytes.
+*.png binary
+*.ico binary
+*.icns binary
+*.woff2 binary
+*.mp4 binary
+
 packages/core/registry/community/skills/dispatching-parallel-agents/LICENSE text eol=lf
 packages/core/registry/community/skills/dispatching-parallel-agents/README.md text eol=lf
 packages/core/registry/community/skills/dispatching-parallel-agents/SKILL.md text eol=lf

@@ -84,6 +84,12 @@ npm test             # must exit 0, offline, with NO API key in the environment
 Run the suite twice: once with `SKETCH_FAKE_PROVIDER=1` and once with it unset. A test that reads an
 ambient environment variable it never set makes the whole suite order-dependent.
 
+**There is no linter, on purpose.** TypeScript `strict` plus the guard tests are the gate. A root
+`lint` script used to exist and resolved to nothing — `--if-present` found no workspace `lint`, so it
+exited 0 having checked nothing. A command that always passes is worse than no command, so it was
+removed. Style is matched by reading nearby code; `.editorconfig` covers indentation and line endings.
+If you want to add a real linter, open a proposal first — it is a repository-wide change.
+
 For anything that touches secrets, the event log, provider settings, or the Tauri surface, also do
 it cold — `node_modules` and `packages/core/dist` deleted, then `npm install && npm run build &&
 npm test`. A warm `dist` has hidden a real security regression in this repository before.
