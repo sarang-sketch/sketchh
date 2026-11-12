@@ -54,6 +54,7 @@
 // Validates: Requirements 23.1, 23.2, 23.3, 23.4
 
 import { spawn } from 'node:child_process'
+import { resolveForSpawn } from './spawnTarget.js'
 // A named type import, not an inline `import('node:child_process').ChildProcess`.
 // The inline form is erased at compile time and still trips the sidecar hazard guard,
 // which reads source text and cannot know a `import(` is type-only — and it is right
@@ -335,7 +336,8 @@ export async function runLiveCheck(
 
   let child: ChildProcess
   try {
-    child = spawn(check.cmd, check.args ?? [], {
+    const target = resolveForSpawn(check.cmd, check.args ?? [])
+    child = spawn(target.cmd, target.args, {
       cwd: check.cwd ?? options.root,
       // No shell, like every other spawn in this package.
       shell: false,

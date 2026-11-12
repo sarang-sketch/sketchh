@@ -6,17 +6,23 @@
 // rendering. Diagnostics — skill load failures, missing skills, the fatal handler
 // — go to stderr through `writeErr`.
 //
-// SEQUENTIAL, IN ARRIVAL ORDER. Requests are queued and handled one at a time.
-// Two consequences, both deliberate:
-//   * every event frame written between a request and its response belongs to
-//     that request, so a client can attribute streamed progress without needing
-//     the `requestId` field (it gets it anyway);
-//   * two overlapping `run` requests cannot interleave — the second starts after
-//     the first responds, and their responses come back in request order.
-// The alternative, concurrent handling, would make `id` correlation the client's
-// only anchor and would let two runs fight over the same project root and plan
-// directory. A caller that wants parallelism spawns a second process, which is
-// also the only way to get real isolation.
+// TWO LANES. Long-running, project-mutating work — `run`, `eval`, `skill-train` —
+// is queued and handled one at a time, in arrival order, exactly as every request
+// used to be: two overlapping runs cannot fight over the same project root and plan
+// directory, and their responses come back in request order.
+//
+// EVERYTHING ELSE IS ANSWERED IMMEDIATELY, even while a run is in flight. This is
+// not an optimisation, it is what makes the control plane exist at all: `cancel`
+// and `reply` address a run that is STILL OPEN, so a server that queued them behind
+// that run could never deliver them — the packaged app's Stop button and its answer
+// box were dead for exactly that reason, while the concurrent HTTP dev bridge masked
+// it. The same queue also froze every panel (git, search, cost, settings) for the
+// whole length of a run.
+//
+// Correlation therefore rests on `id` and on the `requestId` every event frame
+// carries, which both clients already use. An event frame written while two
+// requests are open belongs to the request named in its `requestId`, not to
+// whichever response happens to come next.
 //
 // RESILIENCE (Requirements 12.3, 12.4). Malformed JSON, an unknown method, bad
 // params, and a handler that throws all produce an error frame and NOTHING else:
@@ -39,6 +45,7 @@ import { sanitizePayload } from '../events/index.js'
 import { isSensitiveKeyName, MIN_SECRET_LENGTH } from '../secrets/index.js'
 import { encodeFrame, parseRequest } from './frames.js'
 import type { ErrorCode, Frame, FrameId, RequestFrame } from './frames.js'
+import { installNetworkGuard } from '../privacy/offline.js'
 import {
   envSecrets,
   InvalidParamsError,
@@ -170,6 +177,25 @@ export function sanitizeFrame(
   ]) as unknown as Frame
 }
 
+/**
+ * Methods that do long-running, project-mutating work and therefore keep the
+ * original one-at-a-time, arrival-order discipline among themselves. Every other
+ * method is answered as soon as it arrives — see the header.
+ */
+export const EXCLUSIVE_METHODS: ReadonlySet<string> = new Set(['run', 'eval', 'skill-train'])
+
+/** The `method` of a request line, or null when the line is not a request object. */
+function methodOf(line: string): string | null {
+  try {
+    const value = JSON.parse(line) as unknown
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) return null
+    const method = (value as Record<string, unknown>)['method']
+    return typeof method === 'string' ? method : null
+  } catch {
+    return null
+  }
+}
+
 export class ProtocolServer {
   readonly #io: ServerIO
   readonly #methods: Readonly<Record<string, MethodHandler>>
@@ -177,8 +203,10 @@ export class ProtocolServer {
   readonly #cwd: () => string
   /** Credential values seen in requests, redacted from every outgoing frame. */
   readonly #secrets = new Set<string>()
-  /** The queue. Each line's work is chained onto the previous line's. */
-  #tail: Promise<void> = Promise.resolve()
+  /** The exclusive lane. Each exclusive line's work is chained onto the previous one's. */
+  #exclusiveTail: Promise<void> = Promise.resolve()
+  /** Every line still being handled, in either lane. What `drain` waits for. */
+  readonly #inflight = new Set<Promise<void>>()
   #handled = 0
 
   constructor(io: ServerIO) {
@@ -194,19 +222,34 @@ export class ProtocolServer {
   }
 
   /**
-   * Queue one input line. The returned promise resolves when THIS line's response
+   * Accept one input line. The returned promise resolves when THIS line's response
    * has been written; it never rejects.
+   *
+   * An exclusive method (see {@link EXCLUSIVE_METHODS}) waits for every exclusive
+   * line before it. Anything else starts now, so `cancel` and `reply` reach a run
+   * that is still open.
    */
   handleLine(line: string): Promise<void> {
-    const next = this.#tail.then(() => this.#process(line))
-    // Detach failures from the chain: one poisoned line must not stop the queue.
-    this.#tail = next.catch(() => {})
-    return this.#tail
+    const method = methodOf(line)
+    let work: Promise<void>
+    if (method !== null && EXCLUSIVE_METHODS.has(method)) {
+      work = this.#exclusiveTail.then(() => this.#process(line))
+      // Detach failures from the chain: one poisoned line must not stop the lane.
+      this.#exclusiveTail = work.catch(() => {})
+    } else {
+      work = this.#process(line)
+    }
+    const settled = work.catch(() => {})
+    this.#inflight.add(settled)
+    void settled.then(() => this.#inflight.delete(settled))
+    return settled
   }
 
-  /** Resolves when every queued line has been handled. */
-  drain(): Promise<void> {
-    return this.#tail
+  /** Resolves when every line accepted so far — in both lanes — has been handled. */
+  async drain(): Promise<void> {
+    while (this.#inflight.size > 0) {
+      await Promise.all([...this.#inflight])
+    }
   }
 
   async #process(line: string): Promise<void> {
@@ -286,6 +329,9 @@ export function createServer(io: ServerIO): ProtocolServer {
  * on a pipe is exactly how a client loses the last frame.
  */
 export async function main(io: Partial<ServerIO> = {}): Promise<void> {
+  // Offline Mode's backstop: every request this process makes goes through `fetch`,
+  // and from here on `fetch` refuses non-local hosts while Offline Mode is on.
+  installNetworkGuard(io.env ? { env: io.env } : {})
   const server = new ProtocolServer({
     writeOut: io.writeOut ?? ((line) => void process.stdout.write(`${line}\n`)),
     writeErr: io.writeErr ?? ((line) => void process.stderr.write(`${line}\n`)),

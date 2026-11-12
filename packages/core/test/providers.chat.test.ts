@@ -133,7 +133,46 @@ describe('OpenAICompatibleAdapter', () => {
     expect(res).toEqual({ text: 'ok' })
     const init = (fetchSpy.mock.calls[0] as [string, RequestInit])[1]
     expect((init.headers as Record<string, string>)['HTTP-Referer']).toBe('https://sketch.local')
-    expect(init.signal).toBe(controller.signal)
+    // The request carries its own per-attempt signal (for the timeout), LINKED to the
+    // caller's: cancelling the caller's controller must cancel the request.
+    const forwarded = init.signal as AbortSignal
+    expect(forwarded).toBeInstanceOf(AbortSignal)
+    expect(forwarded.aborted).toBe(false)
+  })
+
+  it('cancels the in-flight request when the caller aborts', async () => {
+    let seen: AbortSignal | undefined
+    global.fetch = vi.fn().mockImplementation((_url: string, init: RequestInit) => {
+      seen = init.signal as AbortSignal
+      return new Promise((_resolve, reject) => {
+        seen!.addEventListener('abort', () => {
+          const err = new Error('aborted')
+          err.name = 'AbortError'
+          reject(err)
+        })
+      })
+    })
+    const controller = new AbortController()
+    const adapter = new OpenAICompatibleAdapter(oaiConfig())
+    const pending = adapter.chat(HELLO, { signal: controller.signal })
+    await new Promise((r) => setTimeout(r, 5))
+    controller.abort()
+    const err = await captureError(pending)
+    expect(err.name).toBe('AbortError')
+    expect(seen?.aborted).toBe(true)
+  })
+
+  it('uses the reasoning field when a reasoning model leaves content empty', async () => {
+    global.fetch = mockFetch({
+      choices: [{ message: { content: '', reasoning: 'Thinking... {"action":"done","text":"ok"}' } }],
+    })
+    const adapter = new OpenAICompatibleAdapter(oaiConfig())
+    const res = await adapter.chat(HELLO)
+    expect(res.text).toContain('{"action":"done","text":"ok"}')
+
+    // A non-empty content always wins over the reasoning.
+    global.fetch = mockFetch({ choices: [{ message: { content: 'final', reasoning_content: 'draft' } }] })
+    expect((await new OpenAICompatibleAdapter(oaiConfig()).chat(HELLO)).text).toBe('final')
   })
 
   it('throws with status and provider id, and never the key, on a 401', async () => {
@@ -412,5 +451,95 @@ describe('provider catalog', () => {
     expect(describeProvider('anthropic')?.kind).toBe('anthropic-messages')
     expect(describeProvider('gemini')?.kind).toBe('openai-compatible')
     expect(describeProvider('nope')).toBeUndefined()
+  })
+})
+
+// ── the model the provider NAMED as having answered (model identity) ──────────
+//
+// A router (OpenRouter `auto`, a gateway) may answer with a different model than the
+// one requested. The adapter must return that answered model ON THE CALL'S RETURN
+// VALUE — never a shared instance field, which would misattribute overlapping calls.
+
+describe('the answered model is on the chat() return value', () => {
+  it('OpenAI-compatible: returns data.model, and leaves it undefined when absent', async () => {
+    global.fetch = mockFetch({
+      model: 'deepseek/deepseek-chat-v3', // a router resolved `auto` to this
+      choices: [{ message: { content: 'hi' } }],
+      usage: { prompt_tokens: 1, completion_tokens: 1 },
+    })
+    const answered = await new OpenAICompatibleAdapter(oaiConfig({ model: 'openrouter/auto' })).chat(HELLO)
+    expect(answered.model).toBe('deepseek/deepseek-chat-v3')
+
+    // No `model` in the body → the result carries no model (never the requested id).
+    global.fetch = mockFetch({ choices: [{ message: { content: 'hi' } }] })
+    const silent = await new OpenAICompatibleAdapter(oaiConfig({ model: 'gpt-4o' })).chat(HELLO)
+    expect(silent.model).toBeUndefined()
+  })
+
+  it('OpenAI-compatible: reads Gemini\'s modelVersion when there is no model field', async () => {
+    // Gemini (reached through its OpenAI-compatible endpoint) names the answering model
+    // `modelVersion`, not `model`. The adapter reads it as a fallback.
+    global.fetch = mockFetch({
+      modelVersion: 'gemini-2.0-flash-001',
+      choices: [{ message: { content: 'hi' } }],
+      usage: { prompt_tokens: 1, completion_tokens: 1 },
+    })
+    const res = await new OpenAICompatibleAdapter(oaiConfig({ model: 'gemini-2.0-flash' })).chat(HELLO)
+    expect(res.model).toBe('gemini-2.0-flash-001')
+  })
+
+  it('Anthropic: returns the response model, undefined when absent', async () => {
+    global.fetch = mockFetch({
+      model: 'claude-3-5-sonnet-20241022',
+      content: [{ type: 'text', text: 'hi' }],
+      usage: { input_tokens: 1, output_tokens: 1 },
+    })
+    const answered = await new AnthropicMessagesAdapter(anthropicConfig({ model: 'claude-sonnet-latest' })).chat(HELLO)
+    expect(answered.model).toBe('claude-3-5-sonnet-20241022')
+
+    global.fetch = mockFetch({ content: [{ type: 'text', text: 'hi' }] })
+    const silent = await new AnthropicMessagesAdapter(anthropicConfig()).chat(HELLO)
+    expect(silent.model).toBeUndefined()
+  })
+
+  it('fromAnthropicResponse carries the model only when present', () => {
+    expect(fromAnthropicResponse({ model: 'm-1', content: [{ type: 'text', text: 'x' }] }).model).toBe('m-1')
+    expect(fromAnthropicResponse({ content: [{ type: 'text', text: 'x' }] }).model).toBeUndefined()
+  })
+
+  // THE LEAD'S MUTATION-GUARD TEST. Two chat() calls on ONE adapter instance overlap
+  // in flight; each response names a DIFFERENT model. Each call must return its OWN
+  // answered model on its OWN return value. An instance field would latch whichever
+  // write landed last and credit BOTH calls to the same model — exactly the
+  // shared-state bug the return-value design prevents. (Mutation-verified: see
+  // fix-ai-providers.md — re-introducing an instance field makes this case fail.)
+  it('attributes each overlapping call on ONE instance to its own answered model', async () => {
+    // The answered model is keyed to the request's user message, so the two calls get
+    // different answers. The FIRST request is held until the SECOND has been issued and
+    // has RESOLVED, so the calls genuinely overlap and resolve out of issue order — the
+    // ordering that makes a shared "last write wins" field give the wrong answer.
+    let release: (() => void) | undefined
+    const gate = new Promise<void>((r) => (release = r))
+    let seen = 0
+    global.fetch = vi.fn(async (_url: string, init: RequestInit) => {
+      const content = JSON.parse(init.body as string).messages[0].content as string
+      const answered = content === 'A' ? 'answered-A' : 'answered-B'
+      if (seen++ === 0) await gate // hold call A until B has resolved
+      return {
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ model: answered, choices: [{ message: { content: 'x' } }], usage: { prompt_tokens: 1, completion_tokens: 1 } }),
+        text: () => Promise.resolve(''),
+      } as unknown as Response
+    }) as unknown as typeof fetch
+
+    const adapter = new OpenAICompatibleAdapter(oaiConfig({ model: 'openrouter/auto' }))
+    const pA = adapter.chat([{ role: 'user', content: 'A' }]) // issued first, held
+    const pB = adapter.chat([{ role: 'user', content: 'B' }]) // resolves first
+    const b = await pB
+    release?.() // now let A finish
+    const a = await pA
+    expect(a.model).toBe('answered-A')
+    expect(b.model).toBe('answered-B')
   })
 })

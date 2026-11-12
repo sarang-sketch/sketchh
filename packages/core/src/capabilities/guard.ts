@@ -68,6 +68,14 @@ export interface ToolDescriptor {
    */
   requires: Capability
   /**
+   * One short, non-secret line saying what THIS call will do — "npm test",
+   * "src/app.ts" — so a live surface can show "Running npm test…" while the call is
+   * in flight. Optional; a tool without one shows its name. The line lands on the
+   * durable log, so a tool must not put a credential-bearing argument in it (the
+   * store's write-path redaction is the backstop, not the policy).
+   */
+  summarize?(args: Record<string, unknown>): string | null
+  /**
    * The effect. Only ever invoked by {@link ToolDispatcher.call}, after the
    * grant check has passed.
    */
@@ -244,12 +252,20 @@ export class ToolDispatcher {
     // change; inventing one here does not.
     //
     // ARGUMENT KEYS ONLY, never values. A tool argument routinely carries a path,
-    // a query, or a token, and this payload is durable.
+    // a query, or a token, and this payload is durable. The one exception is a
+    // tool's own `summarize` line, which the tool vouches is display-safe.
+    let summary: string | null = null
+    try {
+      summary = tool.summarize?.(args) ?? null
+    } catch {
+      summary = null
+    }
     await this.#emit(runId, 'tool_called', {
       name,
       requires: tool.requires,
       phase: 'start',
       argKeys: Object.keys(args).sort(),
+      ...(summary !== null && summary.trim() !== '' ? { summary: summary.slice(0, 200) } : {}),
     })
 
     let outcome: ToolOutcome

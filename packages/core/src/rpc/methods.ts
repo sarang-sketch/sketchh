@@ -20,16 +20,28 @@
 //
 // Validates: Requirements 12.2, 12.5, 6.5
 
+import { spawn as spawnProcess } from 'node:child_process'
 import { stat } from 'node:fs/promises'
-import { dirname, join, resolve } from 'node:path'
+import { homedir } from 'node:os'
+import { dirname, join, resolve, sep as pathSep } from 'node:path'
 
-import { ToolDispatcher, capabilitiesForSkill } from '../capabilities/index.js'
-import { describeLedger, ledgerFor, ledgerForRun } from '../cost/index.js'
-import type { RunBudget } from '../cost/index.js'
+import { ToolDispatcher, capabilitiesForSkill, readOnlyGrant } from '../capabilities/index.js'
+import { describeLedger, ledgerFor, ledgerForRun, recordUsage, summarizeUsage } from '../cost/index.js'
+import type { RunBudget, UsageCause } from '../cost/index.js'
 import { latestBenchArtifactPath, loadLatestBenchArtifact } from '../bench/index.js'
 import * as memory from '../memory/index.js'
 import type { Capability, CapabilitySet } from '../capabilities/index.js'
-import { MCP_CATALOG, McpHost, catalogIds, findCatalogEntry, missingEnv } from '../mcp/index.js'
+import { MCP_CATALOG, McpHost, McpServer, catalogIds, findCatalogEntry, missingEnv } from '../mcp/index.js'
+import { McpCatalogRegistry } from '../mcp/catalog.js'
+import {
+  catalogEntryFor,
+  readUserServers,
+  removeUserServer,
+  saveUserServer,
+  setServerTrust,
+  specFor,
+  type UserMcpServer,
+} from '../mcp/userServers.js'
 import {
   assembleContext,
   buildRepoGraph,
@@ -56,28 +68,53 @@ import {
   promoteInstalledSkill,
   readInstalledSkillGrant,
   trainingArtifactPath,
+  uninstallSkill,
 } from '../registry/index.js'
 import type { RegistryManifest } from '../registry/index.js'
+import { materializeEmbeddedRegistry } from '../registry/materialize.js'
 import { runTask } from '../loop/index.js'
-import { DiskFileWriter } from '../orchestrator/file-writer.js'
+import { DiskFileWriter, SnapshottingFileWriter, restoreSnapshot } from '../orchestrator/file-writer.js'
 import { PlanWriter } from '../plan/index.js'
-import { describeProvider, fakeProviderEnabled, resolveAdapter } from '../providers/index.js'
 import {
+  ChatGPTCodexAdapter,
+  describeProvider,
+  fakeProviderEnabled,
+  listChatGPTModels,
+  resolveAdapter,
+} from '../providers/index.js'
+import {
+  CHATGPT_CODEX_BASE_URL,
+  CHATGPT_PROVIDER_ID,
+  ChatGPTAuthError,
+  apiKeyFromEnv,
+  cancelChatGPTLogin,
+  cancelLoopback,
+  chatgptLogout,
+  chatgptStatus,
+  envKeyPresence,
+  listProviderModels,
   loadProviderSettings,
   providerMatrix,
   providersFilePath,
   saveProviderSettings,
+  startChatGPTBrowserLogin,
+  startChatGPTDeviceLogin,
+  startLoopback,
   testProviderConnection,
+  waitChatGPTLogin,
+  waitLoopback,
 } from '../settings/index.js'
-import type { ProviderTestTarget } from '../settings/index.js'
+import type { ProviderModelsTarget, ProviderTestTarget } from '../settings/index.js'
 import {
   loadProjectContext,
   loadSkillFile,
   loadSkillFolder,
   loadSkills,
   providerProposeEdit,
+  providerProposeEdits,
   trainSkill,
 } from '../skills/index.js'
+import type { ProviderProposeEditOptions } from '../skills/index.js'
 import {
   DEFAULT_STRATEGY,
   ROLE_DEFINITIONS,
@@ -93,7 +130,28 @@ import {
   shouldDefaultToSwarm,
   type Strategy,
 } from '../strategy/index.js'
-import { GitTool, gitToolDescriptors } from '../tools/index.js'
+import { GitTool, gitToolDescriptors, projectToolDescriptors } from '../tools/index.js'
+import { backgroundToolDescriptors, commandToolDescriptor, type CommandApprover, type CommandMode } from '../tools/command.js'
+import { skillToolDescriptor } from '../tools/skills.js'
+import { TerminalHost, TerminalRefusal } from '../tools/terminal.js'
+import { WatcherRegistry } from '../tools/watcher.js'
+import { BackgroundProcesses } from '../tools/background.js'
+import { OsOpenRefusal, openExternalTerminal, revealInFileManager } from '../tools/desktopOpen.js'
+import { FsRefusal, TrashUnavailable, createFile, createFolder, deleteEntry, renameEntry } from '../tools/fsops.js'
+import { FindQueryError, findInFiles, replaceInFiles, type FindFilters, type FindQuery } from '../tools/findReplace.js'
+import {
+  CompletionRateLimiter,
+  INLINE_EDIT_MAX_INSTRUCTION,
+  INLINE_EDIT_MAX_SELECTION,
+  buildCompletionMessages,
+  buildInlineEditMessages,
+  cleanCompletion,
+  cleanInlineEdit,
+  loadSlashCommands,
+} from '../assist/index.js'
+import type { ChatCallOptions } from '../providers/wire.js'
+import type { ToolDescriptor } from '../capabilities/guard.js'
+import { walkProjectDetailed } from '../context/walker.js'
 import {
   VERIFY_STAGES,
   parsePolicyJson,
@@ -101,6 +159,7 @@ import {
   runVerifyPolicy,
 } from '../verify/index.js'
 import type { VerifyPolicy } from '../verify/index.js'
+import { resolveForSpawn } from '../verify/spawnTarget.js'
 import type {
   ChatAdapter,
   Check,
@@ -116,6 +175,29 @@ import type {
 import type { ExtensionBundle } from '../extensions/index.js'
 import { StreamingEventStore } from './streaming-store.js'
 import { ENGINE_NAME, ENGINE_VERSION, PROTOCOL_VERSION } from './version.js'
+import {
+  cancelPull,
+  deleteLocalModel,
+  isModelName,
+  listLocalModels,
+  loadLocalModel,
+  ollamaBase,
+  ollamaServer,
+  pullStatus,
+  startPull,
+  unloadLocalModel,
+  type LocalModel,
+} from '../local/ollama.js'
+import { findOllama, readHardware, recommend } from '../local/hardware.js'
+import {
+  assertReachable,
+  networkGuardInstalled,
+  offlineState,
+  OfflineModeError,
+  recentActivity,
+  saveOfflineSetting,
+  type OfflineState,
+} from '../privacy/offline.js'
 
 function messageOf(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
@@ -289,6 +371,21 @@ function optionalStringArray(value: unknown, field: string): string[] | undefine
   })
 }
 
+/**
+ * A task whose verify commands run inside `root`: an absent `cwd` becomes `root`, a
+ * relative one is resolved against it, an absolute one is kept as given.
+ */
+function anchorVerifyCommands(task: Task, root: string): Task {
+  if (task.verify.length === 0) return task
+  return {
+    ...task,
+    verify: task.verify.map((command) => ({
+      ...command,
+      cwd: command.cwd === undefined ? root : resolve(root, command.cwd),
+    })),
+  }
+}
+
 function readVerifyCommands(value: unknown, field: string): VerifyCommand[] {
   // Absent means "no verification configured", which the loop already has a
   // defined meaning for (Requirement 5.8). It is not an error.
@@ -311,6 +408,37 @@ function readVerifyCommands(value: unknown, field: string): VerifyCommand[] {
     if (timeoutMs !== undefined) command.timeoutMs = timeoutMs
     return command
   })
+}
+
+/**
+ * `params.history`: earlier conversation turns, bounded so a long chat cannot turn
+ * every new message into an unbounded bill. The NEWEST turns are kept; each turn is
+ * clipped; only `user` and `assistant` roles are accepted, so a caller cannot smuggle
+ * a system instruction in through a chat transcript.
+ */
+const MAX_HISTORY_TURNS = 12
+const MAX_HISTORY_TURN_CHARS = 6_000
+
+function readHistory(params: Record<string, unknown>): { role: 'user' | 'assistant'; content: string }[] | undefined {
+  const raw = params['history']
+  if (raw === undefined || raw === null) return undefined
+  if (!Array.isArray(raw)) throw new InvalidParamsError('params.history must be an array')
+  const turns: { role: 'user' | 'assistant'; content: string }[] = []
+  for (const [index, entry] of raw.entries()) {
+    const turn = asObject(entry, `params.history[${index}]`)
+    const role = turn['role']
+    const content = turn['content']
+    if (role !== 'user' && role !== 'assistant') {
+      throw new InvalidParamsError(`params.history[${index}].role must be "user" or "assistant"`)
+    }
+    if (typeof content !== 'string') throw new InvalidParamsError(`params.history[${index}].content must be a string`)
+    if (content.trim() === '') continue
+    turns.push({
+      role,
+      content: content.length > MAX_HISTORY_TURN_CHARS ? `${content.slice(0, MAX_HISTORY_TURN_CHARS)}…` : content,
+    })
+  }
+  return turns.slice(-MAX_HISTORY_TURNS)
 }
 
 function readTask(value: unknown, field: string): Task {
@@ -400,6 +528,15 @@ function readProviderConfig(value: unknown, ctx: MethodContext): ProviderConfig 
     // reaches stdout.
     ctx.rememberSecret(apiKey)
     config.apiKey = apiKey
+  } else {
+    // No key supplied: fall back to the provider's conventional environment variable
+    // (`OPENAI_API_KEY`, `GROQ_API_KEY`, …). Environment credentials are already
+    // scrubbed from every frame; registering it as well costs nothing.
+    const fromEnv = apiKeyFromEnv(config.id, ctx.env)
+    if (fromEnv !== null) {
+      ctx.rememberSecret(fromEnv.value)
+      config.apiKey = fromEnv.value
+    }
   }
 
   const headers = source['headers']
@@ -420,6 +557,34 @@ function readProviderConfig(value: unknown, ctx: MethodContext): ProviderConfig 
   return config
 }
 
+/** Offline Mode as this call sees it. `params.home` isolates a test or preview instance. */
+function offlineFor(params: Record<string, unknown>, ctx: MethodContext): OfflineState {
+  const home = optionalString(params, 'home', 'params.home')
+  return offlineState({ env: ctx.env, ...(home !== undefined ? { home: resolve(home) } : {}) })
+}
+
+/** The address a provider call will go to: the configured base URL, else the catalog default. */
+function providerTarget(config: ProviderConfig): string {
+  if (config.id === CHATGPT_PROVIDER_ID) return CHATGPT_CODEX_BASE_URL
+  return config.baseUrl || (describeProvider(config.id)?.defaultBaseUrl ?? '')
+}
+
+/**
+ * Refuse, before any work starts, a provider call that Offline Mode forbids. The
+ * network guard would stop the request anyway; this says so up front, by name.
+ */
+function assertProviderAllowed(config: ProviderConfig, params: Record<string, unknown>, ctx: MethodContext): void {
+  if (fakeProviderEnabled(ctx.env)) return
+  const target = providerTarget(config)
+  if (target === '') return
+  assertReachable(target, offlineFor(params, ctx), describeProvider(config.id)?.name ?? config.id)
+}
+
+/** Refuse an operation whose only job is the network (a git push, a sign-in) while Offline Mode is on. */
+function assertOnlineAction(params: Record<string, unknown>, ctx: MethodContext, target: string, what: string): void {
+  if (offlineFor(params, ctx).offline) throw new OfflineModeError(target, what)
+}
+
 /**
  * Resolve the model seam. With no `params.provider` this requires the offline
  * switch, so a caller can never accidentally get a silently degraded run: either
@@ -436,7 +601,42 @@ function adapterFor(params: Record<string, unknown>, ctx: MethodContext): ChatAd
     return ctx.extensions?.providers.resolve(OFFLINE_CONFIG, ctx.env) ?? resolveAdapter(OFFLINE_CONFIG, ctx.env)
   }
   const config = readProviderConfig(provider, ctx)
+  assertProviderAllowed(config, params, ctx)
+  // A ChatGPT account is resolved here, not by an extension registry: its tokens
+  // go to OpenAI and nowhere else. `params.home` lets an isolated caller (a test,
+  // a preview instance) use its own sign-in instead of the user's.
+  if (config.id === CHATGPT_PROVIDER_ID && !fakeProviderEnabled(ctx.env)) {
+    return new ChatGPTCodexAdapter(config, { env: ctx.env, ...chatgptStore(params) })
+  }
   return ctx.extensions?.providers.resolve(config, ctx.env) ?? resolveAdapter(config, ctx.env)
+}
+
+/** The engine home a non-run usage line is written under (`params.home` or the OS home). */
+function usageHome(params: Record<string, unknown>): string {
+  return resolve(optionalString(params, 'home', 'params.home') ?? homedir())
+}
+
+/**
+ * Record one non-run model call in the per-cause usage log (`~/.sketch/usage/…`), so a
+ * cost surface can show completions, inline edits, commit messages, connection tests and
+ * model listing by cause. Never writes a key, a prompt, or a reply. Best-effort: a write
+ * failure never fails the call it describes.
+ */
+function noteUsage(
+  params: Record<string, unknown>,
+  cause: UsageCause,
+  facts: {
+    provider?: string | null
+    requestedModel?: string | null
+    answeredModel?: string | null
+    usage?: { in: number; out: number } | null
+    usageEstimated?: boolean
+    ok?: boolean
+    attempts?: number
+    root?: string | null
+  },
+): void {
+  void recordUsage({ cause, ...facts }, usageHome(params))
 }
 
 /**
@@ -602,7 +802,7 @@ async function reply(params: Record<string, unknown>, _ctx: MethodContext): Prom
  * abort. Always deregisters, so a timed-out question cannot be answered later by a reply
  * that arrives after the loop moved on.
  */
-function askChannel(runId: string) {
+function askChannel(runId: string, timeoutMs: number = ASK_REPLY_TIMEOUT_MS) {
   return (question: string, options: { signal?: AbortSignal }): Promise<string | null> =>
     new Promise<string | null>((resolve) => {
       let done = false
@@ -615,7 +815,7 @@ function askChannel(runId: string) {
         resolve(answer)
       }
       const onAbort = () => settle(null)
-      const timer = setTimeout(() => settle(null), ASK_REPLY_TIMEOUT_MS)
+      const timer = setTimeout(() => settle(null), timeoutMs)
       // Node keeps the process alive for a pending timer; a run waiting on a human must
       // not be the reason a CLI invocation refuses to exit.
       timer.unref?.()
@@ -623,6 +823,73 @@ function askChannel(runId: string) {
       options.signal?.addEventListener('abort', onAbort, { once: true })
       pendingQuestions.set(runId, { question, settle })
     })
+}
+
+/**
+ * What an Auto-mode run is told when its model asks the user something.
+ *
+ * Auto mode means the human chose not to be interrupted. Ending the run on a question
+ * would make "auto" stop at the first ambiguity; waiting would make it hang. So the
+ * question is answered — by this standing instruction, recorded as `ask_answered` like
+ * any other answer, so the transcript shows exactly what the model was told.
+ */
+export const AUTONOMOUS_ANSWER =
+  'The user is not available to answer (Auto mode). Use your best judgement: choose the most ' +
+  'conventional option for this project, state that assumption in your final summary, and continue.'
+
+/** How long an Auto-mode run waits on a human for a command it classified as destructive. */
+const AUTO_APPROVAL_TIMEOUT_MS = 120_000
+
+/** "always" / "yes" / anything else, as a decision. Anything unclear is a refusal. */
+export function parseApproval(answer: string | null): 'allow' | 'allow-always' | 'deny' {
+  const text = (answer ?? '').trim().toLowerCase()
+  if (/^(always|allow always|yes,? always|allow for this run)/.test(text)) return 'allow-always'
+  if (/^(y|yes|allow|allow once|ok|okay|approve|approved|run it|sure|go)\b/.test(text)) return 'allow'
+  return 'deny'
+}
+
+/**
+ * Put a command to the human over the SAME question channel `ask` uses, so the
+ * surface answers it with the same `reply` call.
+ *
+ * The `ask` event carries an `approval` object, which is how a surface knows to render
+ * Allow / Deny rather than a free-text box. Reusing the kind with a payload
+ * discriminator follows the project rule for a variant of an existing fact: it IS a
+ * question to the human, and `ask_answered` records the decision.
+ */
+function commandApprover(runId: string, events: EventStore, timeoutMs: number): CommandApprover {
+  return async (request, signal) => {
+    const question =
+      `Allow this command to run?\n${request.display}` +
+      (request.cwd !== '.' ? `\n(in ${request.cwd})` : '') +
+      (request.risk !== null ? `\nWhy you are asked: ${request.risk}.` : '')
+    const approval = { kind: 'command', command: request.display, cwd: request.cwd, risk: request.risk }
+    await events.emit({
+      runId,
+      kind: 'ask',
+      payload: { question, text: question, approval, reason: 'the run needs your approval to run a command' },
+    })
+    const answer = await askChannel(runId, timeoutMs)(question, signal !== undefined ? { signal } : {})
+    const decision = parseApproval(answer)
+    await events.emit({
+      runId,
+      kind: 'ask_answered',
+      payload: {
+        question,
+        answer: answer === null ? 'deny (no answer)' : answer,
+        approval: { ...approval, decision, ...(answer === null ? { timedOut: true } : {}) },
+      },
+    })
+    return decision
+  }
+}
+
+/** `params.commands`: absent (no command tool), `ask`, or `auto`. */
+function readCommandMode(params: Record<string, unknown>): CommandMode | undefined {
+  const raw = params['commands']
+  if (raw === undefined || raw === null || raw === false) return undefined
+  if (raw === 'ask' || raw === 'auto') return raw
+  throw new InvalidParamsError('params.commands must be "ask" or "auto" when present')
 }
 
 /**
@@ -649,8 +916,11 @@ async function cancel(params: Record<string, unknown>, _ctx: MethodContext): Pro
 }
 
 async function run(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
-  const task = readTask(params['task'], 'params.task')
   const root = resolve(optionalString(params, 'root', 'params.root') ?? ctx.cwd())
+  // A verify command runs in the PROJECT, not wherever the engine process happens to
+  // have been started (the packaged app's sidecar starts in the install folder). No
+  // `cwd` means the run's root; a relative one is taken relative to it.
+  const task = anchorVerifyCommands(readTask(params['task'], 'params.task'), root)
   const strategy = readStrategy(params)
   const workflowId = optionalString(params, 'workflow', 'params.workflow')
   if (strategy !== undefined && workflowId !== undefined) {
@@ -670,6 +940,7 @@ async function run(params: Record<string, unknown>, ctx: MethodContext): Promise
     'params.contextBudgetTokens',
   )
   const budget = readBudget(params)
+  const history = readHistory(params)
   // Cancellation. The id is the caller's when it supplied one, so a Stop control works
   // before `run_started` arrives; otherwise it is the same id `runTask` would have minted.
   const runId = readRunId(params) ?? newRunId()
@@ -678,6 +949,14 @@ async function run(params: Record<string, unknown>, ctx: MethodContext): Promise
   // OPT-IN. Without it an `ask` ends the run exactly as it always has, which is what
   // every headless caller and the eval harness need.
   const interactive = optionalBoolean(params, 'interactive', 'params.interactive') ?? false
+  // ── PERMISSION MODE (the composer's Ask / Agent / Auto) ─────────────────────
+  // `readOnly` is enforced in the loop; `commands` opens `run_command`; `autonomous`
+  // answers the model's questions with a standing instruction instead of a human.
+  // All three are absent for every caller that predates them.
+  const readOnly = optionalBoolean(params, 'readOnly', 'params.readOnly') ?? false
+  const commandMode = readOnly ? undefined : readCommandMode(params)
+  const autonomous = optionalBoolean(params, 'autonomous', 'params.autonomous') ?? false
+  const autoSkills = optionalBoolean(params, 'autoSkills', 'params.autoSkills') ?? false
 
   const events = new StreamingEventStore(
     new JsonlEventStore({ baseDir: root, secrets: () => ctx.secrets() }),
@@ -692,6 +971,24 @@ async function run(params: Record<string, unknown>, ctx: MethodContext): Promise
   // already decided — and `recallMemory: false` opts out. A project with an empty store
   // is unaffected either way.
   const recallMemory = optionalBoolean(params, 'recallMemory', 'params.recallMemory') ?? true
+  // OPT-IN INDEXING. Retrieval reads the persisted graph and, without one, quietly
+  // retrieves nothing — so a freshly opened project reached the model with no code at
+  // all. `autoIndex: true` builds the graph when it is missing and refreshes it
+  // otherwise. The build is incremental (an unchanged file's hash is the proof it need
+  // not be re-read), local, and never touches the network; a failure is logged and
+  // the run continues without retrieval, exactly as before.
+  const autoIndex = optionalBoolean(params, 'autoIndex', 'params.autoIndex') ?? false
+  if (autoIndex && contextBudgetTokens !== undefined && contextBudgetTokens > 0) {
+    try {
+      const built = await buildRepoGraph({ root, events })
+      ctx.log(
+        `indexed ${built.stats.indexed} file(s) for retrieval ` +
+          `(${built.stats.added} new, ${built.stats.changed} changed, ${built.stats.reused} unchanged)`,
+      )
+    } catch (err) {
+      ctx.log(`indexing skipped, continuing without it: ${messageOf(err)}`)
+    }
+  }
   const retrievedContext = await retrieveContextFor(
     root,
     task,
@@ -711,23 +1008,79 @@ async function run(params: Record<string, unknown>, ctx: MethodContext): Promise
 
   // THE TOOL LAYER (Requirement 22). Opt-in, scoped to the grant the loaded skills
   // actually hold, and torn down in `finally` whatever the run does.
-  const toolLayer = await openToolLayerFor(root, params, task, skills, granted, events, ctx)
+  //
+  // TWO ADDITIONS, BOTH CHOSEN BY THE HUMAN FOR THIS RUN:
+  //   * `run_command` costs `proc:spawn`, which no skill default holds. The grant the
+  //     DISPATCHER checks gains it only because the person at the keyboard enabled
+  //     commands for this run (and, in `ask`, approves every one). It is not a skill
+  //     grant: MCP launches below are still decided by the skills' own grant, so this
+  //     cannot start a server a skill was never allowed.
+  //   * `use_skill` exposes the project's installed skills by name and description.
+  const extraTools: ToolDescriptor[] = []
+  // ── ASK MODE IS READ-ONLY THROUGH EVERY TOOL PATH (W5 invariant 2) ──────────
+  // readOnly refuses the `edit` action in the loop, but the tool layer is a
+  // second write path: a loaded skill granted fs:write:project or git:write could
+  // otherwise launch a write-capable MCP server and call its write tool, which the
+  // capability guard would allow because the guard only checks the grant. So in
+  // Ask mode BOTH the MCP launch grant and the dispatcher grant are narrowed to an
+  // allowlist of READ capabilities (capabilities/vocabulary.ts). A server that
+  // needs a write capability is then not even started, and any write tool the
+  // model calls is refused by the one guard and the refusal is fed back. Agent and
+  // Auto are unchanged: they use the skills' full grant exactly as before.
+  const launchGrant: CapabilitySet = readOnly ? readOnlyGrant(granted) : granted
+  let dispatcherGrant: CapabilitySet = launchGrant
+  // Dev servers and watchers the agent starts with `background: true`; all stopped
+  // in this run's `finally`.
+  let background: BackgroundProcesses | undefined
+  if (commandMode !== undefined) {
+    background = new BackgroundProcesses()
+    extraTools.push(
+      commandToolDescriptor({
+        mode: commandMode,
+        ...(interactive
+          ? { approve: commandApprover(runId, events, autonomous ? AUTO_APPROVAL_TIMEOUT_MS : ASK_REPLY_TIMEOUT_MS) }
+          : {}),
+        env: ctx.env as NodeJS.ProcessEnv,
+        background,
+      }),
+      ...backgroundToolDescriptors(background),
+    )
+    // Not reachable in Ask mode (commandMode is undefined when readOnly is set), so
+    // `launchGrant` here is the skills' full grant; commands add proc:spawn on top.
+    dispatcherGrant = Object.freeze([...new Set<Capability>([...launchGrant, 'proc:spawn'])].sort())
+    ctx.log(`commands enabled for this run by the user (${commandMode} mode)`)
+  }
+  if (autoSkills) {
+    const installed = await loadSkills(installedSkillsDir(root))
+    const tool = skillToolDescriptor(installed.skills)
+    if (tool !== null) extraTools.push(tool)
+  }
+  const toolLayer = await openToolLayerFor(root, params, task, skills, launchGrant, events, ctx, {
+    extraTools,
+    dispatcherGrant,
+    ...(readOnly ? { readOnly: true } : {}),
+  })
 
   const loopDeps = {
     adapter,
     events,
     // The gate, unmodified and un-bypassable from here.
     plan: new PlanWriter({ baseDir: root, events }),
-    files: new DiskFileWriter(),
+    // Every auto-applied write is journalled first, so `undo-run` can put the
+    // project back without Git. Review-mode runs write nothing and journal nothing.
+    files: new SnapshottingFileWriter(new DiskFileWriter(), { runId }),
     root,
     skills,
-    capabilityGrant: granted,
+    capabilityGrant: dispatcherGrant,
     projectContext: await loadProjectContext(root),
     ...(retrievedContext !== undefined ? { retrievedContext } : {}),
     ...(verifyPolicy !== undefined ? { verifyPolicy } : {}),
     ...(toolLayer !== undefined ? { tools: toolLayer.dispatcher } : {}),
     ...(maxIterations !== undefined ? { maxIterations } : {}),
     ...(reviewEdits !== undefined ? { reviewEdits } : {}),
+    ...(history !== undefined && history.length > 0 ? { history } : {}),
+    ...(readOnly ? { readOnly: true } : {}),
+    ...(autonomous ? { autonomous: true } : {}),
     // The guard runs before every call on both the `runTask` and dispatcher paths,
     // because both are handed exactly this object.
     ...(budget !== undefined ? { budget } : {}),
@@ -735,7 +1088,13 @@ async function run(params: Record<string, unknown>, ctx: MethodContext): Promise
     // which run a Stop request means.
     ids: () => runId,
     signal: controller.signal,
-    ...(interactive ? { answer: askChannel(runId) } : {}),
+    // Auto mode answers the model itself (see AUTONOMOUS_ANSWER); otherwise an
+    // interactive run waits for a human, and a headless one ends on a question.
+    ...(autonomous
+      ? { answer: async () => AUTONOMOUS_ANSWER }
+      : interactive
+        ? { answer: askChannel(runId) }
+        : {}),
   }
 
   try {
@@ -745,7 +1104,10 @@ async function run(params: Record<string, unknown>, ctx: MethodContext): Promise
         runAgent: async (id, options) => {
           const agent = ctx.extensions?.agents.get(id)
           if (agent === undefined) throw new InvalidParamsError(`unknown registered agent ${JSON.stringify(id)}`)
-          return executeRegisteredAgent(agent, task, loopDeps, granted, options)
+          // `launchGrant` is the skills' full grant for Agent/Auto and the
+          // read-only allowlist for Ask, so a workflow sub-run cannot regain a
+          // write capability Ask mode removed.
+          return executeRegisteredAgent(agent, task, loopDeps, launchGrant, options)
         },
       })
     }
@@ -773,9 +1135,10 @@ async function run(params: Record<string, unknown>, ctx: MethodContext): Promise
       ...loopDeps,
       strategy,
       ...(escalate !== undefined ? { escalate } : {}),
-      // Roles can only narrow the same persisted grant the tool layer received.
-      // There is no wire parameter that can widen it.
-      grant: granted,
+      // Roles can only narrow the same grant the tool layer received, and in Ask
+      // mode that grant is already the read-only allowlist (`launchGrant`). There
+      // is no wire parameter that can widen it.
+      grant: launchGrant,
     })
   } finally {
     // A finished run is not cancellable, and the registry must not grow with every
@@ -787,6 +1150,8 @@ async function run(params: Record<string, unknown>, ctx: MethodContext): Promise
     // A server left running holds a pipe, a port, and often a lock. `close()` never
     // throws, but it is in `finally` so a failed run cannot leak one either.
     await toolLayer?.host.close()
+    // The same for dev servers the agent started with `background: true`.
+    await background?.stopAll().catch(() => {})
   }
 }
 
@@ -857,32 +1222,73 @@ async function openToolLayerFor(
   granted: CapabilitySet,
   events: EventStore,
   ctx: MethodContext,
+  extra: { extraTools?: readonly ToolDescriptor[]; dispatcherGrant?: CapabilitySet; readOnly?: boolean } = {},
 ): Promise<{ host: McpHost; dispatcher: ToolDispatcher } | undefined> {
-  const requested = optionalStringArray(params['mcpServers'], 'params.mcpServers')
-  if (requested === undefined || requested.length === 0) return undefined
+  const requested = optionalStringArray(params['mcpServers'], 'params.mcpServers') ?? []
+  // The user's own servers, by name (`~/.sketch/mcp.json`, `<project>/.sketch/mcp.json`).
+  // Naming one for a run IS the user's grant for it; a project server must also have
+  // been approved for this exact launch. See mcp/userServers.ts.
+  const userNames = optionalStringArray(params['userMcpServers'], 'params.userMcpServers') ?? []
+  // `projectTools: true` opens the layer with the read-only project tools even when no
+  // MCP server was asked for. Opt-in, so a CLI or eval caller that never heard of it
+  // gets byte-for-byte the behaviour it had: no layer, every `tool` action refused.
+  const projectTools = optionalBoolean(params, 'projectTools', 'params.projectTools') ?? false
+  const extraTools = extra.extraTools ?? []
+  if (requested.length === 0 && userNames.length === 0 && !projectTools && extraTools.length === 0) return undefined
 
-  const catalog = ctx.extensions?.mcp
+  const userServers = await userServersForRun(root, params, ctx, userNames)
+  const requestTimeoutMs = optionalNumber(params, 'mcpRequestTimeoutMs', 'params.mcpRequestTimeoutMs')
+  const catalog =
+    userServers.length > 0
+      ? (ctx.extensions?.mcp ?? new McpCatalogRegistry()).withUserServers(userServers.map(catalogEntryFor))
+      : ctx.extensions?.mcp
   const host = new McpHost({
     root,
     events,
     runId: task.id,
     log: (line) => ctx.log(line),
     env: ctx.env,
-    allowedLaunches: new Set(requested.filter((id) => {
-      const entry = catalog?.find(id) ?? findCatalogEntry(id)
-      return entry !== null && granted.includes(entry.requires)
-    })),
+    allowedLaunches: new Set([
+      ...requested.filter((id) => {
+        const entry = catalog?.find(id) ?? findCatalogEntry(id)
+        return entry !== null && granted.includes(entry.requires)
+      }),
+      ...userServers.map((server) => server.id),
+    ]),
     ...(catalog !== undefined ? { catalog } : {}),
-    ...(optionalNumber(params, 'mcpRequestTimeoutMs', 'params.mcpRequestTimeoutMs') !== undefined
-      ? { requestTimeoutMs: optionalNumber(params, 'mcpRequestTimeoutMs', 'params.mcpRequestTimeoutMs')! }
+    ...(userServers.length > 0
+      ? {
+          launchOverrides: Object.fromEntries(
+            userServers.map((server) => [server.id, specFor(server, root, requestTimeoutMs !== undefined ? { requestTimeoutMs } : {})]),
+          ),
+        }
       : {}),
+    ...(requestTimeoutMs !== undefined ? { requestTimeoutMs } : {}),
   })
+  for (const server of userServers) {
+    // A user server runs a program (`proc:spawn`), which a read-only (Ask mode) run
+    // must not do — so it is not started at all. Not merely refused: a process that
+    // never launched cannot write a file or open a socket. (W5 invariant 2.)
+    if (extra.readOnly === true) {
+      ctx.log(`mcp: not starting ${server.name} — this run is read-only (Ask mode) and a user server runs a program`)
+      continue
+    }
+    const opened = await host.open(server.id)
+    ctx.log(opened.ok ? `mcp: ${opened.detail}` : `mcp: ${server.name} unavailable for this run — ${opened.detail}`)
+  }
 
+  const offline = offlineFor(params, ctx).offline
   for (const id of requested) {
     const entry = catalog?.find(id) ?? findCatalogEntry(id)
     if (entry === null) {
       const ids = catalog?.ids() ?? catalogIds()
       ctx.log(`mcp: no server named "${id}" in the curated catalog (have: ${ids.join(', ')})`)
+      continue
+    }
+    if (offline && entry.requires.startsWith('net:')) {
+      // A server is its own process, so the engine's network guard cannot hold it to
+      // this machine. One whose job is the network is not started at all.
+      ctx.log(`mcp: not starting ${entry.title} — Offline Mode is on and it needs the network (${entry.requires})`)
       continue
     }
     if (!granted.includes(entry.requires)) {
@@ -901,21 +1307,39 @@ async function openToolLayerFor(
     )
   }
 
+  // The user's servers cost `proc:spawn`. Naming them for this run granted exactly that,
+  // and only their descriptors carry it unless commands were enabled as well.
+  //
+  // EXCEPT in a read-only (Ask mode) run: `proc:spawn` is a write-shaped capability that
+  // Ask mode must not hold, so it is NOT re-added here. A user MCP server's tools then
+  // stay unauthorised and any call to one is refused by the guard — Ask mode writes no
+  // file through the MCP path either (W5 invariant 2). Agent/Auto are unchanged.
+  const baseGrant = extra.dispatcherGrant ?? granted
+  const dispatcherGrant =
+    userServers.length > 0 && extra.readOnly !== true
+      ? (Object.freeze([...new Set<Capability>([...baseGrant, 'proc:spawn'])].sort()) as CapabilitySet)
+      : baseGrant
   const dispatcher = new ToolDispatcher({
     // The engine's own git tools sit alongside the MCP servers', behind the same
     // one authorisation point. They cost `git:read` and `git:write`, so a run whose
     // skills declared neither still sees zero of them — which is why adding them
     // here changes nothing for a caller that never asked for git.
-    tools: [...gitToolDescriptors({ events, runId: task.id }), ...host.descriptors()],
-    granted,
+    tools: [
+      ...(projectTools ? projectToolDescriptors() : []),
+      ...gitToolDescriptors({ events, runId: task.id }),
+      ...extraTools,
+      ...host.descriptors(),
+    ],
+    granted: dispatcherGrant,
     root,
     events,
     runId: task.id,
     ...(skills.length === 1 ? { skill: skills[0]!.name } : {}),
   })
+  const effective = dispatcherGrant
   ctx.log(
     `mcp: ${host.openIds.length} server(s) open, ${dispatcher.availableTools.length} tool(s) ` +
-      `reachable with ${granted.length === 0 ? 'no capabilities' : granted.join(', ')}`,
+      `reachable with ${effective.length === 0 ? 'no capabilities' : effective.join(', ')}`,
   )
   return { host, dispatcher }
 }
@@ -1247,6 +1671,8 @@ async function cost(params: Record<string, unknown>, ctx: MethodContext): Promis
       tokensOut: perRun.tokensOut,
       calls: perRun.calls,
       unpriced: perRun.unpriced,
+      usageUnknown: perRun.usageUnknown,
+      usageEstimatedCalls: perRun.usageEstimatedCalls,
       cacheHits: perRun.cacheHits,
       allLocal: perRun.allLocal,
       startedAt: perRun.entries[0]?.ts ?? null,
@@ -1264,6 +1690,8 @@ async function cost(params: Record<string, unknown>, ctx: MethodContext): Promis
       tokensOut: ledger.tokensOut,
       calls: ledger.calls,
       unpriced: ledger.unpriced,
+      usageUnknown: ledger.usageUnknown,
+      usageEstimatedCalls: ledger.usageEstimatedCalls,
       cacheHits: ledger.cacheHits,
       savedUsd: ledger.savedUsd,
       allLocal: ledger.allLocal,
@@ -1277,6 +1705,17 @@ async function cost(params: Record<string, unknown>, ctx: MethodContext): Promis
     /** Every priced call, newest last, so a total can be audited row by row. */
     entries: ledger.entries,
   }
+}
+
+/**
+ * Model calls NOT tied to a message — completions, inline edits, commit messages,
+ * connection tests, model listing — rolled up by cause from `~/.sketch/usage/*.jsonl`.
+ * These never go in a project's event log (one line per keystroke pause would bury the
+ * runs), so the Cost dashboard reads them from here to show them by cause. Unknown tokens
+ * are shown as unknown, never zero. No key, prompt, or reply is ever in this log.
+ */
+async function costUsage(params: Record<string, unknown>): Promise<unknown> {
+  return summarizeUsage(usageHome(params))
 }
 
 /**
@@ -1735,6 +2174,22 @@ async function gitDiff(params: Record<string, unknown>, ctx: MethodContext): Pro
   return { diff }
 }
 
+/**
+ * One file as it is in HEAD (`ref: 'HEAD'`, the default) or in the index
+ * (`ref: 'index'`), for the editor's change markers and the diff view. Read-only;
+ * `content` is null when that version has no such file (new, untracked, no commit
+ * yet, no repository).
+ */
+async function gitShow(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
+  const path = optionalString(params, 'path', 'params.path')
+  if (path === undefined || path.trim() === '') throw new InvalidParamsError('params.path is required')
+  const ref = optionalString(params, 'ref', 'params.ref') ?? 'HEAD'
+  if (ref !== 'HEAD' && ref !== 'index') throw new InvalidParamsError("params.ref must be 'HEAD' or 'index' when present")
+  const tool = gitTool(gitRoot(params), ctx, false)
+  const content = ref === 'index' ? await tool.showIndex(path) : await tool.showHead(path)
+  return { content }
+}
+
 async function gitStage(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
   const root = gitRoot(params)
   const tool = gitTool(root, ctx, true)
@@ -1759,6 +2214,124 @@ async function gitCommit(params: Record<string, unknown>, ctx: MethodContext): P
   const message = typeof params['message'] === 'string' ? params['message'] : ''
   const result = await tool.commit(message)
   return { output: result.output, status: await tool.status() }
+}
+
+async function gitDiscard(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
+  const tool = gitTool(gitRoot(params), ctx, true)
+  await tool.discard(gitPaths(params))
+  return tool.status()
+}
+
+async function gitBranches(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
+  return gitTool(gitRoot(params), ctx, false).branches()
+}
+
+async function gitSwitch(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
+  const tool = gitTool(gitRoot(params), ctx, true)
+  const name = readString(params, 'branch', 'params.branch')
+  const create = optionalBoolean(params, 'create', 'params.create') === true
+  await tool.switchBranch(name, { create })
+  return tool.status()
+}
+
+// Push, pull and fetch exist to reach a remote, so Offline Mode refuses them before
+// `git` starts: the network guard covers this process's requests, not a child's.
+const GIT_REMOTE_LABEL = 'git://remote'
+
+async function gitPush(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
+  assertOnlineAction(params, ctx, GIT_REMOTE_LABEL, 'git push')
+  const tool = gitTool(gitRoot(params), ctx, true)
+  const { output } = await tool.push()
+  return { output, status: await tool.status() }
+}
+
+async function gitPull(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
+  assertOnlineAction(params, ctx, GIT_REMOTE_LABEL, 'git pull')
+  const tool = gitTool(gitRoot(params), ctx, true)
+  const { output } = await tool.pull()
+  return { output, status: await tool.status() }
+}
+
+async function gitFetch(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
+  assertOnlineAction(params, ctx, GIT_REMOTE_LABEL, 'git fetch')
+  const tool = gitTool(gitRoot(params), ctx, true)
+  await tool.fetch()
+  return tool.status()
+}
+
+async function gitLog(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
+  const limit = optionalNumber(params, 'limit', 'params.limit') ?? 30
+  return { commits: await gitTool(gitRoot(params), ctx, false).log(limit) }
+}
+
+/** Diff characters quoted to the model for a commit message. */
+const COMMIT_DIFF_CHARS = 14_000
+
+/**
+ * A commit message for what is staged (or, with nothing staged, for the working-tree
+ * changes), written by the connected model from the diff and the repository's recent
+ * subjects. One model call, nothing written: the message lands in the commit box for
+ * the user to read and edit before committing.
+ */
+async function gitCommitMessage(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
+  const tool = gitTool(gitRoot(params), ctx, false)
+  let diff = await tool.diff({ staged: true })
+  let source: 'staged' | 'unstaged' = 'staged'
+  if (diff.trim() === '') {
+    diff = await tool.diff()
+    source = 'unstaged'
+  }
+  if (diff.trim() === '') throw new InvalidParamsError('there are no changes to describe')
+  const recent = await tool.log(8).catch(() => [])
+  const quoted = diff.length > COMMIT_DIFF_CHARS ? `${diff.slice(0, COMMIT_DIFF_CHARS)}\n… (diff truncated)` : diff
+  const style =
+    recent.length > 0
+      ? `Recent commit subjects in this repository, for style:\n${recent.map((c) => `- ${c.subject}`).join('\n')}\n\n`
+      : ''
+  const adapter = adapterFor(params, ctx)
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 60_000)
+  timer.unref?.()
+  try {
+    const options: ChatCallOptions = { signal: controller.signal, maxTokens: 300, temperature: 0.2 }
+    const response = await adapter.chat(
+      [
+        {
+          role: 'system',
+          content:
+            'You write git commit messages. Reply with the message only: a subject line of at most 72 characters in the ' +
+            "imperative mood (\"Fix …\", \"Add …\"), following the repository's style when one is shown; then, only if the " +
+            'change needs it, a blank line and a short body explaining why. No code fences, no quotes, no preamble.',
+        },
+        { role: 'user', content: `${style}The ${source} diff:\n\n${quoted}` },
+      ],
+      options as { signal?: AbortSignal },
+    )
+    const message = response.text
+      .replace(/^```[a-z]*\n?|```\s*$/gim, '')
+      .replace(/^["'`]+|["'`]+$/g, '')
+      .trim()
+    if (message === '') throw new Error('the model returned an empty message')
+    const answeredModel = typeof response.model === 'string' && response.model.trim() !== '' ? response.model.trim() : null
+    noteUsage(params, 'commit-message', {
+      provider: adapter.id,
+      requestedModel: adapter.model ?? null,
+      answeredModel: answeredModel !== null && answeredModel !== adapter.model ? answeredModel : null,
+      usage: response.usage ?? null,
+      usageEstimated: adapter.model === 'fake',
+      ok: true,
+      attempts: response.attempts,
+      root: optionalString(params, 'root', 'params.root') ?? null,
+    })
+    return {
+      message,
+      source,
+      ...(adapter.model !== undefined ? { model: adapter.model } : {}),
+      ...(answeredModel !== null && answeredModel !== adapter.model ? { responseModel: answeredModel } : {}),
+    }
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 // ── provider settings ────────────────────────────────────────────────────────
@@ -1787,10 +2360,15 @@ function settingsPath(params: Record<string, unknown>): string | undefined {
 async function providerCatalog(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
   const path = settingsPath(params)
   const loaded = await loadProviderSettings(path)
+  const catalog = ctx.extensions?.providers.catalog() ?? providerMatrix()
+  const ids = [...new Set([...catalog.map((entry) => entry.id), ...loaded.settings.providers.map((entry) => entry.id)])]
   return {
-    catalog: ctx.extensions?.providers.catalog() ?? providerMatrix(),
+    catalog,
     settings: loaded.settings,
     path: loaded.path,
+    // Which providers already have a key in the environment, by variable NAME only,
+    // so a surface can say "using OPENAI_API_KEY" instead of asking for it again.
+    envKeys: envKeyPresence(ids, ctx.env),
     ...(loaded.diagnostic !== undefined ? { diagnostic: loaded.diagnostic } : {}),
   }
 }
@@ -1816,7 +2394,13 @@ async function providerTest(
 ): Promise<unknown> {
   // Reuses the run path's reader, which is what registers the key as a secret.
   const config = readProviderConfig(params['provider'], ctx)
+  assertProviderAllowed(config, params, ctx)
   const timeoutMs = optionalNumber(params, 'timeoutMs', 'params.timeoutMs')
+  if (config.id === CHATGPT_PROVIDER_ID) {
+    const result = await chatgptConnectionTest(config, params, ctx, timeoutMs)
+    noteUsage(params, 'connection-test', { provider: config.id, requestedModel: config.model, usage: null, ok: (result as { ok?: boolean }).ok === true })
+    return result
+  }
   const target: ProviderTestTarget = {
     id: config.id,
     kind: config.kind,
@@ -1826,8 +2410,489 @@ async function providerTest(
     ...(config.apiKey !== undefined ? { apiKey: config.apiKey } : {}),
     ...(config.headers !== undefined ? { headers: config.headers } : {}),
   }
-  return testProviderConnection(target, {
+  const result = await testProviderConnection(target, {
     ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+  })
+  // A connection test is a GET /models, so it spends a request but no tokens.
+  noteUsage(params, 'connection-test', { provider: config.id, requestedModel: config.model, usage: null, ok: result.ok })
+  return result
+}
+
+/**
+ * The models a provider serves, asked of the provider. A real network call made
+ * only because a surface asked (the model picker); the key is for this one call.
+ * `params.provider.model` is not required here — choosing one is the point.
+ */
+async function providerModels(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
+  const source = asObject(params['provider'], 'params.provider')
+  const config = readProviderConfig({ model: '-', ...source }, ctx)
+  assertProviderAllowed(config, params, ctx)
+  const timeoutMs = optionalNumber(params, 'timeoutMs', 'params.timeoutMs')
+  if (config.id === CHATGPT_PROVIDER_ID) {
+    const url = `${CHATGPT_CODEX_BASE_URL}/models`
+    try {
+      const listed = await listChatGPTModels({
+        ...chatgptStore(params),
+        env: ctx.env,
+        ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+      })
+      noteUsage(params, 'model-list', { provider: config.id, usage: null, ok: true })
+      return {
+        ok: true,
+        code: 'ok',
+        message: listed.message,
+        url,
+        models: listed.models.map((m) => ({
+          id: m.id,
+          name: m.name,
+          ...(m.contextLength !== undefined ? { contextLength: m.contextLength } : {}),
+        })),
+      }
+    } catch (err) {
+      noteUsage(params, 'model-list', { provider: config.id, usage: null, ok: false })
+      return { ok: false, code: 'unauthorized', message: messageOf(err), url, models: [] }
+    }
+  }
+  const target: ProviderModelsTarget = {
+    id: config.id,
+    kind: config.kind,
+    baseUrl: config.baseUrl || (describeProvider(config.id)?.defaultBaseUrl ?? ''),
+    ...(config.apiKey !== undefined ? { apiKey: config.apiKey } : {}),
+    ...(config.headers !== undefined ? { headers: config.headers } : {}),
+  }
+  const result = await listProviderModels(target, { ...(timeoutMs !== undefined ? { timeoutMs } : {}) })
+  noteUsage(params, 'model-list', { provider: config.id, usage: null, ok: result.ok })
+  return result
+}
+
+// ── account sign-in (loopback OAuth) ────────────────────────────────────────
+//
+// The engine's part of "Connect your account" is ONLY the listener: it opens a port
+// on loopback and reports the one-time `code` the provider redirects back with. The
+// PKCE verifier lives in the surface that started the flow, the exchange happens
+// there, and the resulting key goes straight to the OS credential store — no
+// credential is ever held or returned here. `oauth-wait` is a long poll, which is
+// only possible because the protocol server no longer queues it behind a run.
+
+async function oauthStart(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
+  // The listener is local, but its only purpose is a sign-in the window then completes
+  // over the internet (the OpenRouter key exchange). Offline Mode stops it here.
+  assertOnlineAction(params, ctx, 'https://openrouter.ai', 'account sign-in')
+  const timeoutMs = optionalNumber(params, 'timeoutMs', 'params.timeoutMs')
+  return startLoopback({ ...(timeoutMs !== undefined ? { timeoutMs } : {}) })
+}
+
+async function oauthWait(params: Record<string, unknown>): Promise<unknown> {
+  const id = optionalString(params, 'id', 'params.id')
+  if (id === undefined) throw new InvalidParamsError('params.id is required')
+  return waitLoopback(id)
+}
+
+async function oauthCancel(params: Record<string, unknown>): Promise<unknown> {
+  const id = optionalString(params, 'id', 'params.id')
+  if (id === undefined) throw new InvalidParamsError('params.id is required')
+  return { id, cancelled: cancelLoopback(id) }
+}
+
+// ── "Sign in with ChatGPT" ──────────────────────────────────────────────────
+//
+// Unlike the OpenRouter flow above, the ENGINE completes this one: it holds the
+// PKCE verifier, exchanges the code, and keeps the tokens (settings/chatgptAuth.ts
+// says why — OpenAI rotates refresh tokens on every use). The window learns only
+// whether it worked, and as whom. No method here returns a token.
+
+function chatgptStore(params: Record<string, unknown>): { home?: string } {
+  const home = optionalString(params, 'home', 'params.home')
+  return home === undefined ? {} : { home: resolve(home) }
+}
+
+async function chatgptStatusMethod(params: Record<string, unknown>): Promise<unknown> {
+  return chatgptStatus(chatgptStore(params))
+}
+
+async function chatgptLoginStart(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
+  const mode = optionalString(params, 'mode', 'params.mode') ?? 'browser'
+  if (mode !== 'browser' && mode !== 'device') {
+    throw new InvalidParamsError("params.mode must be 'browser' or 'device'")
+  }
+  assertOnlineAction(params, ctx, CHATGPT_CODEX_BASE_URL, 'Sign in with ChatGPT')
+  const timeoutMs = optionalNumber(params, 'timeoutMs', 'params.timeoutMs')
+  const options = { ...chatgptStore(params), env: ctx.env, ...(timeoutMs !== undefined ? { timeoutMs } : {}) }
+  try {
+    if (mode === 'device') {
+      const device = await startChatGPTDeviceLogin(options)
+      return { ok: true, mode, ...device }
+    }
+    const browser = await startChatGPTBrowserLogin(options)
+    return { ok: true, mode, id: browser.id, authUrl: browser.authUrl, port: browser.port, expiresAt: browser.expiresAt }
+  } catch (err) {
+    if (err instanceof ChatGPTAuthError) return { ok: false, code: err.code, error: err.message }
+    throw err
+  }
+}
+
+async function chatgptLoginWait(params: Record<string, unknown>): Promise<unknown> {
+  const id = optionalString(params, 'id', 'params.id')
+  if (id === undefined) throw new InvalidParamsError('params.id is required')
+  return waitChatGPTLogin(id)
+}
+
+async function chatgptLoginCancel(params: Record<string, unknown>): Promise<unknown> {
+  const id = optionalString(params, 'id', 'params.id')
+  if (id === undefined) throw new InvalidParamsError('params.id is required')
+  return { id, cancelled: cancelChatGPTLogin(id) }
+}
+
+async function chatgptLogoutMethod(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
+  return chatgptLogout({ ...chatgptStore(params), env: ctx.env })
+}
+
+async function chatgptModels(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
+  const timeoutMs = optionalNumber(params, 'timeoutMs', 'params.timeoutMs')
+  try {
+    return await listChatGPTModels({ ...chatgptStore(params), env: ctx.env, ...(timeoutMs !== undefined ? { timeoutMs } : {}) })
+  } catch (err) {
+    return {
+      ok: false,
+      source: 'none',
+      models: [],
+      defaultModel: '',
+      code: err instanceof ChatGPTAuthError ? err.code : 'transient',
+      message: messageOf(err),
+    }
+  }
+}
+
+/**
+ * The connection test for a ChatGPT account is one tiny real request, because the
+ * only question that matters — "will a run work?" — is answered by nothing less.
+ */
+async function chatgptConnectionTest(
+  config: ProviderConfig,
+  params: Record<string, unknown>,
+  ctx: MethodContext,
+  timeoutMs?: number,
+): Promise<unknown> {
+  const url = `${CHATGPT_CODEX_BASE_URL}/responses`
+  const started = Date.now()
+  const store = chatgptStore(params)
+  const status = await chatgptStatus(store)
+  if (!status.signedIn) {
+    return {
+      ok: false,
+      code: 'unauthorized',
+      message: status.needsSignIn
+        ? 'Your ChatGPT sign-in has ended. Sign in with ChatGPT again.'
+        : 'Not signed in to ChatGPT yet. Choose “Sign in with ChatGPT”.',
+      url,
+      durationMs: Date.now() - started,
+    }
+  }
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), Math.max(5_000, timeoutMs ?? 45_000))
+  try {
+    const adapter = new ChatGPTCodexAdapter(config, { env: ctx.env, ...store })
+    const reply = await adapter.chat(
+      [
+        { role: 'system', content: 'You are a connection check. Reply with exactly: OK' },
+        { role: 'user', content: 'ping' },
+      ],
+      { signal: controller.signal, maxTokens: 16 },
+    )
+    const who = status.email !== undefined ? ` as ${status.email}` : ''
+    const plan = status.plan !== undefined ? ` (${status.plan} plan)` : ''
+    return {
+      ok: true,
+      code: 'ok',
+      message: `ChatGPT answered${who}${plan} with ${config.model}${reply.text.trim() === '' ? '' : `: “${reply.text.trim().slice(0, 40)}”`}.`,
+      url,
+      durationMs: Date.now() - started,
+    }
+  } catch (err) {
+    const message = messageOf(err)
+    const code = controller.signal.aborted
+      ? 'timeout'
+      : /not available to your ChatGPT account|not supported/i.test(message)
+        ? 'model-not-found'
+        : /sign in|sign-in|signed in/i.test(message)
+          ? 'unauthorized'
+          : /Could not reach/i.test(message)
+            ? 'unreachable'
+            : 'endpoint-error'
+    return {
+      ok: false,
+      code,
+      message: code === 'timeout' ? 'ChatGPT did not answer in time. Try again.' : message,
+      url,
+      durationMs: Date.now() - started,
+    }
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/**
+ * Put back every file an auto-applied run changed, from the snapshot it journalled.
+ * A file edited by someone after the run wrote it is skipped and reported, never
+ * overwritten.
+ */
+async function undoRun(params: Record<string, unknown>): Promise<unknown> {
+  const root = resolve(readString(params, 'root', 'params.root'))
+  const runId = optionalString(params, 'runId', 'params.runId')
+  if (runId === undefined || !/^[A-Za-z0-9._-]{1,128}$/.test(runId)) {
+    throw new InvalidParamsError('params.runId must be 1-128 characters from A-Z a-z 0-9 . _ -')
+  }
+  return restoreSnapshot(root, runId)
+}
+
+/**
+ * Clone a repository into a NEW folder under `params.parent`, for the "Clone
+ * Repository" button. One spawn, no shell, a URL that must look like a repository
+ * address, and a target folder that must not exist yet — so it can never be
+ * pointed at the user's existing files.
+ */
+async function gitClone(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
+  const url = readString(params, 'url', 'params.url').trim()
+  const parent = resolve(readString(params, 'parent', 'params.parent'))
+  if (!/^(https:\/\/|git@|ssh:\/\/)[^\s]+$/.test(url) || url.startsWith('-')) {
+    throw new InvalidParamsError('params.url must be an https://, ssh:// or git@ repository address')
+  }
+  assertOnlineAction(params, ctx, url.startsWith('https://') ? url : GIT_REMOTE_LABEL, 'git clone')
+  const derived = url.replace(/[/\\]+$/, '').split(/[/:\\]/).pop()?.replace(/\.git$/i, '') ?? ''
+  const name = (optionalString(params, 'name', 'params.name') ?? derived).trim()
+  if (!/^[A-Za-z0-9._-]{1,100}$/.test(name) || name === '.' || name === '..') {
+    throw new InvalidParamsError('the folder name may contain only letters, digits, . _ and -')
+  }
+  let parentInfo
+  try {
+    parentInfo = await stat(parent)
+  } catch {
+    throw new InvalidParamsError(`params.parent does not exist: ${parent}`)
+  }
+  if (!parentInfo.isDirectory()) throw new InvalidParamsError(`params.parent is not a folder: ${parent}`)
+  const target = join(parent, name)
+  const exists = await stat(target).then(
+    () => true,
+    () => false,
+  )
+  if (exists) throw new InvalidParamsError(`a folder named ${name} already exists in ${parent}`)
+
+  const output = await new Promise<{ code: number | null; stderr: string }>((resolveClone, rejectClone) => {
+    const launch = resolveForSpawn('git', ['clone', '--', url, target], ctx.env)
+    const child = spawnProcess(launch.cmd, launch.args, {
+      cwd: parent,
+      shell: false,
+      windowsHide: true,
+      // Never block on a credential prompt: a private repository fails with a message.
+      env: { ...ctx.env, GIT_TERMINAL_PROMPT: '0' },
+    })
+    let stderr = ''
+    child.stderr.setEncoding('utf8')
+    child.stderr.on('data', (chunk: string) => {
+      stderr = (stderr + chunk).slice(-4000)
+    })
+    const timer = setTimeout(() => child.kill(), 10 * 60_000)
+    child.on('error', (err) => {
+      clearTimeout(timer)
+      rejectClone(new Error(`git could not be started: ${err.message}`))
+    })
+    child.on('close', (code) => {
+      clearTimeout(timer)
+      resolveClone({ code, stderr })
+    })
+  })
+  if (output.code !== 0) {
+    throw new Error(`git clone failed: ${output.stderr.trim().split('\n').slice(-3).join(' ') || `exit ${output.code}`}`)
+  }
+  return { path: target, name }
+}
+
+// ── terminal ─────────────────────────────────────────────────────────────────
+//
+// The Code surface's terminal. One host per engine process, so every window tab and
+// both transports see the same running commands. See tools/terminal.ts for why this
+// lives in the engine rather than behind the old blocking Tauri command.
+
+let terminalHost: TerminalHost | null = null
+
+function terminal(ctx: MethodContext): TerminalHost {
+  if (terminalHost === null) {
+    terminalHost = new TerminalHost({ env: ctx.env })
+    const host = terminalHost
+    // A dev server must not outlive the engine that started it.
+    process.once('exit', () => host.disposeAll())
+  }
+  return terminalHost
+}
+
+/** A refusal is a sentence for the user; anything else keeps its own message. */
+function asTerminalError(err: unknown): never {
+  if (err instanceof TerminalRefusal) throw new InvalidParamsError(err.message)
+  throw err
+}
+
+function readTerminalId(params: Record<string, unknown>): string {
+  const id = readString(params, 'id', 'params.id')
+  if (!/^term-[a-z0-9]+-\d+$/.test(id)) throw new InvalidParamsError('params.id is not a terminal command id')
+  return id
+}
+
+async function termStart(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
+  const root = readString(params, 'root', 'params.root')
+  const line = params['line']
+  if (typeof line !== 'string') throw new InvalidParamsError('params.line must be a string')
+  if (line.length > 8000) throw new InvalidParamsError('params.line is too long for one command')
+  const cwd = optionalString(params, 'cwd', 'params.cwd')
+  const confirmed = optionalBoolean(params, 'confirmed', 'params.confirmed') === true
+  try {
+    const host = terminal(ctx)
+    return { ...host.start({ root, line, confirmed, ...(cwd !== undefined ? { cwd } : {}) }) }
+  } catch (err) {
+    return asTerminalError(err)
+  }
+}
+
+async function termRead(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
+  const id = readTerminalId(params)
+  const since = optionalNumber(params, 'since', 'params.since') ?? 0
+  try {
+    return terminal(ctx).read(id, since)
+  } catch (err) {
+    return asTerminalError(err)
+  }
+}
+
+async function termWrite(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
+  const id = readTerminalId(params)
+  const data = params['data']
+  const end = optionalBoolean(params, 'end', 'params.end') === true
+  if (data !== undefined && typeof data !== 'string') throw new InvalidParamsError('params.data must be a string')
+  try {
+    const host = terminal(ctx)
+    if (typeof data === 'string' && data !== '') host.write(id, data)
+    if (end) host.endInput(id)
+    return { ok: true }
+  } catch (err) {
+    return asTerminalError(err)
+  }
+}
+
+async function termKill(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
+  const id = readTerminalId(params)
+  try {
+    return terminal(ctx).kill(id)
+  } catch (err) {
+    return asTerminalError(err)
+  }
+}
+
+// ── the project watcher ─────────────────────────────────────────────────────
+//
+// What changed on disk, by long poll: see tools/watcher.ts. One watcher per open
+// folder, shared by every window polling it, closed when none has polled for a while.
+
+let watcherRegistry: WatcherRegistry | null = null
+
+function watchers(): WatcherRegistry {
+  if (watcherRegistry === null) {
+    watcherRegistry = new WatcherRegistry()
+    const registry = watcherRegistry
+    process.once('exit', () => registry.closeAll())
+  }
+  return watcherRegistry
+}
+
+async function fsWatch(params: Record<string, unknown>): Promise<unknown> {
+  const root = readString(params, 'root', 'params.root')
+  if (!/^(?:[A-Za-z]:[\\/]|[\\/])/.test(root)) throw new InvalidParamsError('params.root must be an absolute path')
+  const since = optionalNumber(params, 'since', 'params.since')
+  const timeoutMs = optionalNumber(params, 'timeoutMs', 'params.timeoutMs') ?? 25_000
+  if (timeoutMs < 0) throw new InvalidParamsError('params.timeoutMs must not be negative')
+  return watchers().for(root).poll(since === undefined ? undefined : Math.floor(since), timeoutMs)
+}
+
+// ── handing a path to the operating system ──────────────────────────────────
+//
+// "Reveal in File Explorer / Finder" and "Open in External Terminal". Contained to the
+// project by real path; spawned shell-less and detached. See tools/desktopOpen.ts.
+
+function asOsError(err: unknown): never {
+  if (err instanceof OsOpenRefusal) throw new InvalidParamsError(err.message)
+  throw err
+}
+
+async function osReveal(params: Record<string, unknown>): Promise<unknown> {
+  const root = readString(params, 'root', 'params.root')
+  const path = readString(params, 'path', 'params.path')
+  try {
+    return await revealInFileManager(root, path)
+  } catch (err) {
+    return asOsError(err)
+  }
+}
+
+async function osOpenTerminal(params: Record<string, unknown>): Promise<unknown> {
+  const root = readString(params, 'root', 'params.root')
+  const path = optionalString(params, 'path', 'params.path') ?? root
+  try {
+    return await openExternalTerminal(root, path)
+  } catch (err) {
+    return asOsError(err)
+  }
+}
+
+// ── explorer file operations ────────────────────────────────────────────────
+
+async function fsGuard<T>(work: () => Promise<T>): Promise<T> {
+  try {
+    return await work()
+  } catch (err) {
+    if (err instanceof FsRefusal) throw new InvalidParamsError(err.message)
+    const code = (err as NodeJS.ErrnoException | null)?.code
+    if (code === 'EPERM' || code === 'EACCES') throw new Error('The operating system refused: permission denied.')
+    if (code === 'EBUSY') throw new Error('The file is in use by another program. Close it there and try again.')
+    if (code === 'ENOTEMPTY') throw new Error('The folder is not empty.')
+    throw err
+  }
+}
+
+async function fsCreateFile(params: Record<string, unknown>): Promise<unknown> {
+  const root = readString(params, 'root', 'params.root')
+  const path = readString(params, 'path', 'params.path')
+  const content = params['content']
+  if (content !== undefined && typeof content !== 'string') throw new InvalidParamsError('params.content must be a string')
+  return fsGuard(() => createFile(root, path, content ?? ''))
+}
+
+async function fsCreateFolder(params: Record<string, unknown>): Promise<unknown> {
+  const root = readString(params, 'root', 'params.root')
+  const path = readString(params, 'path', 'params.path')
+  return fsGuard(() => createFolder(root, path))
+}
+
+async function fsRename(params: Record<string, unknown>): Promise<unknown> {
+  const root = readString(params, 'root', 'params.root')
+  const source = readString(params, 'source', 'params.source')
+  const target = readString(params, 'target', 'params.target')
+  return fsGuard(() => renameEntry(root, source, target))
+}
+
+/**
+ * Delete. `trash` defaults to TRUE: a delete is recoverable unless the user explicitly
+ * chose otherwise. When the trash cannot be used nothing is deleted, and the answer
+ * says so (`trashUnavailable`) so the window can offer a permanent delete instead.
+ */
+async function fsDelete(params: Record<string, unknown>): Promise<unknown> {
+  const root = readString(params, 'root', 'params.root')
+  const path = readString(params, 'path', 'params.path')
+  const trash = optionalBoolean(params, 'trash', 'params.trash') ?? true
+  return fsGuard(async () => {
+    try {
+      return { deleted: true, ...(await deleteEntry(root, path, { trash })) }
+    } catch (err) {
+      if (err instanceof TrashUnavailable) return { deleted: false, trashUnavailable: true, message: err.message }
+      throw err
+    }
   })
 }
 
@@ -1928,6 +2993,131 @@ async function projectSearchMethod(params: Record<string, unknown>): Promise<unk
   })
 }
 
+// ── Find in Files / Replace in Files ─────────────────────────────────────────
+//
+// The Search panel's editor-style search (tools/findReplace.ts): literal by default,
+// optionally a regular expression, case and whole-word toggles, include/exclude globs,
+// and Replace that rewrites exactly the matches the panel showed. `find-in-files` is a
+// read and emits nothing; a newer search with the same `requestId` stops the older one.
+// `replace-in-files` writes through the contained, snapshotting writer and returns the
+// snapshot id `undo-run` takes, so a Replace All can be undone.
+
+/** A search text may be a single space; only "nothing at all" is refused. */
+function readSearchText(params: Record<string, unknown>, key: string): string {
+  const value = params[key]
+  if (typeof value !== 'string' || value === '') throw new InvalidParamsError(`params.${key} must be a non-empty string`)
+  if (value.length > 4000) throw new InvalidParamsError(`params.${key} is longer than 4000 characters`)
+  return value
+}
+
+/** Optional text that may legitimately be empty (a replacement, a glob box). */
+function readOptionalText(params: Record<string, unknown>, key: string): string | undefined {
+  const value = params[key]
+  if (value === undefined || value === null) return undefined
+  if (typeof value !== 'string') throw new InvalidParamsError(`params.${key} must be a string when present`)
+  if (value.length > 4000) throw new InvalidParamsError(`params.${key} is longer than 4000 characters`)
+  return value
+}
+
+function readFindQuery(params: Record<string, unknown>): FindQuery & FindFilters {
+  const isRegex = optionalBoolean(params, 'isRegex', 'params.isRegex')
+  const matchCase = optionalBoolean(params, 'matchCase', 'params.matchCase')
+  const wholeWord = optionalBoolean(params, 'wholeWord', 'params.wholeWord')
+  const include = readOptionalText(params, 'include')
+  const exclude = readOptionalText(params, 'exclude')
+  return {
+    query: readSearchText(params, 'query'),
+    ...(isRegex === true ? { isRegex: true } : {}),
+    ...(matchCase === true ? { matchCase: true } : {}),
+    ...(wholeWord === true ? { wholeWord: true } : {}),
+    ...(include !== undefined ? { include } : {}),
+    ...(exclude !== undefined ? { exclude } : {}),
+  }
+}
+
+async function assertFolder(root: string): Promise<void> {
+  let info
+  try {
+    info = await stat(root)
+  } catch (err) {
+    throw new InvalidParamsError(`cannot search ${root}: ${err instanceof Error ? err.message : String(err)}`)
+  }
+  if (!info.isDirectory()) throw new InvalidParamsError(`cannot search ${root}: not a folder`)
+}
+
+async function findInFilesMethod(params: Record<string, unknown>): Promise<unknown> {
+  const root = resolve(readString(params, 'root', 'params.root'))
+  const query = readFindQuery(params)
+  const replacement = readOptionalText(params, 'replacement')
+  const maxHits = optionalNumber(params, 'maxHits', 'params.maxHits')
+  const requestId = optionalString(params, 'requestId', 'params.requestId')
+  if (requestId !== undefined && !/^[A-Za-z0-9._-]{1,128}$/.test(requestId)) {
+    throw new InvalidParamsError('params.requestId must be 1-128 characters from A-Z a-z 0-9 . _ -')
+  }
+  await assertFolder(root)
+  const controller = new AbortController()
+  if (requestId !== undefined) {
+    inFlightRuns.get(requestId)?.abort()
+    inFlightRuns.set(requestId, controller)
+  }
+  try {
+    const result = await findInFiles({
+      root,
+      ...query,
+      ...(replacement !== undefined ? { replacement } : {}),
+      ...(maxHits !== undefined ? { maxHits: Math.max(1, Math.min(20_000, Math.floor(maxHits))) } : {}),
+      signal: controller.signal,
+    })
+    return { ...result, cancelled: controller.signal.aborted }
+  } catch (err) {
+    if (err instanceof FindQueryError) throw new InvalidParamsError(err.message)
+    throw err
+  } finally {
+    if (requestId !== undefined && inFlightRuns.get(requestId) === controller) inFlightRuns.delete(requestId)
+  }
+}
+
+function readReplaceOnly(value: unknown): { path: string; line: number; text: string; textStart: number } | undefined {
+  if (value === undefined || value === null) return undefined
+  if (typeof value !== 'object' || Array.isArray(value)) throw new InvalidParamsError('params.only must be an object')
+  const only = value as Record<string, unknown>
+  const path = only['path']
+  const line = only['line']
+  const text = only['text']
+  const textStart = only['textStart']
+  if (typeof path !== 'string' || path.trim() === '') throw new InvalidParamsError('params.only.path must be a non-empty string')
+  if (typeof line !== 'number' || !Number.isInteger(line) || line < 1) throw new InvalidParamsError('params.only.line must be a positive integer')
+  if (typeof text !== 'string') throw new InvalidParamsError('params.only.text must be a string')
+  if (typeof textStart !== 'number' || !Number.isInteger(textStart) || textStart < 0) {
+    throw new InvalidParamsError('params.only.textStart must be a non-negative integer')
+  }
+  return { path, line, text, textStart }
+}
+
+async function replaceInFilesMethod(params: Record<string, unknown>): Promise<unknown> {
+  const root = resolve(readString(params, 'root', 'params.root'))
+  const query = readFindQuery(params)
+  const replacement = readOptionalText(params, 'replacement')
+  if (replacement === undefined) throw new InvalidParamsError('params.replacement must be a string (it may be empty)')
+  const paths = optionalStringArray(params['paths'], 'params.paths')
+  const only = readReplaceOnly(params['only'])
+  await assertFolder(root)
+  const snapshotId = `replace-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  try {
+    return await replaceInFiles({
+      root,
+      ...query,
+      replacement,
+      ...(paths !== undefined ? { paths } : {}),
+      ...(only !== undefined ? { only } : {}),
+      snapshotId,
+    })
+  } catch (err) {
+    if (err instanceof FindQueryError) throw new InvalidParamsError(err.message)
+    throw err
+  }
+}
+
 // ── skills: the registry, installing from it, and training against it ────────
 //
 // The Skills surface is a UI over these three methods, for the third time and the
@@ -1982,6 +3172,25 @@ const NO_REGISTRY_REASON =
   `The curated registry ships inside @sketch/core under registry/`
 
 /**
+ * The registry to use: an explicit one when configured, otherwise the curated registry
+ * EMBEDDED in this engine, materialized under `~/.sketch/registry/`. The shipped app is a
+ * single bundled file with no `registry/` beside it, so without the embedded copy every
+ * installed app reported "no skill registry is configured" and no skill could be added.
+ * The same installer verification applies to it as to any other registry folder.
+ */
+async function registryDirFor(params: Record<string, unknown>, ctx: MethodContext): Promise<string | null> {
+  const configured = configuredRegistryDir(params, ctx)
+  if (configured !== null) return configured
+  const home = optionalString(params, 'home', 'params.home') ?? homedir()
+  try {
+    return await materializeEmbeddedRegistry(join(resolve(home), '.sketch', 'registry'))
+  } catch (err) {
+    ctx.log(`embedded skill registry unavailable: ${messageOf(err)}`)
+    return null
+  }
+}
+
+/**
  * The catalog: every pinned skill, plus what is installed in this project.
  *
  * `installed` is read from disk rather than from a list the UI keeps, so a skill
@@ -1990,7 +3199,7 @@ const NO_REGISTRY_REASON =
  */
 async function skillsCatalog(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
   const root = resolve(optionalString(params, 'root', 'params.root') ?? ctx.cwd())
-  const registryDir = configuredRegistryDir(params, ctx)
+  const registryDir = await registryDirFor(params, ctx)
 
   let manifest: RegistryManifest | null = null
   let diagnostic: string | undefined
@@ -2052,7 +3261,7 @@ async function skillsCatalog(params: Record<string, unknown>, ctx: MethodContext
  */
 async function skillInstall(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
   const root = resolve(optionalString(params, 'root', 'params.root') ?? ctx.cwd())
-  const registryDir = configuredRegistryDir(params, ctx)
+  const registryDir = await registryDirFor(params, ctx)
   const name = readString(params, 'name', 'params.name')
   if (registryDir === null) throw new InvalidParamsError(NO_REGISTRY_REASON)
 
@@ -2106,6 +3315,13 @@ async function skillTrain(params: Record<string, unknown>, ctx: MethodContext): 
   const maxTokens = optionalNumber(params, 'maxTokens', 'params.maxTokens')
   const guidance = optionalString(params, 'guidance', 'params.guidance')
   const write = optionalBoolean(params, 'write', 'params.write')
+  // 'edits' is Microsoft SkillOpt's update rule: a few anchored edits per epoch and
+  // a buffer of rejected edits. 'rewrite' (the default) proposes a whole new body.
+  const mode = optionalString(params, 'mode', 'params.mode') ?? 'rewrite'
+  if (mode !== 'rewrite' && mode !== 'edits') {
+    throw new InvalidParamsError(`params.mode must be "rewrite" or "edits", not ${JSON.stringify(mode)}`)
+  }
+  const maxEdits = optionalNumber(params, 'maxEdits', 'params.maxEdits')
   const adapter = adapterFor(params, ctx)
 
   const { skills, diagnostics } = await loadSkills(installedSkillsDir(root))
@@ -2140,31 +3356,41 @@ async function skillTrain(params: Record<string, unknown>, ctx: MethodContext): 
   )
   const ledger = { calls: 0, tokens: 0, refusal: null as string | null }
 
+  const rejectedEdits: string[] = []
+  const proposerOptions: ProviderProposeEditOptions = {
+    adapter,
+    ledger,
+    ...(guidance !== undefined ? { guidance } : {}),
+    ...(maxCalls !== undefined || maxTokens !== undefined
+      ? {
+          budget: {
+            ...(maxCalls !== undefined ? { maxCalls } : {}),
+            ...(maxTokens !== undefined ? { maxTokens } : {}),
+          },
+        }
+      : {}),
+  }
+  const editProposer =
+    mode === 'edits'
+      ? providerProposeEdits({ ...proposerOptions, rejected: rejectedEdits, ...(maxEdits !== undefined ? { maxEdits } : {}) })
+      : null
+
   const result = await trainSkill({
     seed,
     cases,
     events,
     adapter,
     ...(epochs !== undefined ? { epochs } : {}),
-    proposeEdit: providerProposeEdit({
-      adapter,
-      ledger,
-      ...(guidance !== undefined ? { guidance } : {}),
-      ...(maxCalls !== undefined || maxTokens !== undefined
-        ? {
-            budget: {
-              ...(maxCalls !== undefined ? { maxCalls } : {}),
-              ...(maxTokens !== undefined ? { maxTokens } : {}),
-            },
-          }
-        : {}),
-    }),
+    proposeEdit: editProposer ?? providerProposeEdit(proposerOptions),
     // Writing the artifact is opt-in: a training run the user has not looked at
     // should not silently replace the skill they installed.
     ...(write === true
       ? { artifactPath: trainingArtifactPath(root, name) }
       : {}),
   })
+  // The last round's edits learn their fate only now, from the skill the gate kept;
+  // with the default single epoch, that is every round.
+  editProposer?.settle(result.skill)
 
   return {
     ok: true,
@@ -2177,6 +3403,8 @@ async function skillTrain(params: Record<string, unknown>, ctx: MethodContext): 
     split: { train: result.split.train.length, val: result.split.val.length },
     epochs: result.epochs,
     budget: { calls: ledger.calls, tokens: ledger.tokens, refusal: ledger.refusal },
+    mode,
+    ...(mode === 'edits' ? { rejectedEdits } : {}),
     ...(result.artifactPath !== undefined ? { artifactPath: result.artifactPath } : {}),
     // The winning body, so a surface can show a diff before the user writes it.
     body: result.skill.body,
@@ -2202,6 +3430,42 @@ async function skillPromote(params: Record<string, unknown>, ctx: MethodContext)
         skill: name,
         digest: result.digest,
         capabilities: result.granted,
+      },
+    })
+  }
+  return result
+}
+
+/**
+ * Remove an installed skill: its directory and its persisted capability grant.
+ *
+ * The removal is confined to this project's `.sketch/skills` and refuses an unsafe
+ * name before it builds a path (see `uninstallSkill` in `registry/grants.ts`); there
+ * is no path parameter and no `force`. It is idempotent — removing something already
+ * gone is `ok: true` with nothing removed — and the result says exactly what it took
+ * away, so a surface can tell "removed it" from "it was already gone". Afterwards the
+ * next `skills-catalog` reads the directory off disk and reports the skill as not
+ * installed, and a run can no longer load it because the loader finds nothing there.
+ */
+async function skillUninstall(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
+  const root = resolve(optionalString(params, 'root', 'params.root') ?? ctx.cwd())
+  const name = readString(params, 'name', 'params.name')
+  const result = await uninstallSkill(root, name)
+  if (result.ok && (result.removedDir || result.removedGrant)) {
+    const events = new StreamingEventStore(
+      new JsonlEventStore({ baseDir: root, secrets: () => ctx.secrets() }),
+      (event) => ctx.emitEvent(event),
+    )
+    await events.emit({
+      runId: `uninstall-${name}`,
+      kind: 'tool_called',
+      payload: {
+        component: 'registry',
+        name: 'skill-uninstall',
+        skill: name,
+        dir: result.dir,
+        removedDir: result.removedDir,
+        removedGrant: result.removedGrant,
       },
     })
   }
@@ -2284,6 +3548,219 @@ async function benchmarkReport(
   }
 }
 
+// ── editor and composer assistance ──────────────────────────────────────────
+
+/** One process-wide ceiling on inline completions; see `CompletionRateLimiter`. */
+const completionLimiter = new CompletionRateLimiter()
+/** A completion slower than this is useless to someone typing. */
+const COMPLETION_TIMEOUT_MS = 15_000
+
+/**
+ * Inline completion at the cursor ("ghost text").
+ *
+ * Cancellable through `cancel` with the `requestId` the editor chose, because the
+ * editor abandons a request the moment the user types again. A cancelled or
+ * timed-out request answers `{ text: '' }` rather than failing: no suggestion is the
+ * honest result of a request nobody is waiting for. A PROVIDER error still fails, so
+ * the editor can say once that completion is not working instead of failing silently
+ * forever.
+ *
+ * Nothing is written to the project's event log: a completion is not a run, and one
+ * line per pause in typing would bury every run that matters. The usage the provider
+ * reported is returned to the caller instead.
+ */
+async function complete(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
+  const prefix = params['prefix'] ?? ''
+  const suffix = params['suffix'] ?? ''
+  if (typeof prefix !== 'string') throw new InvalidParamsError('params.prefix must be a string')
+  if (typeof suffix !== 'string') throw new InvalidParamsError('params.suffix must be a string')
+  const path = optionalString(params, 'path', 'params.path') ?? 'untitled'
+  const language = optionalString(params, 'language', 'params.language')
+  const requestId = optionalString(params, 'requestId', 'params.requestId')
+  if (requestId !== undefined && !/^[A-Za-z0-9._-]{1,128}$/.test(requestId)) {
+    throw new InvalidParamsError('params.requestId must be 1-128 characters from A-Z a-z 0-9 . _ -')
+  }
+  const maxTokens = Math.max(16, Math.min(512, optionalNumber(params, 'maxTokens', 'params.maxTokens') ?? 160))
+
+  if (prefix.trim() === '' && suffix.trim() === '') return { text: '', skipped: 'empty file' }
+  if (!completionLimiter.tryAcquire()) {
+    return { text: '', throttled: true, detail: 'too many completion requests this minute; pausing suggestions briefly' }
+  }
+
+  const adapter = adapterFor(params, ctx)
+  const controller = new AbortController()
+  if (requestId !== undefined) {
+    inFlightRuns.get(requestId)?.abort()
+    inFlightRuns.set(requestId, controller)
+  }
+  const timer = setTimeout(() => controller.abort(), COMPLETION_TIMEOUT_MS)
+  timer.unref?.()
+  const started = Date.now()
+  try {
+    const options: ChatCallOptions = { signal: controller.signal, maxTokens, temperature: 0.1 }
+    const response = await adapter.chat(
+      buildCompletionMessages({ path, prefix, suffix, ...(language !== undefined ? { language } : {}) }),
+      // Wider than the contract's `{ signal }` on purpose; see `ChatCallOptions`.
+      options as { signal?: AbortSignal },
+    )
+    const answeredModel = typeof response.model === 'string' && response.model.trim() !== '' ? response.model.trim() : null
+    noteUsage(params, 'completion', {
+      provider: adapter.id,
+      requestedModel: adapter.model ?? null,
+      answeredModel: answeredModel !== null && answeredModel !== adapter.model ? answeredModel : null,
+      usage: response.usage ?? null,
+      usageEstimated: adapter.model === 'fake',
+      ok: true,
+      attempts: response.attempts,
+      root: optionalString(params, 'root', 'params.root') ?? null,
+    })
+    return {
+      text: cleanCompletion(response.text, { prefix, suffix }),
+      latencyMs: Date.now() - started,
+      ...(response.usage !== undefined ? { usage: response.usage } : {}),
+      // The requested model, and the one the provider named as having answered when it
+      // differs (a router alias). So even an editor call attributes the real model.
+      ...(adapter.model !== undefined ? { model: adapter.model } : {}),
+      ...(answeredModel !== null && answeredModel !== adapter.model ? { responseModel: answeredModel } : {}),
+    }
+  } catch (err) {
+    if (controller.signal.aborted) return { text: '', cancelled: true, latencyMs: Date.now() - started }
+    throw err
+  } finally {
+    clearTimeout(timer)
+    if (requestId !== undefined && inFlightRuns.get(requestId) === controller) inFlightRuns.delete(requestId)
+  }
+}
+
+/** A rewrite slower than this has lost the person waiting for it. Long, but slow free models exist. */
+const INLINE_EDIT_TIMEOUT_MS = 120_000
+
+/**
+ * Inline edit ("Ctrl+K"): the selection rewritten as the instruction asks.
+ *
+ * The editor shows the answer as a diff the user accepts or rejects; nothing is
+ * written here, and nothing is logged — like `complete`, this is an editor action,
+ * not a run. Cancellable through `cancel` with the editor's `requestId`; a cancelled
+ * or timed-out request answers `{ text: '', cancelled: true }`, while a provider
+ * error fails so the editor can show it.
+ */
+async function inlineEdit(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
+  const before = params['before'] ?? ''
+  const selection = params['selection'] ?? ''
+  const after = params['after'] ?? ''
+  const instructionParam = params['instruction']
+  if (typeof before !== 'string') throw new InvalidParamsError('params.before must be a string')
+  if (typeof selection !== 'string') throw new InvalidParamsError('params.selection must be a string')
+  if (typeof after !== 'string') throw new InvalidParamsError('params.after must be a string')
+  if (typeof instructionParam !== 'string' || instructionParam.trim() === '') {
+    throw new InvalidParamsError('params.instruction is required: say what should change')
+  }
+  const instruction = instructionParam.trim()
+  if (instruction.length > INLINE_EDIT_MAX_INSTRUCTION) {
+    throw new InvalidParamsError(`params.instruction is longer than ${INLINE_EDIT_MAX_INSTRUCTION} characters`)
+  }
+  if (selection.length > INLINE_EDIT_MAX_SELECTION) {
+    throw new InvalidParamsError(
+      `the selection is ${selection.length} characters; inline edit takes up to ${INLINE_EDIT_MAX_SELECTION}. Ask the agent for a change this large.`,
+    )
+  }
+  const path = optionalString(params, 'path', 'params.path') ?? 'untitled'
+  const language = optionalString(params, 'language', 'params.language')
+  const requestId = optionalString(params, 'requestId', 'params.requestId')
+  if (requestId !== undefined && !/^[A-Za-z0-9._-]{1,128}$/.test(requestId)) {
+    throw new InvalidParamsError('params.requestId must be 1-128 characters from A-Z a-z 0-9 . _ -')
+  }
+  const maxTokens = Math.max(64, Math.min(16_384, optionalNumber(params, 'maxTokens', 'params.maxTokens') ?? 4_096))
+
+  const adapter = adapterFor(params, ctx)
+  const controller = new AbortController()
+  if (requestId !== undefined) {
+    inFlightRuns.get(requestId)?.abort()
+    inFlightRuns.set(requestId, controller)
+  }
+  const timer = setTimeout(() => controller.abort(), INLINE_EDIT_TIMEOUT_MS)
+  timer.unref?.()
+  const started = Date.now()
+  try {
+    const options: ChatCallOptions = { signal: controller.signal, maxTokens, temperature: 0.2 }
+    const response = await adapter.chat(
+      buildInlineEditMessages({ path, before, selection, after, instruction, ...(language !== undefined ? { language } : {}) }),
+      // Wider than the contract's `{ signal }` on purpose; see `ChatCallOptions`.
+      options as { signal?: AbortSignal },
+    )
+    const answeredModel = typeof response.model === 'string' && response.model.trim() !== '' ? response.model.trim() : null
+    noteUsage(params, 'inline-edit', {
+      provider: adapter.id,
+      requestedModel: adapter.model ?? null,
+      answeredModel: answeredModel !== null && answeredModel !== adapter.model ? answeredModel : null,
+      usage: response.usage ?? null,
+      usageEstimated: adapter.model === 'fake',
+      ok: true,
+      attempts: response.attempts,
+      root: optionalString(params, 'root', 'params.root') ?? null,
+    })
+    return {
+      text: cleanInlineEdit(response.text, { selection }),
+      latencyMs: Date.now() - started,
+      ...(response.usage !== undefined ? { usage: response.usage } : {}),
+      ...(adapter.model !== undefined ? { model: adapter.model } : {}),
+      ...(answeredModel !== null && answeredModel !== adapter.model ? { responseModel: answeredModel } : {}),
+    }
+  } catch (err) {
+    if (controller.signal.aborted) return { text: '', cancelled: true, latencyMs: Date.now() - started }
+    throw err
+  } finally {
+    clearTimeout(timer)
+    if (requestId !== undefined && inFlightRuns.get(requestId) === controller) inFlightRuns.delete(requestId)
+  }
+}
+
+/** Above this the file list is cut; a quick-open over more than this is a search problem. */
+const PROJECT_FILES_MAX = 20_000
+
+/**
+ * Every indexable file in a project, project-relative with `/` separators.
+ *
+ * Powers Quick Open and the composer's `@` file mention. It uses the walker every
+ * other engine path uses, so `.gitignore`, dependency folders and binary files are
+ * excluded exactly as retrieval excludes them. Paths only; no content is read.
+ */
+async function projectFiles(params: Record<string, unknown>, _ctx: MethodContext): Promise<unknown> {
+  const rootParam = optionalString(params, 'root', 'params.root')
+  if (rootParam === undefined) throw new InvalidParamsError('params.root is required')
+  const root = resolve(rootParam)
+  const walk = await walkProjectDetailed(root, { maxFiles: PROJECT_FILES_MAX })
+  const files = walk.files.map((file) => file.relativePath.split(pathSep).join('/')).sort((a, b) => a.localeCompare(b))
+  return { root, files, truncated: walk.truncated, maxFiles: walk.maxFiles }
+}
+
+/**
+ * The custom slash commands for a project: `<root>/.sketch/commands/*.md`, then
+ * `~/.sketch/commands/*.md`. Read-only; the surface expands and sends them.
+ */
+async function commandsList(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
+  const rootParam = optionalString(params, 'root', 'params.root')
+  const home = optionalString(params, 'home', 'params.home') ?? homedir()
+  const sources = [
+    ...(rootParam !== undefined ? [{ dir: join(resolve(rootParam), '.sketch', 'commands'), scope: 'project' as const }] : []),
+    { dir: join(resolve(home), '.sketch', 'commands'), scope: 'user' as const },
+  ]
+  const { commands, diagnostics } = await loadSlashCommands(sources)
+  for (const diagnostic of diagnostics) ctx.log(`command diagnostic: ${diagnostic}`)
+  return {
+    commands: commands.map((command) => ({
+      name: command.name,
+      description: command.description,
+      ...(command.argumentHint !== undefined ? { argumentHint: command.argumentHint } : {}),
+      body: command.body,
+      scope: command.scope,
+      path: command.path,
+    })),
+    directories: sources.map((source) => source.dir),
+    diagnostics,
+  }
+}
+
 /**
  * The method table.
  *
@@ -2292,9 +3769,254 @@ async function benchmarkReport(
  * belongs to the engine and reaches the panel through `SketchClient` on both
  * transports rather than through a Tauri-only command.
  */
+// ── the user's own MCP servers ──────────────────────────────────────────────
+//
+// Listing is free. Saving, removing and approving are user actions on the user's own
+// files (`~/.sketch/mcp.json`, `<project>/.sketch/mcp.json`, `~/.sketch/mcp-trust.json`).
+// `mcp-server-test` starts the server once to list its tools, then stops it. Runs start
+// a server only when the window names it in `params.userMcpServers`.
+
+function userServerOptions(params: Record<string, unknown>): { home?: string; root?: string } {
+  const home = optionalString(params, 'home', 'params.home')
+  const root = optionalString(params, 'root', 'params.root')
+  return { ...(home !== undefined ? { home: resolve(home) } : {}), ...(root !== undefined ? { root: resolve(root) } : {}) }
+}
+
+/** The named servers a run may start: configured, startable, approved. Every refusal is logged. */
+async function userServersForRun(root: string, params: Record<string, unknown>, ctx: MethodContext, names: readonly string[]): Promise<UserMcpServer[]> {
+  if (names.length === 0) return []
+  if (offlineFor(params, ctx).offline) {
+    ctx.log(`mcp: not starting your servers (${names.join(', ')}) — Offline Mode is on, and Sketch cannot tell whether a program uses the network`)
+    return []
+  }
+  const { servers } = await readUserServers({ ...userServerOptions(params), root })
+  const out: UserMcpServer[] = []
+  for (const name of names) {
+    const server = servers.find((s) => s.name === name)
+    if (server === undefined) ctx.log(`mcp: no server named "${name}" in your MCP settings`)
+    else if (server.problems.length > 0) ctx.log(`mcp: not starting ${name} — ${server.problems.join('; ')}`)
+    else if (!server.trusted) ctx.log(`mcp: not starting ${name} — this project's server has not been approved (MCP panel)`)
+    else out.push(server)
+  }
+  return out
+}
+
+async function mcpServers(params: Record<string, unknown>): Promise<unknown> {
+  return readUserServers(userServerOptions(params))
+}
+
+function serverScope(params: Record<string, unknown>): 'global' | 'project' {
+  const scope = optionalString(params, 'scope', 'params.scope') ?? 'global'
+  if (scope !== 'global' && scope !== 'project') throw new InvalidParamsError("params.scope must be 'global' or 'project'")
+  if (scope === 'project' && optionalString(params, 'root', 'params.root') === undefined) {
+    throw new InvalidParamsError('a project server needs params.root')
+  }
+  return scope
+}
+
+async function mcpServerSave(params: Record<string, unknown>): Promise<unknown> {
+  const envValue = params['env']
+  const env = envValue === undefined ? {} : asObject(envValue, 'params.env')
+  for (const [key, value] of Object.entries(env)) {
+    if (typeof value !== 'string') throw new InvalidParamsError(`params.env.${key} must be a string`)
+  }
+  try {
+    const saved = await saveUserServer(userServerOptions(params), {
+      scope: serverScope(params),
+      name: readString(params, 'name', 'params.name').trim(),
+      command: readString(params, 'command', 'params.command').trim(),
+      args: optionalStringArray(params['args'], 'params.args') ?? [],
+      env: env as Record<string, string>,
+    })
+    return { saved: saved.name, ...(await readUserServers(userServerOptions(params))) }
+  } catch (err) {
+    if (err instanceof InvalidParamsError) throw err
+    throw new InvalidParamsError(messageOf(err))
+  }
+}
+
+async function mcpServerRemove(params: Record<string, unknown>): Promise<unknown> {
+  const removed = await removeUserServer(userServerOptions(params), serverScope(params), readString(params, 'name', 'params.name'))
+  return { removed, ...(await readUserServers(userServerOptions(params))) }
+}
+
+async function findUserServer(params: Record<string, unknown>): Promise<UserMcpServer> {
+  const name = readString(params, 'name', 'params.name')
+  const { servers } = await readUserServers(userServerOptions(params))
+  const server = servers.find((s) => s.name === name)
+  if (server === undefined) throw new InvalidParamsError(`no MCP server named "${name}" in your settings`)
+  return server
+}
+
+async function mcpServerTrust(params: Record<string, unknown>): Promise<unknown> {
+  const server = await findUserServer(params)
+  if (server.scope !== 'project') throw new InvalidParamsError(`"${server.name}" is in your own settings; only project servers need approval`)
+  await setServerTrust(userServerOptions(params), server, params['trusted'] !== false)
+  return readUserServers(userServerOptions(params))
+}
+
+async function mcpServerTest(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
+  const server = await findUserServer(params)
+  if (server.problems.length > 0) return { ok: false, name: server.name, detail: server.problems.join('; '), tools: [] }
+  if (!server.trusted) return { ok: false, name: server.name, detail: 'Approve this project server before starting it.', tools: [] }
+  assertOnlineAction(params, ctx, `stdio://${server.name}`, `starting the MCP server "${server.name}"`)
+  const root = optionalString(params, 'root', 'params.root') ?? ctx.cwd()
+  const timeoutMs = optionalNumber(params, 'timeoutMs', 'params.timeoutMs') ?? 60_000
+  const instance = new McpServer(specFor(server, resolve(root), { handshakeTimeoutMs: timeoutMs, requestTimeoutMs: timeoutMs }), {
+    log: (line) => ctx.log(line),
+  })
+  try {
+    const started = await instance.start()
+    return {
+      ok: started.ok,
+      name: server.name,
+      detail: started.detail,
+      tools: instance.tools.map((tool) => ({ name: tool.name, description: tool.description })),
+    }
+  } finally {
+    await instance.close()
+  }
+}
+
+// ── local models (Ollama) ───────────────────────────────────────────────────
+//
+// The model manager. Reading is free and touches only the Ollama server the user
+// configured (this computer by default). Downloading and removing are user actions
+// and need `confirmed: true` on the wire, the way `term-start` does: the window asks
+// first and shows the size. Nothing here is used by runs, which reach models only
+// through provider adapters.
+
+function localBase(params: Record<string, unknown>, ctx: MethodContext): string {
+  const base = ollamaBase(optionalString(params, 'baseUrl', 'params.baseUrl'))
+  if (!/^https?:\/\/[^\s/]+/.test(base)) throw new InvalidParamsError('params.baseUrl must be an http:// or https:// address')
+  assertReachable(base, offlineFor(params, ctx), 'Ollama')
+  return base
+}
+
+function modelParam(params: Record<string, unknown>): string {
+  const model = readString(params, 'model', 'params.model').trim()
+  if (!isModelName(model)) throw new InvalidParamsError('params.model must be an Ollama model name such as qwen2.5-coder:7b')
+  return model
+}
+
+function requireConfirmed(params: Record<string, unknown>, what: string): void {
+  if (params['confirmed'] !== true) {
+    throw new InvalidParamsError(`${what} needs confirmed: true — the user must agree first`)
+  }
+}
+
+async function localModels(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
+  const base = localBase(params, ctx)
+  const [server, install, hardware] = await Promise.all([ollamaServer(base), findOllama(ctx.env), readHardware()])
+  let models: LocalModel[] = []
+  let error: string | undefined
+  if (server.reachable) {
+    try {
+      models = await listLocalModels(base)
+    } catch (err) {
+      error = messageOf(err)
+    }
+  }
+  return {
+    server,
+    install,
+    models,
+    ...(error !== undefined ? { error } : {}),
+    hardware,
+    recommendations: recommend(hardware, models.map((m) => m.name)),
+  }
+}
+
+async function localModelPull(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
+  const base = localBase(params, ctx)
+  const model = modelParam(params)
+  requireConfirmed(params, 'Downloading a model')
+  // Ollama fetches the model from the internet itself, where this process's guard
+  // cannot see it. Offline Mode therefore refuses the download outright.
+  assertOnlineAction(params, ctx, 'https://registry.ollama.ai', `downloading ${model}`)
+  return startPull(base, model)
+}
+
+async function localModelPullStatus(params: Record<string, unknown>): Promise<unknown> {
+  const id = readString(params, 'id', 'params.id')
+  const state = pullStatus(id)
+  if (state === null) throw new InvalidParamsError(`no download with id ${JSON.stringify(id)}`)
+  return state
+}
+
+async function localModelPullCancel(params: Record<string, unknown>): Promise<unknown> {
+  const id = readString(params, 'id', 'params.id')
+  return { id, cancelled: cancelPull(id) }
+}
+
+async function localModelDelete(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
+  const base = localBase(params, ctx)
+  const model = modelParam(params)
+  requireConfirmed(params, 'Removing a model')
+  await deleteLocalModel(base, model)
+  return { ok: true, model }
+}
+
+async function localModelLoad(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
+  const base = localBase(params, ctx)
+  const model = modelParam(params)
+  if (params['unload'] === true) await unloadLocalModel(base, model)
+  else await loadLocalModel(base, model)
+  return { ok: true, model, loaded: params['unload'] !== true }
+}
+
+// ── Offline Mode and the privacy view ───────────────────────────────────────
+//
+// `privacy-status` is read-only: the switch, where it is saved, whether this process's
+// network guard is in place, and the requests this engine process made (origin and
+// outcome only). `privacy-set` is the switch itself, a user action.
+
+async function privacyStatus(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
+  const state = offlineFor(params, ctx)
+  const limit = optionalNumber(params, 'limit', 'params.limit') ?? 50
+  const home = optionalString(params, 'home', 'params.home')
+  const root = optionalString(params, 'root', 'params.root')
+  return {
+    offline: state.offline,
+    source: state.source,
+    file: state.file,
+    ...(state.error !== undefined ? { error: state.error } : {}),
+    guard: networkGuardInstalled(),
+    activity: recentActivity(Math.min(200, Math.max(0, Math.floor(limit)))),
+    storage: {
+      user: join(resolve(home ?? homedir()), '.sketch'),
+      ...(root !== undefined ? { project: join(resolve(root), '.sketch') } : {}),
+    },
+  }
+}
+
+async function privacySet(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
+  const offline = params['offline']
+  if (typeof offline !== 'boolean') throw new InvalidParamsError('params.offline must be true or false')
+  const home = optionalString(params, 'home', 'params.home')
+  await saveOfflineSetting(offline, { env: ctx.env, ...(home !== undefined ? { home: resolve(home) } : {}) })
+  return privacyStatus(params, ctx)
+}
+
 export const METHODS: Readonly<Record<string, MethodHandler>> = {
   ping,
   run,
+  // Offline Mode: the switch, and what this engine process sent where.
+  'privacy-status': privacyStatus,
+  'privacy-set': privacySet,
+  // The user's own MCP servers: list, add, remove, approve (project files), test.
+  'mcp-servers': mcpServers,
+  'mcp-server-save': mcpServerSave,
+  'mcp-server-remove': mcpServerRemove,
+  'mcp-server-trust': mcpServerTrust,
+  'mcp-server-test': mcpServerTest,
+  // The local model manager (Ollama): list, download, remove, load and unload.
+  'local-models': localModels,
+  'local-model-pull': localModelPull,
+  'local-model-pull-status': localModelPullStatus,
+  'local-model-pull-cancel': localModelPullCancel,
+  'local-model-delete': localModelDelete,
+  'local-model-load': localModelLoad,
   // Stopping a run. `runTask` accepted an `AbortSignal` from the beginning and no wire
   // could produce one, so a runaway run could only be ended by killing the process.
   cancel,
@@ -2309,11 +4031,68 @@ export const METHODS: Readonly<Record<string, MethodHandler>> = {
   'git-stage': gitStage,
   'git-unstage': gitUnstage,
   'git-commit': gitCommit,
+  // Source control beyond stage/commit: discard, branches, sync, history, and an AI
+  // commit message drafted from the staged diff (one model call, nothing committed).
+  'git-discard': gitDiscard,
+  'git-branches': gitBranches,
+  'git-switch': gitSwitch,
+  'git-push': gitPush,
+  'git-pull': gitPull,
+  'git-fetch': gitFetch,
+  'git-log': gitLog,
+  // The editor's change markers: a file as it is in HEAD. Read-only.
+  'git-show': gitShow,
+  'git-commit-message': gitCommitMessage,
   // Task 4.1's Provider Settings surface. Same reasoning as the git group: engine
   // capability, one implementation, reachable from both transports.
   'provider-catalog': providerCatalog,
   'provider-config-save': providerConfigSave,
   'provider-test': providerTest,
+  // The setup wizard's model picker: what this provider actually serves.
+  'provider-models': providerModels,
+  // "Connect your account": the loopback listener of a desktop OAuth sign-in. It
+  // reports a one-time code; it never sees or returns a credential.
+  'oauth-start': oauthStart,
+  'oauth-wait': oauthWait,
+  'oauth-cancel': oauthCancel,
+  // "Sign in with ChatGPT": the engine completes this sign-in and keeps the tokens;
+  // the window learns only whether it worked and as whom.
+  'chatgpt-status': chatgptStatusMethod,
+  'chatgpt-login-start': chatgptLoginStart,
+  'chatgpt-login-wait': chatgptLoginWait,
+  'chatgpt-login-cancel': chatgptLoginCancel,
+  'chatgpt-logout': chatgptLogoutMethod,
+  'chatgpt-models': chatgptModels,
+  // Undo an auto-applied run from its file-level snapshot. No Git required.
+  'undo-run': undoRun,
+  // The welcome screen's Clone Repository: one shell-less `git clone` into a new folder.
+  'git-clone': gitClone,
+  // The Code surface's terminal: the user's shell, streamed by polling, stoppable.
+  // `term-start` refuses without `confirmed: true`, as the Tauri command did.
+  'term-start': termStart,
+  'term-read': termRead,
+  'term-write': termWrite,
+  'term-kill': termKill,
+  // What changed on disk, by long poll: the window re-reads exactly those files and
+  // folders, in real time, whoever changed them (another editor, git, a build).
+  'fs-watch': fsWatch,
+  // The Explorer's "Reveal in File Explorer / Finder" and "Open in External Terminal".
+  'os-reveal': osReveal,
+  'os-open-terminal': osOpenTerminal,
+  // The Explorer's New File / New Folder / Rename / Delete. Contained by real path;
+  // never overwrites; delete goes to the OS trash unless the user chose otherwise.
+  'fs-create-file': fsCreateFile,
+  'fs-create-folder': fsCreateFolder,
+  'fs-rename': fsRename,
+  'fs-delete': fsDelete,
+  // Editor ghost text. Cancellable by `requestId` through `cancel`; logs nothing.
+  complete,
+  // Editor inline edit (Ctrl+K): the selection rewritten; the editor shows the diff.
+  'inline-edit': inlineEdit,
+  // Quick Open and `@` mentions: the walker's file list, paths only.
+  'project-files': projectFiles,
+  // Custom slash commands from `.sketch/commands/` and `~/.sketch/commands/`.
+  'commands-list': commandsList,
   // Task 5.5's Live Architecture panel: the seven views derived from the persisted
   // graph, plus the optional rebuild that makes "index this project" actionable.
   architecture,
@@ -2321,11 +4100,16 @@ export const METHODS: Readonly<Record<string, MethodHandler>> = {
   // panel's own `git grep` + folder-walk implementation is deleted; one dialect now
   // serves both callers. Read-only, emits nothing, writes nothing.
   'project-search': projectSearchMethod,
+  // The Search panel's editor-style Find in Files (literal or regex, globs) and
+  // Replace, which writes through the snapshotting writer so `undo-run` reverses it.
+  'find-in-files': findInFilesMethod,
+  'replace-in-files': replaceInFilesMethod,
   // Task 6.4's Skills surface. `skill-install` verifies before it writes and has no
   // force parameter; `skill-train` is the only method here that can reach a provider
   // and is invoked by explicit user action only (Requirement 9.6).
   'skills-catalog': skillsCatalog,
   'skill-install': skillInstall,
+  'skill-uninstall': skillUninstall,
   'skill-train': skillTrain,
   'skill-promote': skillPromote,
   // Task 7.3's curated MCP layer. READ-ONLY: this reports what the catalog offers and
@@ -2338,6 +4122,9 @@ export const METHODS: Readonly<Record<string, MethodHandler>> = {
   // Task 8.4's Cost Dashboard. Reads the log and sums it. No running total anywhere,
   // because two sources of a money number agree right up until they do not.
   cost,
+  // Non-run model calls (completions, inline edits, commit messages, connection tests,
+  // model listing) rolled up by cause from ~/.sketch/usage — visible where cost is shown.
+  'cost-usage': costUsage,
   // Task 9.4's Memory panel. Reading is free; remembering and superseding are user
   // actions, and `memory-supersede` requires a reason on the wire — an entry cannot be
   // closed silently (Requirement 21.3).

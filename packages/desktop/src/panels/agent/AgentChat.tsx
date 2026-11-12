@@ -1,419 +1,326 @@
 import { useEffect, useRef, useState } from 'react';
 import styles from './AgentChat.module.css';
-import { 
-  Sparkles, Copy, Plus, Send, Folder, Stop
-} from '../../components/Icons';
-import { ThinkingIndicator } from '../../components/ThinkingIndicator';
-import { ModelSelector } from '../../components/ModelSelector';
-import { useAppState, useAppDispatch } from '../../state/AppState';
+import { Sparkles, Folder, Key, AlertTriangle, Info, Copy, Check, Refresh } from '../../components/Icons';
+import { Markdown } from '../../components/Markdown';
+import { ChangedFilesCard, LiveRun, RunReceiptLine, RunSteps } from '../../components/RunCards';
+import { useAppState, useAppDispatch, type ChatMessage } from '../../state/AppState';
 import { useFileActions } from '../../editor/useFileActions';
-import { useSketchClient } from '../../lib/ClientProvider';
-import { withDesktopRunDefaults } from '../../lib/runDefaults';
-import { resolveApiKeyForRun } from '../../lib/secrets';
+import { canonicalPath, conversationRootRelation, relativeToRoot } from '../../editor/paths';
+import { insertEditorText } from '../../editor/editorBridge';
+import { useSketchEvents } from '../../lib/ClientProvider';
+import { AgentSessionProvider, useOptionalAgentSession, useAgentSession } from '../../lib/AgentSession';
+import { ApprovalCard, Composer } from './Composer';
 
-interface DisplayMessage {
-  id: string;
-  role: 'user' | 'agent' | 'system';
-  content: string;
-  isThinking?: boolean;
-}
+// The composer lives in its own module; it is re-exported here because both chat
+// surfaces have always imported it from this file.
+export { Composer } from './Composer';
 
-/** Ids for local chat rows. `crypto.randomUUID` is present in the webview. */
-function newId(): string {
-  return crypto.randomUUID();
-}
+import { CoworkHome } from './CoworkHome';
 
 export const AgentChat: React.FC = () => {
-  const state = useAppState();
+  // Production mounts one session for the window (App.tsx). A panel rendered on its
+  // own — a test, a storybook — brings its own, so it is never sessionless.
+  const shared = useOptionalAgentSession();
+  if (shared === null) {
+    return (
+      <AgentSessionProvider>
+        <AgentChatView />
+      </AgentSessionProvider>
+    );
+  }
+  return <AgentChatView />;
+};
+
+export function Blocker() {
+  const session = useAgentSession();
   const dispatch = useAppDispatch();
   const fileActions = useFileActions();
-  const client = useSketchClient();
-  const bottomRef = useRef<HTMLDivElement>(null);
-  const [inputText, setInputText] = useState('');
-  // The id of the run currently in flight, so it can be stopped. Held here and not in
-  // AppState because it is this panel's control state, not project state.
-  const [activeRunId, setActiveRunId] = useState<string | null>(null);
-  // The question the active run is waiting on, from its `ask` event. Non-null means the
-  // prompt box is an answer box.
-  const [pendingQuestion, setPendingQuestion] = useState<string | null>(null);
+  const blocker = session.blocker;
+  if (blocker === null) return null;
+  return (
+    <div className={styles.blocker} role="status">
+      <Info size={14} />
+      <span>{blocker.reason}</span>
+      {blocker.action === 'connect' && (
+        <button className={styles.blockerBtn} onClick={() => dispatch({ type: 'OPEN_CONNECT' })}>
+          <Key size={12} /> Connect a model
+        </button>
+      )}
+      {blocker.action === 'folder' && (
+        <button className={styles.blockerBtn} onClick={() => void fileActions.openFolder()}>
+          <Folder size={12} /> Open folder
+        </button>
+      )}
+    </div>
+  );
+}
 
-  const messages: DisplayMessage[] = state.chatMessages.length > 0 ? state.chatMessages : [];
+/** Within this many pixels of the end counts as "at the end": new output is followed. */
+const FOLLOW_SLACK_PX = 80;
 
-  const isEmpty = messages.length === 0;
+/** The nearest ancestor that scrolls vertically: the chat's own scroller, wherever it is mounted. */
+function scrollParentOf(node: HTMLElement | null): HTMLElement | null {
+  let at = node?.parentElement ?? null;
+  while (at !== null) {
+    const overflow = typeof window !== 'undefined' ? window.getComputedStyle(at).overflowY : '';
+    if (overflow === 'auto' || overflow === 'scroll') return at;
+    at = at.parentElement;
+  }
+  return null;
+}
 
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
-
-  // A paused run announces itself on the event stream, not on the run promise — the
-  // promise is still open, which is the point. `ask_answered` closes the prompt again for
-  // the case where something other than this panel supplied the answer.
-  useEffect(() => {
-    return client.subscribe((event) => {
-      if (event.runId !== activeRunId) return;
-      if (event.kind === 'ask') {
-        const question = event.payload['question'];
-        if (typeof question !== 'string' || question.trim() === '') return;
-        setPendingQuestion(question);
-        dispatch({
-          type: 'ADD_MESSAGE',
-          payload: { id: newId(), role: 'agent', content: question, timestamp: Date.now() },
-        });
-        dispatch({ type: 'SET_THINKING', payload: { isThinking: false } });
-      } else if (event.kind === 'ask_answered') {
-        setPendingQuestion(null);
-      }
-    });
-  }, [client, activeRunId, dispatch]);
-
-  // Sends go through the client seam. The reply is the engine's real `finalText`,
-  // and the events the run emits show up in the Timeline and the Agent Console as
-  // they arrive — no simulated response. Provider selection has one authority:
-  // the key-free entry in AppState loaded from providers.json. No selection means
-  // no provider on the wire, so the engine gives its existing honest refusal.
-  /**
-   * Stop the run in flight.
-   *
-   * The engine aborts it and the RUN emits its own `run_failed{reason:"aborted"}`, so this
-   * does not write a terminal message of its own — the `run` promise still settles below
-   * and reports what actually happened.
-   */
-  const handleStop = () => {
-    const runId = activeRunId;
-    if (runId === null) return;
-    dispatch({ type: 'SET_THINKING', payload: { isThinking: true, stage: 'Stopping the run...' } });
-    client.cancel(runId).catch((err: unknown) => {
-      dispatch({
-        type: 'ADD_MESSAGE',
-        payload: {
-          id: newId(),
-          role: 'system',
-          content: `Could not stop the run: ${err instanceof Error ? err.message : String(err)}`,
-          timestamp: Date.now(),
-        },
-      });
-    });
+/**
+ * The actions under a finished assistant reply: Copy the reply text, and Retry — re-send
+ * the request this reply answered, as one fresh run. Both are real: Copy writes to the
+ * clipboard with a "Copied" state, Retry calls the one session's retry(). No dead button —
+ * Retry is only shown when there is an earlier request to retry and no run is in flight.
+ */
+function MessageActions({ message }: { message: ChatMessage }) {
+  const session = useAgentSession();
+  const [copied, setCopied] = useState(false);
+  const canRetry = session.activeRunId === null && session.promptBehind(message) !== null;
+  const copy = () => {
+    void navigator.clipboard
+      ?.writeText(message.content)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      })
+      .catch(() => {});
   };
+  return (
+    <div className={styles.messageActions}>
+      <button type="button" className={styles.msgActionBtn} onClick={copy} aria-label={copied ? 'Copied' : 'Copy reply'} title="Copy reply">
+        {copied ? <Check size={12} /> : <Copy size={12} />}
+        {copied ? 'Copied' : 'Copy'}
+      </button>
+      {canRetry && (
+        <button type="button" className={styles.msgActionBtn} onClick={() => session.retry(message)} aria-label="Retry this request" title="Send this request again">
+          <Refresh size={12} /> Retry
+        </button>
+      )}
+    </div>
+  );
+}
 
-  const handleSend = () => {
-    const prompt = inputText.trim();
-    if (!prompt) return;
+export function MessageList({
+  compact = false,
+  onJumpChange,
+}: {
+  compact?: boolean;
+  /** Host-placed "Jump to latest": called with the action while scrolled up, null otherwise. */
+  onJumpChange?: (jump: (() => void) | null) => void;
+}) {
+  const state = useAppState();
+  const dispatch = useAppDispatch();
+  const session = useAgentSession();
+  const events = useSketchEvents();
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const messages = state.chatMessages;
+  const [stopping, setStopping] = useState(false);
 
-    // A question in flight turns the box into an answer box. Sending the text as a new
-    // task instead would abandon the paused run and start a second bill.
-    if (pendingQuestion !== null && activeRunId !== null) {
-      const runId = activeRunId;
-      setInputText('');
-      dispatch({
-        type: 'ADD_MESSAGE',
-        payload: { id: newId(), role: 'user', content: prompt, timestamp: Date.now() }
-      });
-      setPendingQuestion(null);
-      dispatch({ type: 'SET_THINKING', payload: { isThinking: true, stage: 'Continuing with your answer...' } });
-      client.reply(runId, prompt).then((outcome) => {
-        // The engine says whether the answer was actually delivered. A stale or timed-out
-        // question must not look answered.
-        if (!outcome.answered) {
-          dispatch({
-            type: 'ADD_MESSAGE',
-            payload: {
-              id: newId(),
-              role: 'system',
-              content: `That run was no longer waiting for an answer: ${outcome.detail ?? 'it had already moved on'}`,
-              timestamp: Date.now(),
-            },
-          });
-        }
-      }).catch((err: unknown) => {
-        dispatch({
-          type: 'ADD_MESSAGE',
-          payload: {
-            id: newId(),
-            role: 'system',
-            content: `Could not deliver the answer: ${err instanceof Error ? err.message : String(err)}`,
-            timestamp: Date.now(),
-          },
-        });
-      });
+  useEffect(() => {
+    if (session.activeRunId === null) setStopping(false);
+  }, [session.activeRunId]);
+
+  // FOLLOW THE CONVERSATION ONLY WHILE THE READER IS AT THE END OF IT. A run streams
+  // dozens of updates; scrolling to the bottom on each one dragged anybody reading an
+  // earlier answer back down. Scrolled up, new output waits behind a "Jump to latest"
+  // button instead. Sending a message always returns to the end.
+  const pinned = useRef(true);
+  const [behind, setBehind] = useState(false);
+  useEffect(() => {
+    const scroller = scrollParentOf(bottomRef.current);
+    if (scroller === null) return;
+    const onScroll = () => {
+      const atEnd = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < FOLLOW_SLACK_PX;
+      pinned.current = atEnd;
+      if (atEnd) setBehind(false);
+    };
+    scroller.addEventListener('scroll', onScroll, { passive: true });
+    return () => scroller.removeEventListener('scroll', onScroll);
+  }, []);
+
+  const last = messages[messages.length - 1];
+  useEffect(() => {
+    if (last?.role === 'user') pinned.current = true;
+  }, [last?.id, last?.role]);
+
+  useEffect(() => {
+    if (!pinned.current) {
+      setBehind(true);
       return;
     }
+    bottomRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'end' });
+  }, [messages, session.liveEvents.length, session.pendingApproval]);
 
-    // One run at a time from this panel: the engine refuses a duplicate in-flight id, and
-    // a second concurrent run is a second bill nobody asked for.
-    if (activeRunId !== null) return;
-    const provider = state.providers.find((entry) => entry.id === state.selectedProvider);
-    // Generated here so Stop works immediately, before `run_started` arrives.
-    const runId = newId();
-    setActiveRunId(runId);
+  const jumpToLatest = () => {
+    pinned.current = true;
+    setBehind(false);
+    bottomRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'end' });
+  };
+  const jumpRef = useRef(jumpToLatest);
+  jumpRef.current = jumpToLatest;
+  useEffect(() => {
+    onJumpChange?.(behind ? () => jumpRef.current() : null);
+    // The host only needs to hear when "behind" flips.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [behind]);
 
-    dispatch({
-      type: 'ADD_MESSAGE',
-      payload: { id: newId(), role: 'user', content: prompt, timestamp: Date.now() }
-    });
-    setInputText('');
-    dispatch({ type: 'SET_THINKING', payload: { isThinking: true, stage: 'Running task through the engine...' } });
+  const openReview = () => {
+    dispatch({ type: 'SET_MODE', payload: 'ide' });
+    dispatch({ type: 'SET_ACTIVE_PANEL', payload: 'review' });
+  };
 
-    // The stored key is resolved HERE, for this call, and held in nothing but the
-    // argument below (Requirement 17.4). A store that cannot be read is reported rather
-    // than swallowed: a local provider needs no key, so this must not fail the run.
-    const withKey = async () => {
-      if (provider === undefined) return undefined;
-      return resolveApiKeyForRun(provider.id, (reason) => {
-        dispatch({
-          type: 'ADD_MESSAGE',
-          payload: {
-            id: newId(),
-            role: 'system',
-            content: `Continuing without a stored key for ${provider.label}: ${reason}`,
-            timestamp: Date.now(),
-          },
-        });
-      });
-    };
-
-    withKey()
-      .then((apiKey) =>
-        client.run(
-          { id: newId(), prompt, verify: [] },
-          // Retrieval and the spend ceiling come from one authority so this panel and
-          // its tests cannot drift. Without them a desktop run reaches the model with no
-          // repository context and no bill ceiling — see runDefaults.ts.
-          withDesktopRunDefaults({
-            runId,
-            // There is a person here who can answer, so a question pauses the run
-            // instead of ending it.
-            interactive: true,
-            ...(provider !== undefined ? { provider } : {}),
-            // Present only when the store actually held one. `apiKey: undefined` would
-            // still be an own property on the wire object.
-            ...(apiKey !== null && apiKey !== undefined ? { apiKey } : {}),
-            ...(state.projectRoot ? { root: state.projectRoot } : {}),
-            reviewEdits: true,
-          }),
-        ),
-      )
-      .then((result) => {
-        setActiveRunId(null);
-        setPendingQuestion(null);
-        dispatch({ type: 'SET_THINKING', payload: { isThinking: false } });
-        dispatch({
-          type: 'ADD_MESSAGE',
-          payload: { id: newId(), role: 'agent', content: result.finalText, timestamp: Date.now() }
-        });
-      })
-      .catch((err: unknown) => {
-        setActiveRunId(null);
-        setPendingQuestion(null);
-        dispatch({ type: 'SET_THINKING', payload: { isThinking: false } });
-        dispatch({
-          type: 'ADD_MESSAGE',
-          payload: {
-            id: newId(),
-            role: 'system',
-            // Name the tool and the reason (Req 27.5).
-            content: `Engine (${client.transport} transport) failed: ${err instanceof Error ? err.message : String(err)}`,
-            timestamp: Date.now()
+  // Code in a reply goes straight into the open file, at the caret, while one is open.
+  const insertCode =
+    state.mode === 'ide' && state.activeFile !== null
+      ? (code: string) => {
+          if (!insertEditorText(code)) {
+            dispatch({ type: 'SET_EDITOR_NOTICE', payload: { level: 'info', message: 'Open a file in the editor to insert code into it.' } });
           }
-        });
-      });
-  };
+        }
+      : undefined;
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  };
-
-  const handleFolderClick = () => {
-    void fileActions.openFolder();
-  };
-
-  if (isEmpty) {
-    return (
-      <div className={`${styles.welcomeContainer} dottedCanvas`}>
-        {/* Screenshot 1 Welcome View */}
-        <div className={styles.centerCardArea}>
-          
-          {/* Headline with Asterisk/Sparkle */}
-          <div className={styles.headerTitleRow}>
-            <span className={styles.asteriskIcon} style={{ background: '#E8631A', color: '#fff', borderRadius: '6px', padding: '2px 8px', fontWeight: 'bold', fontSize: '1.2rem' }}>S</span>
-            <h1 className={styles.heroTitle}>What can I take off your plate?</h1>
-          </div>
-          <p className={styles.heroSubtitle}>Learn how to use Cowork safely.</p>
-
-          {/* Screenshot 1 Prompt Box Card */}
-          <div className={styles.promptCard}>
-            <textarea
-              className={styles.promptInput}
-              placeholder="How can I help you today?"
-              rows={2}
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              onKeyDown={handleKeyDown}
-            />
-
-            {/* Prompt Card Bottom Row */}
-            <div className={styles.promptCardBottomRow}>
-              <button className={styles.attachBtn} title="Attach files">
-                <Plus size={16} />
-              </button>
-
-              <div className={styles.promptRightActions}>
-                {/* Real providers, from providers.json. The pill that used to be
-                    here named a model on machines with nothing configured. */}
-                <ModelSelector />
-
-                {/* Same circle control, two jobs: a run in flight can be stopped from
-                    where it was started, rather than by killing the app. */}
-                <button 
-                  className={`${styles.sendCircleBtn} ${activeRunId !== null || inputText.trim() ? styles.sendActive : ''}`} 
-                  onClick={activeRunId !== null ? handleStop : handleSend}
-                  title={activeRunId !== null ? 'Stop this run' : 'Send'}
-                  aria-label={activeRunId !== null ? 'Stop this run' : 'Send'}
-                >
-                  {activeRunId !== null ? <Stop size={12} /> : <Send size={14} />}
-                </button>
-              </div>
-            </div>
-
-            {/* Folder context button inside prompt box */}
-            <div className={styles.folderContextRow}>
-              <button className={styles.folderPillBtn} onClick={handleFolderClick}>
-                <Folder size={14} />
-                <span>{state.projectRoot ? state.projectRoot.split(/[/\\]/).pop() : 'Work in a project or folder'}</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Screenshot 1 Suggestions Section */}
-          <div className={styles.suggestionsSection}>
-            <div className={styles.suggestionHeaderRow}>
-              <span className={styles.shuffleIcon}>🔀</span>
-              <span className={styles.suggestionTitleLabel}>Pick a task, any task</span>
-            </div>
-
-            <div className={styles.suggestionCardList}>
-              <div className={styles.suggestionCardItem} onClick={() => setInputText('Optimize my week')}>
-                <span className={styles.cardEmoji}>🌅</span>
-                <span className={styles.cardText}>Optimize my week</span>
-              </div>
-
-              <div className={styles.suggestionCardItem} onClick={() => setInputText('Organize my screenshots')}>
-                <span className={styles.cardEmoji}>📁</span>
-                <span className={styles.cardText}>Organize my screenshots</span>
-              </div>
-
-              <div className={styles.suggestionCardItem} onClick={() => setInputText('Find insights in files')}>
-                <span className={styles.cardEmoji}>📊</span>
-                <span className={styles.cardText}>Find insights in files</span>
-              </div>
-            </div>
-
-            <div className={styles.customizeFooterLink}>
-              <span>Customize with plugins</span>
-            </div>
-          </div>
-
+  const renderMessage = (msg: ChatMessage) => {
+    if (msg.role === 'system') {
+      return (
+        <div key={msg.id} className={styles.systemRow} role="note">
+          <AlertTriangle size={13} />
+          <span>{msg.content}</span>
         </div>
+      );
+    }
+    const isUser = msg.role === 'user';
+    return (
+      <div key={msg.id} className={`${styles.messageRow} ${isUser ? styles.userRow : styles.assistantRow}`}>
+        {!isUser && !compact && (
+          <div className={styles.avatarWrapper}>
+            <Sparkles className={styles.avatarIcon} />
+          </div>
+        )}
+        <div className={`${styles.messageBubble} ${isUser ? styles.userBubble : styles.assistantBubble}`}>
+          {!isUser && (
+            <div className={styles.agentName}>
+              Sketch
+              {session.wasStopped(msg.runId) ? (
+                <span className={styles.stopped}>Stopped</span>
+              ) : (
+                msg.ok === false && <span className={styles.notOk}>did not finish</span>
+              )}
+            </div>
+          )}
+          {isUser ? <div className={styles.userText}>{msg.content}</div> : <Markdown text={msg.content} onInsertCode={insertCode} />}
+          {!isUser && msg.files && msg.files.length > 0 && (
+            <ChangedFilesCard
+              message={msg}
+              events={events}
+              onUndo={() => session.undo(msg)}
+              onAccept={() => session.acceptProposals(msg)}
+              onReject={() => session.rejectProposals(msg)}
+              onReview={openReview}
+            />
+          )}
+          {!isUser && msg.steps && <RunSteps steps={msg.steps} />}
+          {!isUser && msg.receipt && <RunReceiptLine receipt={msg.receipt} />}
+          {!isUser && msg.content.trim() !== '' && <MessageActions message={msg} />}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className={compact ? styles.compactMessages : styles.messagesWrapper} role="log" aria-label="Conversation messages" aria-relevant="additions text">
+      {messages.map(renderMessage)}
+      {session.activeRunId !== null && (
+        <div className={styles.assistantRow} style={{ display: 'flex' }}>
+          <LiveRun
+            events={session.liveEvents}
+            stopping={stopping}
+            onStop={() => {
+              setStopping(true);
+              session.stop();
+            }}
+          />
+        </div>
+      )}
+      <ApprovalCard />
+      {behind && onJumpChange === undefined && (
+        <button type="button" className={styles.jumpLatest} onClick={jumpToLatest}>
+          ↓ Jump to latest
+        </button>
+      )}
+      <div ref={bottomRef} />
+    </div>
+  );
+}
+
+/**
+ * Tells the user where the ACTIVE conversation runs, when that differs from the open
+ * workspace. Selecting a conversation never moves the workspace boundary (W2 invariants
+ * 1-2), so this line is how the difference is made visible instead of silent:
+ *   - inside the workspace but not the workspace root itself: a quiet "Runs in <rel>"
+ *     line (its follow-up runs use that sub-path; the editor boundary stays the workspace).
+ *   - outside the workspace (another folder, or a PARENT of the open one): a plain notice
+ *     with a guarded "Open folder" button; the composer blocks send until then.
+ * Nothing is shown when the conversation has no root or runs at the workspace root.
+ */
+const ConversationRootNotice: React.FC = () => {
+  const state = useAppState();
+  const fileActions = useFileActions();
+  const conversation = state.conversations.find((c) => c.id === state.activeConversationId);
+  const convRoot = conversation?.root ? canonicalPath(conversation.root) : null;
+  const workspaceRoot = state.projectRoot;
+  const relation = conversationRootRelation(workspaceRoot, convRoot);
+
+  if (relation === 'outside' && convRoot !== null) {
+    return (
+      <div className={styles.blocker} role="status">
+        <Info size={14} />
+        <span>This conversation ran in {convRoot}. Open that folder to continue it.</span>
+        <button className={styles.blockerBtn} onClick={() => void fileActions.openFolderPath(convRoot)}>
+          <Folder size={12} /> Open folder
+        </button>
       </div>
     );
   }
 
-  return (
-    <div className={`${styles.container} dottedCanvas`}>
-      <div className={styles.messagesWrapper}>
-        {messages.map((msg) => (
-          <div 
-            key={msg.id} 
-            className={`${styles.messageRow} ${msg.role === 'user' ? styles.userRow : styles.assistantRow}`}
-          >
-            {msg.role === 'agent' && (
-              <div className={styles.avatarWrapper}>
-                <Sparkles className={styles.avatarIcon} />
-              </div>
-            )}
-            
-            <div className={`${styles.messageBubble} ${msg.role === 'user' ? styles.userBubble : styles.assistantBubble}`}>
-              {msg.role === 'agent' && (
-                <div className={styles.agentName}>Sketch</div>
-              )}
-              
-              <MessageContent content={msg.content} />
-            </div>
-          </div>
-        ))}
-
-        {state.isThinking && (
-          <div className={styles.thinkingRow}>
-            <ThinkingIndicator stage={state.thinkingStage || "Working..."} compact={false} />
-          </div>
-        )}
-
-        <div ref={bottomRef} />
+  if (relation === 'inside' && convRoot !== null && workspaceRoot !== null && convRoot !== workspaceRoot) {
+    const rel = relativeToRoot(workspaceRoot, convRoot);
+    return (
+      <div className={styles.blocker} role="status">
+        <Info size={12} />
+        <span>Runs in {rel}</span>
       </div>
+    );
+  }
 
-      {/* Floating Input at bottom when chat active */}
-      <div className={styles.activeChatInputWrapper}>
-        <div className={styles.activeChatCard}>
-          <textarea
-            className={styles.promptInput}
-            placeholder={pendingQuestion !== null ? 'Answer the question above...' : 'Ask a follow up...'}
-            rows={1}
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            onKeyDown={handleKeyDown}
-          />
-          <div className={styles.promptCardBottomRow}>
-            <button className={styles.attachBtn} title="Attach files">
-              <Plus size={16} />
-            </button>
-            <div className={styles.promptRightActions}>
-              <ModelSelector />
-              <button 
-                className={`${styles.sendCircleBtn} ${activeRunId !== null || inputText.trim() ? styles.sendActive : ''}`} 
-                onClick={activeRunId !== null ? handleStop : handleSend}
-                title={activeRunId !== null ? 'Stop this run' : 'Send'}
-                aria-label={activeRunId !== null ? 'Stop this run' : 'Send'}
-              >
-                {activeRunId !== null ? <Stop size={12} /> : <Send size={14} />}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+  return null;
 };
 
-const MessageContent = ({ content }: { content: string }) => {
-  const parts = content.split(/(```[\s\S]*?```)/g);
-  
+const AgentChatView: React.FC = () => {
+  const state = useAppState();
+  const session = useAgentSession();
+  const [jump, setJump] = useState<(() => void) | null>(null);
+  const isEmpty = state.chatMessages.length === 0 && session.activeRunId === null;
+
+  if (isEmpty) return <CoworkHome blocker={<Blocker />} />;
+
   return (
-    <div className={styles.content}>
-      {parts.map((part, i) => {
-        if (part.startsWith('```')) {
-          const lines = part.split('\n');
-          const lang = lines[0].replace('```', '').trim() || 'text';
-          const code = lines.slice(1, -1).join('\n');
-          
-          return (
-            <div key={i} className={styles.codeBlock}>
-              <div className={styles.codeHeader}>
-                <span className={styles.codeLang}>{lang}</span>
-                <button className={styles.copyBtn}>
-                  <Copy size={12} /> Copy
-                </button>
-              </div>
-              <pre className={styles.codeContent}>
-                <code>{code}</code>
-              </pre>
-            </div>
-          );
-        }
-        
-        return <div key={i} className={styles.textContent}>{part}</div>;
-      })}
+    <div className={`${styles.container} dottedCanvas`}>
+      <div className={styles.conversationHeader}>
+        <span>{state.conversations.find((c) => c.id === state.activeConversationId)?.title ?? 'Current task'}</span>
+        <span className={styles.conversationStatus}>{session.activeRunId !== null ? 'Working' : 'Conversation'}</span>
+      </div>
+      <MessageList onJumpChange={(fn) => setJump(() => fn)} />
+      <div className={styles.activeChatInputWrapper}>
+        {jump !== null && <button type="button" className={styles.jumpLatestFloating} onClick={jump}>↓ Jump to latest</button>}
+        <Blocker />
+        <ConversationRootNotice />
+        <div className={styles.activeChatCard}>
+          <Composer placeholder="Ask a follow up, / for commands, @ for files" rows={1} compact acceptSeeds surface="agent" />
+        </div>
+      </div>
     </div>
   );
 };

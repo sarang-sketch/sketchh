@@ -55,6 +55,7 @@ export function useProviderConfig(
           selected: answer.settings.selected,
           path: answer.path,
           notice: answer.diagnostic ?? null,
+          ...(answer.envKeys !== undefined ? { envKeys: answer.envKeys } : {}),
         },
       })
     } catch (err) {

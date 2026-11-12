@@ -80,10 +80,12 @@ describe('reading key presence', () => {
 })
 
 describe('the sentences a user reads', () => {
-  it('says which store, and that a stored key is never read back', () => {
+  it('says which store, and what a stored key is used for', () => {
     const stored: KeyState = { status: 'stored', store: 'the macOS Keychain' }
     expect(describeKeyState(stored)).toContain('the macOS Keychain')
-    expect(describeKeyState(stored)).toMatch(/never read back/)
+    expect(describeKeyState(stored)).toMatch(/Runs and connection tests use it/)
+    // It never claims to display the key: the sentence carries no value.
+    expect(describeKeyState(stored)).not.toMatch(/sk-/)
 
     const absent: KeyState = { status: 'absent', store: 'Windows Credential Manager' }
     expect(describeKeyState(absent)).toMatch(/No key is stored/)

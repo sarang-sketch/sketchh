@@ -45,12 +45,31 @@ export interface LedgerEntry {
   eventId: string
   ts: number
   iteration: number | null
-  /** The model, when the event recorded one. */
+  /**
+   * The model this call is attributed to: the model the provider said ANSWERED when
+   * the event recorded one (`responseModel`, e.g. a router alias resolved), otherwise
+   * the requested model. Pricing uses this, because you are billed for the model that
+   * actually ran.
+   */
   model: string | null
+  /**
+   * The model that was REQUESTED, when it differs from {@link model}. `null` when the
+   * event recorded no alias, so a surface shows the difference only when there is one.
+   */
+  requestedModel: string | null
   /** The adapter/provider id, when the event recorded one. */
   provider: string | null
   usage: Usage
-  /** USD, or null when this model is not in the pricing table. */
+  /**
+   * True unless the event said the provider reported NO usage (`usageKnown: false`). When
+   * false, {@link usage} is a placeholder `{0,0}`, NOT a measurement: a surface shows the
+   * tokens as "unknown" and {@link usd} is null (unknown), never 0 / $0.00. Old logs
+   * without the flag read as known.
+   */
+  usageKnown: boolean
+  /** True when the numbers are an estimate (the offline fake adapter's ~len/4), not a provider count. */
+  usageEstimated: boolean
+  /** USD, or null when this model is not in the pricing table OR its usage is unknown. */
   usd: number | null
   /** The pricing key that matched, for a surface that wants to show it. */
   matched: string | null
@@ -67,6 +86,14 @@ export interface Ledger {
   calls: number
   /** Calls whose model is not in the pricing table. `usd` excludes these. */
   unpriced: number
+  /**
+   * Calls whose token usage the provider did not report. Their tokens are NOT in
+   * {@link tokensIn}/{@link tokensOut} (there is nothing to add), and their cost is
+   * unknown, so a surface says "tokens unknown for N of M calls" rather than showing 0.
+   */
+  usageUnknown: number
+  /** Calls whose numbers are estimates (the offline fake adapter), counted but flagged. */
+  usageEstimatedCalls: number
   /** Requests answered from the cache. No tokens, no money, no network. */
   cacheHits: number
   /**
@@ -98,6 +125,8 @@ export function ledgerFor(events: readonly SketchEvent[], now: number = Date.now
   let tokensOut = 0
   let usd = 0
   let unpriced = 0
+  let usageUnknown = 0
+  let usageEstimatedCalls = 0
   let cacheHits = 0
   let savedUsd = 0
   let anyPriced = false
@@ -120,13 +149,34 @@ export function ledgerFor(events: readonly SketchEvent[], now: number = Date.now
     if (event.kind !== 'llm_response') continue
 
     const usage = readUsage(event.payload['usage']) ?? { in: 0, out: 0 }
-    const model = readString(event.payload['model'])
+    const requested = readString(event.payload['model'])
+    // The model that ANSWERED wins for attribution and pricing when the event recorded
+    // one; a run billed by a router is billed for the model that actually ran.
+    const answered = readString(event.payload['responseModel'])
+    const model = answered ?? requested
     const provider = readString(event.payload['adapter'] ?? event.payload['provider'])
-    const answer = costFor(usage, model ?? undefined, provider ?? undefined, now)
+    // The provider reported no usage when the event explicitly says `usageKnown: false`.
+    // Its `usage` is then a placeholder, not a measurement — do NOT sum it as real, and
+    // its cost is unknown, never zero. An old log without the flag reads as known.
+    const usageKnown = event.payload['usageKnown'] !== false
+    const usageEstimated = event.payload['usageEstimated'] === true
+    const answer = usageKnown
+      ? costFor(usage, model ?? undefined, provider ?? undefined, now)
+      : { usd: null, matched: null, local: false }
 
-    tokensIn += usage.in
-    tokensOut += usage.out
-    if (answer.usd === null) {
+    if (usageKnown) {
+      tokensIn += usage.in
+      tokensOut += usage.out
+    } else {
+      usageUnknown += 1
+    }
+    if (usageEstimated) usageEstimatedCalls += 1
+
+    if (!usageKnown) {
+      // Cost is genuinely unknown; it is neither priced nor "unpriced-model". It simply
+      // cannot be computed, so it does not touch `usd` and is not counted as unpriced.
+      allLocal = false
+    } else if (answer.usd === null) {
       unpriced += 1
       allLocal = false
     } else {
@@ -141,8 +191,12 @@ export function ledgerFor(events: readonly SketchEvent[], now: number = Date.now
       ts: event.ts,
       iteration: readNumber(event.payload['iteration']),
       model,
+      // Only when a router answered with a different model than requested.
+      requestedModel: answered !== null && requested !== null && requested !== answered ? requested : null,
       provider,
       usage,
+      usageKnown,
+      usageEstimated,
       usd: answer.usd,
       matched: answer.matched,
       local: answer.local,
@@ -155,6 +209,8 @@ export function ledgerFor(events: readonly SketchEvent[], now: number = Date.now
     tokensOut,
     calls: entries.length,
     unpriced,
+    usageUnknown,
+    usageEstimatedCalls,
     cacheHits,
     savedUsd,
     // Vacuously true is wrong here: a run with no priced call has not established that
@@ -197,8 +253,12 @@ export function describeLedger(ledger: Ledger): string {
     parts.push(`$${ledger.usd.toFixed(4)}`)
   }
 
-  parts.push(`${ledger.tokensIn} in / ${ledger.tokensOut} out over ${ledger.calls} call(s)`)
+  const tokenNote = ledger.usageEstimatedCalls > 0 && ledger.usageEstimatedCalls === ledger.calls ? ' (estimated)' : ''
+  parts.push(`${ledger.tokensIn} in / ${ledger.tokensOut} out over ${ledger.calls} call(s)${tokenNote}`)
 
+  if (ledger.usageUnknown > 0) {
+    parts.push(`tokens unknown for ${ledger.usageUnknown} of ${ledger.calls} call(s)`)
+  }
   if (ledger.unpriced > 0 && ledger.unpriced < ledger.calls) {
     parts.push(`${ledger.unpriced} call(s) could not be priced, so the total is a lower bound`)
   }

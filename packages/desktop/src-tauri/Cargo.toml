@@ -3,11 +3,20 @@ name = "sketch-desktop"
 version = "0.1.0"
 edition = "2021"
 
+[workspace]
+# The terminal crate is its own package so its tests build without Tauri:
+# `cargo test -p sketch-terminal` compiles a few crates instead of a few hundred.
+members = ["terminal"]
+
 [dependencies]
 tauri = { version = "2", features = [] }
 tauri-plugin-shell = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-dialog = "2"
+# Remembers the window's size, position and maximized state between launches.
+# 2.4.1 is the newest release that accepts tauri 2.11; 2.5 requires tauri 2.12.
+tauri-plugin-window-state = "=2.4.1"
+sketch-terminal = { path = "terminal" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["full"] }

@@ -86,21 +86,35 @@
 .content {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 12px;
 }
 
+/* A responsive grid: as many ~260px columns as the panel is wide, one on a narrow
+   host panel. `minmax(0, 1fr)` lets a column shrink below its content so a long
+   name or digest wraps/truncates inside the card instead of forcing a horizontal
+   scrollbar on the whole page. */
 .skillList {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr));
   gap: 12px;
+  align-items: start;
 }
 
 .skillCard {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
   background-color: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 12px;
   transition: border-color 0.2s ease, opacity 0.2s ease;
+}
+
+/* The training-method control spans the whole grid rather than sitting in one cell. */
+.trainMethod {
+  grid-column: 1 / -1;
 }
 
 .skillCard:hover {
@@ -111,22 +125,31 @@
   opacity: 0.6;
 }
 
+/* The header never lets its button overlap the title: the title column may shrink
+   (min-width: 0) and the button keeps its intrinsic width and does not shrink. The
+   old rule gave the install button width: 100%, which in this space-between row
+   fought the title for the same space — the overlap the owner saw. */
 .cardHeader {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
+  gap: 8px;
   margin-bottom: 8px;
 }
 
 .cardTitle {
   display: flex;
-  align-items: center;
-  gap: 6px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  min-width: 0;
 }
 
 .name {
   font-weight: 600;
   font-size: 13px;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .featuredIcon {
@@ -148,22 +171,31 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: auto;
+  padding-top: 8px;
 }
 
 .meta {
   display: flex;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  min-width: 0;
   font-size: 11px;
   color: var(--text-muted);
+  overflow-wrap: anywhere;
 }
 
 .badge {
   padding: 2px 6px;
-  border-radius: 10px;
+  border-radius: var(--radius-full);
   font-size: 10px;
   font-weight: 600;
-  color: #fff;
+  color: var(--text-secondary);
+  background: var(--bg-elevated);
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .toggleSwitch {
@@ -274,8 +306,8 @@
 
 .actionButton {
   width: 100%;
-  background-color: var(--accent);
-  color: #fff;
+  background-color: var(--accent-fill);
+  color: var(--text-on-accent);
   border: none;
   border-radius: var(--radius);
   padding: 8px;
@@ -285,8 +317,54 @@
   transition: background-color 0.2s ease;
 }
 
-.actionButton:hover {
-  background-color: var(--accent-hover);
+.actionButton:hover:not(:disabled) {
+  background-color: var(--accent-fill-hover);
+}
+
+.actionButton:focus-visible,
+.dangerButton:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* An in-row button sizes to its label instead of the card width, so it cannot
+   overlap the title beside it or stretch across a card footer. */
+.actionButtonInline {
+  width: auto;
+  flex: 0 0 auto;
+  padding: 5px 10px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* Footer actions on an installed card: Train and the destructive Uninstall. */
+.cardActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.dangerButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  color: var(--error);
+  border: 1px solid color-mix(in srgb, var(--error) 45%, transparent);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.dangerButton:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--error) 14%, transparent);
+  border-color: var(--error);
+}
+
+.dangerButton:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 /* ── task 6.4: the registry surface ─────────────────────────────────────────
@@ -298,14 +376,17 @@
 .version {
   font-size: 11px;
   color: var(--text-secondary);
+  white-space: nowrap;
 }
 
 .installedTag {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  flex: 0 0 auto;
   font-size: 11px;
   color: var(--success);
+  white-space: nowrap;
 }
 
 .summary {
@@ -453,4 +534,70 @@
 .secondaryButton:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+
+/* ── training method (SkillOpt small edits or a full rewrite) ─────────────── */
+
+.trainMethod {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.trainMethodRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.trainSelect {
+  min-width: 0;
+  padding: 4px 6px;
+  font-size: 12px;
+  color: var(--text-primary);
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.trainSelect:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.trainHint {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+.rejectedEdits {
+  width: 100%;
+  margin-top: 6px;
+  color: var(--text-secondary);
+}
+
+.rejectedEdits summary {
+  cursor: pointer;
+  color: var(--text-primary);
+}
+
+.rejectedEdits ul {
+  margin: 4px 0 0;
+  padding-left: 16px;
+}
+
+.rejectedEdits code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  word-break: break-word;
 }

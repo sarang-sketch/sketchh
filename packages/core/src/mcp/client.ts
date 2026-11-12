@@ -36,6 +36,7 @@
 // Validates: Requirements 22.1, 22.3, 22.5
 
 import { spawn } from 'node:child_process'
+import { resolveForSpawn } from '../verify/spawnTarget.js'
 import type { ChildProcess } from 'node:child_process'
 
 import type { EventInput } from '../events/store.js'
@@ -167,7 +168,10 @@ export class McpServer {
     if (this.#started) return { ok: true, detail: 'already started' }
 
     try {
-      this.#child = spawn(this.spec.command, this.spec.args ?? [], {
+      // Curated servers launch through `npx`, a .cmd shim on Windows; resolved to the
+      // Node script it wraps so the launch stays shell-free there too.
+      const target = resolveForSpawn(this.spec.command, this.spec.args ?? [])
+      this.#child = spawn(target.cmd, target.args, {
         cwd: this.spec.cwd,
         // No shell. The registry pins an argv; nothing here interpolates a string.
         shell: false,

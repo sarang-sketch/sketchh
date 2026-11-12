@@ -49,6 +49,9 @@ import {
 } from '../settings/providerRows';
 import { useKeyStore } from '../settings/KeyStoreProvider';
 import { useProviderConfig } from '../settings/useProviderConfig';
+import { resolveApiKeyForRun } from '../lib/secrets';
+import type { ChatGPTStatus } from '../lib/client';
+import { CHATGPT_ID, describeAccount } from '../settings/chatgpt';
 import {
   describeKeyFailure,
   describeKeyState,
@@ -59,12 +62,32 @@ import styles from './ProviderSettings.module.css';
 
 /** Test ceiling. Long enough for a cold local model list, short enough to bail. */
 const TEST_TIMEOUT_MS = 5000;
+/** A ChatGPT test is one real reply from a reasoning model. */
+const CHATGPT_TEST_TIMEOUT_MS = 45_000;
 
 export function ProviderSettings() {
   const state = useAppState();
   const dispatch = useAppDispatch();
   const client = useSketchClient();
   const keyStore = useKeyStore();
+
+  /**
+   * Whether a ChatGPT account is signed in, and as whom. A local file read in the
+   * engine — never a token, never a network call.
+   */
+  const [chatgpt, setChatgpt] = useState<ChatGPTStatus | null>(null);
+  const [signingOut, setSigningOut] = useState(false);
+  const refreshChatgpt = useCallback(async () => {
+    if (client.chatgptStatus === undefined) return;
+    try {
+      setChatgpt(await client.chatgptStatus());
+    } catch {
+      setChatgpt(null);
+    }
+  }, [client]);
+  useEffect(() => {
+    void refreshChatgpt();
+  }, [refreshChatgpt, state.providers]);
 
   // The read lives in `useProviderConfig` because the model picker needs the same
   // one. Loading on mount is a file read, not a network call.
@@ -222,6 +245,23 @@ export function ProviderSettings() {
     [persist, state.providers, state.selectedProvider],
   );
 
+  /** Sign out of ChatGPT: the engine revokes and forgets the sign-in, then the entry goes. */
+  const signOutChatgpt = useCallback(async () => {
+    setSigningOut(true);
+    try {
+      await client.chatgptLogout?.();
+    } catch (err) {
+      dispatch({
+        type: 'PROVIDER_SETTINGS_NOTICE',
+        payload: `Could not sign out of ChatGPT: ${err instanceof Error ? err.message : String(err)}`,
+      });
+    } finally {
+      setSigningOut(false);
+    }
+    if (state.providers.some((p) => p.id === CHATGPT_ID)) await removeProvider(CHATGPT_ID);
+    await refreshChatgpt();
+  }, [client, dispatch, refreshChatgpt, removeProvider, state.providers]);
+
   const runTest = useCallback(
     async (entry: ProviderSettingsEntry, apiKey: string) => {
       const previous = inFlight.current.get(entry.id);
@@ -231,6 +271,13 @@ export function ProviderSettings() {
 
       dispatch({ type: 'PROVIDER_TEST_STARTED', payload: entry.id });
       try {
+        // A typed key is tested as typed. With the box empty, the test uses the key the
+        // OS credential store holds — the same one a run will use — instead of making
+        // the user paste it again. No stored key: the engine falls back to the
+        // provider's environment variable, if one is set.
+        const typed = apiKey.trim();
+        const stored = typed === '' ? await resolveApiKeyForRun(entry.id) : null;
+        const key = typed !== '' ? typed : stored ?? '';
         const result = await client.testProvider(
           {
             provider: {
@@ -239,9 +286,11 @@ export function ProviderSettings() {
               baseUrl: entry.baseUrl,
               model: entry.model,
               // Supplied for this call only. Nothing persists it.
-              ...(apiKey.trim() === '' ? {} : { apiKey: apiKey.trim() }),
+              ...(key === '' ? {} : { apiKey: key }),
             },
-            timeoutMs: TEST_TIMEOUT_MS,
+            // A ChatGPT account is tested with one real (tiny) reply, which takes longer
+            // than listing a local server's models.
+            timeoutMs: entry.id === CHATGPT_ID ? CHATGPT_TEST_TIMEOUT_MS : TEST_TIMEOUT_MS,
           },
           { signal: controller.signal },
         );
@@ -355,7 +404,11 @@ export function ProviderSettings() {
                         connection to describe. An unconfigured provider is not
                         "untested", it is unconfigured, and the row says that
                         below (Requirement 27.3). */}
-                    {isLocal ? (
+                    {row.descriptor.id === CHATGPT_ID ? (
+                      <span className={styles.tagQuiet} title="Signs in with a ChatGPT account; no API key, no per-token bill">
+                        ChatGPT account
+                      </span>
+                    ) : isLocal ? (
                       <span
                         className={styles.tagQuiet}
                         title="The endpoint is on this machine: no account, no key, no provider spend"
@@ -383,7 +436,27 @@ export function ProviderSettings() {
                         <span className={styles.metaModel}>{entry.model}</span>
                       </div>
                       <div className={styles.detail}>{summary.detail}</div>
+                      {entry.id === CHATGPT_ID && chatgpt !== null && (
+                        <div className={styles.detail}>
+                          {chatgpt.signedIn
+                            ? `${describeAccount(chatgpt)}. Renewed automatically; usage counts against your ChatGPT plan.`
+                            : chatgpt.needsSignIn
+                              ? 'Your ChatGPT sign-in has ended. Sign in again to keep using it.'
+                              : 'Not signed in to ChatGPT on this computer.'}
+                        </div>
+                      )}
+                      {state.providerEnvKeys[entry.id] && (
+                        <div className={styles.detail}>
+                          A key is also available from the environment ({state.providerEnvKeys[entry.id]}); it is used when no key is stored.
+                        </div>
+                      )}
                       <div className={styles.actions}>
+                        <button
+                          className={styles.actionBtn}
+                          onClick={() => dispatch({ type: 'OPEN_CONNECT', payload: entry.id })}
+                        >
+                          Change model
+                        </button>
                         {summary.tone === 'busy' ? (
                           <button
                             className={styles.actionBtn}
@@ -399,19 +472,41 @@ export function ProviderSettings() {
                             Test connection
                           </button>
                         )}
-                        <button
-                          className={styles.actionBtn}
-                          onClick={toggleDraft}
-                        >
-                          {editing ? 'Close' : 'Edit'}
-                        </button>
-                        <button
-                          className={styles.actionBtn}
-                          onClick={() => void removeProvider(entry.id)}
-                          disabled={saving}
-                        >
-                          Remove
-                        </button>
+                        {entry.id === CHATGPT_ID ? (
+                          <>
+                            {chatgpt !== null && !chatgpt.signedIn && (
+                              <button
+                                className={styles.actionBtn}
+                                onClick={() => dispatch({ type: 'OPEN_CONNECT', payload: CHATGPT_ID })}
+                              >
+                                Sign in again
+                              </button>
+                            )}
+                            <button
+                              className={styles.actionBtn}
+                              onClick={() => void signOutChatgpt()}
+                              disabled={saving || signingOut}
+                            >
+                              {signingOut ? 'Signing out…' : 'Sign out'}
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              className={styles.actionBtn}
+                              onClick={toggleDraft}
+                            >
+                              {editing ? 'Close' : 'Edit'}
+                            </button>
+                            <button
+                              className={styles.actionBtn}
+                              onClick={() => void removeProvider(entry.id)}
+                              disabled={saving}
+                            >
+                              Remove
+                            </button>
+                          </>
+                        )}
                         {state.selectedProvider === entry.id ? (
                           <span className={styles.selected}>
                             <Check size={12} /> default
@@ -419,18 +514,38 @@ export function ProviderSettings() {
                         ) : (
                           <button
                             className={styles.actionBtn}
-                            onClick={() =>
+                            onClick={() => {
                               dispatch({
                                 type: 'SET_PROVIDER',
                                 payload: { provider: entry.id, model: entry.model },
-                              })
-                            }
+                              });
+                              // Remembered in providers.json, so the next window starts here.
+                              void persist(state.providers, entry.id);
+                            }}
                           >
                             Use by default
                           </button>
                         )}
                       </div>
                     </>
+                  ) : row.descriptor.id === CHATGPT_ID ? (
+                    <div className={styles.actions}>
+                      <span className={styles.unconfigured}>
+                        {chatgpt?.signedIn ? describeAccount(chatgpt) : 'Not signed in'}
+                      </span>
+                      <button
+                        className={styles.actionBtn}
+                        aria-label={`Add ${row.descriptor.name}`}
+                        onClick={() => dispatch({ type: 'OPEN_CONNECT', payload: CHATGPT_ID })}
+                      >
+                        <Plus size={12} /> {chatgpt?.signedIn ? 'Connect' : 'Sign in with ChatGPT'}
+                      </button>
+                      {chatgpt?.signedIn && (
+                        <button className={styles.actionBtn} onClick={() => void signOutChatgpt()} disabled={signingOut}>
+                          Sign out
+                        </button>
+                      )}
+                    </div>
                   ) : (
                     <div className={styles.actions}>
                       <span className={styles.unconfigured}>Not configured</span>

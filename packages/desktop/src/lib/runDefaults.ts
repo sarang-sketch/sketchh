@@ -77,7 +77,33 @@ export const DESKTOP_RUN_DEFAULTS = {
    * Memory panel.
    */
   rememberRun: true,
-} as const satisfies Pick<RunOptions, 'contextBudgetTokens' | 'budget' | 'rememberRun'>
+
+  /**
+   * The read-only project tools: `read_file`, `list_dir`, `find_files`, `search_code`.
+   *
+   * Without them a run could edit files it had never seen — an exact search/replace
+   * against bytes the model was guessing at. They cost `fs:read:project`, which the
+   * default grant already holds, and every call is on the log.
+   */
+  projectTools: true,
+
+  /**
+   * Build the repository index when it is missing and refresh it when it is stale, so
+   * retrieval works on the first run in a freshly opened folder instead of silently
+   * retrieving nothing. Incremental and local; no network.
+   */
+  autoIndex: true,
+
+  /**
+   * Model turns per run. Reading costs turns, so the engine's library default of 12 is
+   * too tight for "read three files, plan, edit, verify, fix". 30 stays well inside the
+   * 40-call spend ceiling above, which remains the real guard.
+   */
+  maxIterations: 30,
+} as const satisfies Pick<
+  RunOptions,
+  'contextBudgetTokens' | 'budget' | 'rememberRun' | 'projectTools' | 'autoIndex' | 'maxIterations'
+>
 
 /**
  * Apply the desktop defaults under any explicit choices the caller made.
@@ -90,6 +116,9 @@ export function withDesktopRunDefaults(overrides: RunOptions = {}): RunOptions {
     contextBudgetTokens: DESKTOP_RUN_DEFAULTS.contextBudgetTokens,
     budget: { ...DESKTOP_RUN_DEFAULTS.budget },
     rememberRun: DESKTOP_RUN_DEFAULTS.rememberRun,
+    projectTools: DESKTOP_RUN_DEFAULTS.projectTools,
+    autoIndex: DESKTOP_RUN_DEFAULTS.autoIndex,
+    maxIterations: DESKTOP_RUN_DEFAULTS.maxIterations,
     ...overrides,
   }
 }

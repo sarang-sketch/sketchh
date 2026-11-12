@@ -13,7 +13,7 @@ import { events, loop, orchestrator, plan, providers, tools } from '@sketch/core
 import type { SketchEvent } from './lib/contracts'
 import { createEventBus, type PingResult, type SketchClient } from './lib/client'
 import { SketchClientProvider } from './lib/ClientProvider'
-import { AppStateProvider } from './state/AppState'
+import { AppStateProvider, DEFAULT_AGENT_PREFS } from './state/AppState'
 import { canonicalPath } from './editor/paths'
 import { FileIoProvider } from './editor/FileIoProvider'
 import type { FileIo } from './editor/fileIo'
@@ -119,7 +119,7 @@ function realFileIo(root: string): FileIo {
   const contained = (path: string) => {
     const target = resolve(path)
     const rel = relative(resolve(root), target)
-    if (rel.startsWith('..') || resolve(rel) === rel) throw new Error('outside the open project root')
+    if (rel.startsWith('..') || resolve(rel) === rel) throw new Error('outside the folder you have open in Sketch')
     return target
   }
   return {
@@ -172,7 +172,15 @@ describe('Phase 3 offline gate — actual open/edit/run/review/git seams', () =>
     const canonicalFile = canonicalPath(file)
     render(
       <SketchClientProvider client={client}>
-        <AppStateProvider initial={{ mode: 'ide', projectRoot: canonicalRoot }}>
+        {/* Review mode is a user preference now (auto-apply with undo is the default);
+            this gate is about the review seam, so it chooses review explicitly. */}
+        <AppStateProvider
+          initial={{
+            mode: 'ide',
+            projectRoot: canonicalRoot,
+            agentPrefs: { ...DEFAULT_AGENT_PREFS, autoApply: false },
+          }}
+        >
           <FileIoProvider io={realFileIo(root)}>
             <GitProvider>
               <FileExplorer />
@@ -197,7 +205,7 @@ describe('Phase 3 offline gate — actual open/edit/run/review/git seams', () =>
     await waitFor(async () => expect(await readFile(file, 'utf8')).toBe('export const value = 2\n'))
 
     // Cowork's real run button -> client seam -> real core loop in review mode.
-    const prompt = screen.getByPlaceholderText('How can I help you today?')
+    const prompt = screen.getByLabelText('Message the agent')
     fireEvent.change(prompt, { target: { value: 'Change value to three' } })
     fireEvent.keyDown(prompt, { key: 'Enter' })
 

@@ -1,0 +1,166 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.filter {
+  flex: 1;
+  min-width: 0;
+  max-width: 360px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.filter:focus { border-color: var(--accent); }
+
+.totals {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.list {
+  flex: 1;
+  overflow: auto;
+  padding: 4px 0;
+}
+
+.fileRow {
+  display: flex;
+  align-items: center;
+  padding-right: 8px;
+}
+
+.fileRow:hover { background: var(--bg-hover); }
+
+.fileToggle {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 3px 10px;
+  text-align: left;
+}
+
+.fileName { font-weight: 600; }
+
+.fileDir {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.badge {
+  margin-left: 4px;
+  padding: 0 6px;
+  border-radius: 9px;
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-size: 10px;
+}
+
+.fixBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent);
+  border-radius: 4px;
+  background: var(--accent-subtle);
+  color: var(--accent);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.fixBtn:hover:not(:disabled) { background: var(--bg-hover); }
+.fixBtn:disabled { opacity: 0.5; }
+
+.problem {
+  display: flex;
+  flex: 1;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  padding: 3px 10px 3px 42px;
+  text-align: left;
+}
+
+.problemRow {
+  display: flex;
+  align-items: center;
+  padding-right: 8px;
+}
+
+.problemRow:hover { background: var(--bg-hover); }
+.problem svg { flex: 0 0 auto; align-self: center; }
+
+/* One problem fixed in place. Quiet until the row is hovered or the button is focused. */
+.quickFix {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 20px;
+  border-radius: 4px;
+  color: var(--accent);
+  opacity: 0;
+}
+
+.problemRow:hover .quickFix,
+.quickFix:focus-visible { opacity: 1; }
+.quickFix:hover { background: var(--accent-subtle); }
+
+@media (hover: none) {
+  .quickFix { opacity: 1; }
+}
+
+.message {
+  overflow: hidden;
+  color: var(--text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.source, .position {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.error { color: var(--error); }
+.warning { color: var(--warning); }
+.info { color: #60a5fa; }
+
+.empty {
+  padding: 14px 16px;
+  color: var(--text-secondary);
+}
+
+.emptyHint {
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+}

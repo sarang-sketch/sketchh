@@ -1,0 +1,12 @@
+.wrap { position: relative; display: flex; }
+.trigger { width: 28px; height: 28px; border-radius: 5px; display: grid; place-items: center; color: var(--text-secondary); }
+.trigger:hover, .trigger[aria-expanded='true'] { background: var(--bg-hover); color: var(--text-primary); }
+.menu { position: absolute; right: 0; top: calc(100% + 10px); width: 290px; max-height: calc(100vh - 80px); overflow: auto; border: 1px solid var(--border-strong); border-radius: 10px; padding: 6px; background: var(--bg-surface); box-shadow: var(--shadow-lg); z-index: var(--z-dropdown); }
+.title { padding: 8px 10px; color: var(--text-muted); font-size: var(--text-xs); }
+.menu button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 10px; border-radius: 5px; color: var(--text-secondary); text-align: left; font-size: var(--text-sm); }
+.menu button span { flex: 1; }
+.menu button:hover, .menu button:focus-visible { background: var(--bg-hover); color: var(--text-primary); }
+.menu button small { display: block; font-size: var(--text-xs); color: var(--text-muted); padding-top: 3px; }
+.menu button svg { flex-shrink: 0; }
+.menu kbd { font-size: 10px; color: var(--text-muted); font-family: inherit; }
+.separator { height: 1px; margin: 5px 6px; background: var(--border); }

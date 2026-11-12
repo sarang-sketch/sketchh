@@ -31,6 +31,19 @@ export {
   fromAnthropicResponse,
 } from './anthropicMessages.js'
 export type { AnthropicRequestBody } from './anthropicMessages.js'
+// A signed-in ChatGPT account as the model (the Codex backend, Responses API).
+export {
+  ChatGPTCodexAdapter,
+  CHATGPT_FALLBACK_MODELS,
+  CHATGPT_CATALOG_CLIENT_VERSION,
+  chatgptFailureMessage,
+  collectResponses,
+  listChatGPTModels,
+  parseChatGPTModels,
+  readSse,
+  toResponsesRequest,
+} from './chatgpt.js'
+export type { ChatGPTAdapterOptions, ChatGPTModel, ChatGPTModelsResult, ResponsesRequestBody } from './chatgpt.js'
 export { redact, providerError, providerErrorMessage, REDACTED } from './redact.js'
 export type { ProviderErrorFacts } from './redact.js'
 // No `registry` singleton: a process-global adapter cache is a process-global key

@@ -329,6 +329,10 @@ export class MockSketchClient implements SketchClient {
     return this.noEngine('skill-install')
   }
 
+  async skillUninstall(): Promise<never> {
+    return this.noEngine('skill-uninstall')
+  }
+
   async skillTrain(): Promise<never> {
     return this.noEngine('skill-train')
   }
@@ -367,6 +371,10 @@ export class MockSketchClient implements SketchClient {
   // from the log or not exist.
   async cost(): Promise<never> {
     return this.noEngine('cost')
+  }
+
+  async costUsage(): Promise<never> {
+    return this.noEngine('cost-usage')
   }
 
   // Benchmark artifacts cannot be fabricated either. The mock has no project state and

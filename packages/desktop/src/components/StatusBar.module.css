@@ -2,70 +2,150 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 22px;
-  background-color: #121212;
-  border-top: 1px solid #262626;
-  padding: 0 10px;
+  gap: 8px;
+  height: 24px;
+  padding: 0 4px 0 8px;
+  background-color: var(--bg-secondary);
+  border-top: 1px solid var(--border);
   font-family: var(--font-sans);
   font-size: 11px;
-  color: #737373;
+  color: var(--text-muted);
   user-select: none;
+  overflow: hidden;
 }
 
-.left, .right {
+.left,
+.right {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 2px;
+  min-width: 0;
 }
 
-.item {
+.left {
+  overflow: hidden;
+}
+
+.right {
+  flex: 0 0 auto;
+}
+
+/* Every chip is the same height, so the bar reads as one row instead of five
+   differently-sized pieces of text. */
+.item,
+.itemButton,
+.costButton {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
+  height: 20px;
+  padding: 0 6px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: 1;
+  white-space: nowrap;
 }
 
+.itemButton,
+.costButton {
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.itemButton:hover,
+.costButton:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.itemButton:focus-visible,
+.costButton:focus-visible {
+  outline: var(--focus-ring-width) solid var(--accent);
+  outline-offset: -1px;
+}
+
+/* A quiet ring makes the engine light readable on both the dark and light bars. */
 .statusDot {
-  width: 6px;
-  height: 6px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
-  background-color: #10b981;
+  background-color: var(--success);
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.18);
 }
 
-.zap { color: #f97316; }
+.dotError {
+  background-color: var(--error);
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.18);
+}
+
+.dotIdle {
+  background-color: var(--text-secondary);
+  box-shadow: 0 0 0 2px rgba(163, 163, 163, 0.14);
+}
+
+.muted {
+  color: var(--text-disabled);
+}
+
+/* Autocomplete switched on: visibly lit, so nobody has to wonder whether it is. */
+.autocompleteOn {
+  color: var(--accent);
+  background: var(--accent-subtle);
+}
+
+.autocompleteOn:hover {
+  color: var(--accent);
+  background: var(--bg-hover);
+}
+
+.zap { color: var(--accent); }
 
 /* A button, not a figure. The number lives in the Cost panel, which is the one
    source; see the note at the top of StatusBar.tsx. */
 .costButton {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 0 4px;
-  border: none;
-  border-radius: 3px;
-  background: none;
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
-}
-
-.costButton:hover {
-  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-secondary);
 }
 
 .badge {
-  padding: 1px 6px;
-  border-radius: 3px;
-  font-size: 10px;
-  font-weight: 600;
+  display: flex;
+  align-items: center;
+  height: 16px;
+  padding: 0 7px;
+  border-radius: 4px;
+  font-size: 9.5px;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
 }
 
-.badgeAgent {
-  background-color: rgba(249, 115, 22, 0.2);
-  color: #f97316;
-}
-
+.badgeAgent,
 .badgeIde {
-  background-color: rgba(249, 115, 22, 0.2);
-  color: #f97316;
+  background-color: var(--accent-subtle);
+  color: var(--accent);
 }
 
+/* An unsaved buffer is a state the user must not miss, so it gets a dot rather
+   than a stray bullet character in a sentence. */
+.dirtyDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.errorIcon { color: var(--error); }
+.warningIcon { color: var(--warning); }
+
+/* At narrower widths the editor facts go first (they are repeated in Settings and
+   on the line/column chip), then the model name. The engine, branch, Problems,
+   Autocomplete and Cost controls always stay. */
+@media (max-width: 1180px) {
+  .item.optional,
+  .badge.optional,
+  .modelName {
+    display: none;
+  }
+}

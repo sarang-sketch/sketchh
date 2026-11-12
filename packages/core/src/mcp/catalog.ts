@@ -319,4 +319,30 @@ export class McpCatalogRegistry {
   list(): readonly McpCatalogEntry[] { return [...this.#entries.values()] }
   find(id: string): McpCatalogEntry | null { return this.#entries.get(id) ?? null }
   ids(): string[] { return [...this.#entries.keys()].sort() }
+
+  /**
+   * A copy that also holds the user's own servers (`mcp/userServers.ts`), for one run.
+   *
+   * Their launch is the user's own choice, so the pinned-version rule does not apply
+   * to them. The rest still does: one program and an argv array, a `user-` id that
+   * cannot shadow a curated entry, and the honest capability for a program, `proc:spawn`.
+   */
+  withUserServers(entries: readonly McpCatalogEntry[]): McpCatalogRegistry {
+    const next = new McpCatalogRegistry()
+    for (const [id, entry] of this.#entries) next.#entries.set(id, entry)
+    for (const entry of entries) {
+      if (!/^user-[a-z0-9]+(?:-[a-z0-9]+)*$/.test(entry.id)) throw new Error(`invalid user MCP id ${JSON.stringify(entry.id)}`)
+      if (next.#entries.has(entry.id)) throw new Error(`user MCP server ${entry.id} is listed twice`)
+      if (entry.requires !== 'proc:spawn') throw new Error(`user MCP server ${entry.id} must cost proc:spawn`)
+      const { command, args } = entry.launch
+      if (typeof command !== 'string' || command.trim() === '' || /[;&|<>`$]/.test(command)) {
+        throw new Error(`user MCP server ${entry.id} launch.command must be one program`)
+      }
+      if (!Array.isArray(args) || args.some((arg) => typeof arg !== 'string')) {
+        throw new Error(`user MCP server ${entry.id} launch.args must be an array of strings`)
+      }
+      next.#entries.set(entry.id, Object.freeze({ ...entry, launch: Object.freeze({ command, args: Object.freeze([...args]) as string[] }) }))
+    }
+    return next
+  }
 }

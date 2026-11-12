@@ -127,6 +127,34 @@ export function isWithinRoot(root: string, absolutePath: string): boolean {
   return b === a || b.startsWith(a.endsWith('/') ? a : `${a}/`)
 }
 
+/**
+ * How a conversation's own root relates to the OPEN WORKSPACE root — the one decision
+ * every W2 consumer shares, in one place so they cannot disagree.
+ *
+ *   - `none`    — the conversation carries no root, or no folder is open. Runs use the
+ *                 workspace root (or none); selecting it is harmless.
+ *   - `inside`  — the conversation root equals the workspace root or sits inside it.
+ *                 A run keeps using the conversation's own root (its history and file
+ *                 references are relative to it) WITHOUT moving the workspace boundary,
+ *                 so `../index.mjs` in the editor still works (W2 invariants 1-2).
+ *   - `outside` — the conversation ran in another folder, or in a PARENT of the open one.
+ *                 Selecting it is read-only: a run must not execute against the wrong
+ *                 root, so the UI offers "open that folder" instead.
+ *
+ * Case/slash-insensitive via `isWithinRoot`. `inside` deliberately includes the equal
+ * case; `outside` is "has a root the workspace does not contain."
+ */
+export type WorkspaceRelation = 'none' | 'inside' | 'outside'
+
+export function conversationRootRelation(
+  workspaceRoot: string | null,
+  conversationRoot: string | null | undefined,
+): WorkspaceRelation {
+  if (conversationRoot === null || conversationRoot === undefined || conversationRoot.trim() === '') return 'none'
+  if (workspaceRoot === null || workspaceRoot.trim() === '') return 'none'
+  return isWithinRoot(workspaceRoot, conversationRoot) ? 'inside' : 'outside'
+}
+
 /** `C:/app/src/App.tsx` under `C:/app` → `src/App.tsx`. Falls back to the input. */
 export function relativeToRoot(root: string, absolutePath: string): string {
   const base = canonicalPath(root)

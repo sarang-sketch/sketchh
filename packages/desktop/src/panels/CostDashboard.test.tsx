@@ -33,6 +33,7 @@ import {
   type EventHandler,
   type PingResult,
   type SketchClient,
+  type UsageSummary,
 } from '../lib/client'
 import { AppStateProvider } from '../state/AppState'
 
@@ -107,6 +108,8 @@ class EngineClient implements SketchClient {
   readonly transport = 'stdio' as const
   private readonly bus = createEventBus()
   private readonly ctx = methodContext()
+  /** When set, costUsage reads this isolated home instead of the real ~/.sketch. */
+  usageHome: string | undefined
 
   ping(): Promise<PingResult> {
     return Promise.resolve({ ok: true, version: 'test', transport: 'stdio' })
@@ -162,6 +165,14 @@ cancel(): Promise<never> {
       { root: params.root, ...(params.runId !== undefined ? { runId: params.runId } : {}) },
       this.ctx,
     ) as Promise<CostReport>
+  }
+
+  costUsage(params: { home?: string } = {}): Promise<UsageSummary> {
+    const home = params.home ?? this.usageHome
+    return METHODS['cost-usage']!(
+      { ...(home !== undefined ? { home } : {}) },
+      this.ctx,
+    ) as Promise<UsageSummary>
   }
 }
 
@@ -221,6 +232,45 @@ describe('reconciliation with the log', () => {
     // A total a user cannot audit is a total they cannot challenge.
     const rows = screen.getByLabelText('Every priced model call')
     expect(rows.textContent).toContain('evt-')
+  })
+
+  it('shows the model that ANSWERED and the requested model when a router resolved an alias', async () => {
+    // A row whose llm_response carried responseModel: the dashboard prices + names the
+    // answered model (gpt-4o) and shows the requested alias.
+    const aliased = {
+      ...llmResponse('gpt-4o', { in: 1_000_000, out: 0 }),
+      payload: { iteration: 1, text: 'ok', adapter: 'openrouter', model: 'openrouter/auto', responseModel: 'gpt-4o', usage: { in: 1_000_000, out: 0 } },
+    }
+    const root = projectWithLog([aliased])
+    mount(root, new EngineClient())
+
+    await waitFor(() => expect(screen.getByLabelText('Every priced model call')).toBeTruthy())
+    const rows = screen.getByLabelText('Every priced model call')
+    expect(rows.textContent).toContain('gpt-4o') // the model that answered
+    expect(rows.textContent).toContain('openrouter/auto') // the requested alias
+  })
+
+  it('shows model calls NOT tied to a message, grouped by cause, unknown as unknown', async () => {
+    // Seed the engine's non-run usage log under an isolated home.
+    const home = mkdtempSync(join(tmpdir(), 'sketch-usage-home-'))
+    tmpDirs.push(home)
+    await costLib.recordUsage({ cause: 'completion', provider: 'openai', requestedModel: 'gpt-4o', usage: { in: 10, out: 5 } }, home)
+    await costLib.recordUsage({ cause: 'completion', provider: 'openai', requestedModel: 'gpt-4o', usage: { in: 20, out: 7 } }, home)
+    await costLib.recordUsage({ cause: 'connection-test', provider: 'groq', usage: null, ok: true }, home)
+
+    const root = projectWithLog([llmResponse('gpt-4o', { in: 10, out: 10 })])
+    const client = new EngineClient()
+    client.usageHome = home
+    mount(root, client)
+
+    await waitFor(() => expect(screen.getByLabelText('Model calls not tied to a message')).toBeTruthy())
+    const section = screen.getByLabelText('Model calls not tied to a message')
+    expect(section.textContent).toContain('Inline completions')
+    expect(section.textContent).toContain('2 calls')
+    expect(section.textContent).toContain('30 in / 12 out')
+    // The connection test had no token usage — shown as "no tokens"/unknown, never 0.
+    expect(section.textContent).toContain('Connection tests')
+    expect(section.textContent).toMatch(/no tokens|tokens unknown/)
   })
 
   it('reports unreadable log lines rather than absorbing them', async () => {

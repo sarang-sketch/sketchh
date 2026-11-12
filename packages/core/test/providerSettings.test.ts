@@ -9,7 +9,7 @@
 // Validates: Requirements 17.1, 17.2, 17.4, 17.7
 
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from 'node:fs'
+import { mkdtempSync, readFileSync, readdirSync, existsSync, rmSync, writeFileSync, mkdirSync } from 'node:fs'
 import { createServer, type Server } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -17,6 +17,7 @@ import { join } from 'node:path'
 import {
   SecretInSettingsError,
   assertKeyFree,
+  backupCorruptConfig,
   checkEndpoint,
   loadProviderSettings,
   providerMatrix,
@@ -214,6 +215,52 @@ describe('providers.json is key-free (Requirement 17.2)', () => {
     expect(toProviderConfig(entry, SECRET).apiKey).toBe(SECRET)
     // The entry itself is untouched, so nothing downstream can persist the key.
     expect(JSON.stringify(entry)).not.toContain(SECRET)
+  })
+})
+
+// ── 1b. a corrupt providers.json never bricks the app (W10 invariant 5) ──────
+
+describe('a corrupt providers.json is set aside, not silently kept or deleted', () => {
+  it('backs up unreadable JSON, starts clean, and says where the old bytes went', async () => {
+    const home = makeHome()
+    const path = providersFilePath(home)
+    mkdirSync(join(home, '.sketch'), { recursive: true })
+    writeFileSync(path, '{ this is not valid json ]', 'utf8')
+
+    const loaded = await loadProviderSettings(path)
+
+    // Clean start: no provider, honest empty state — not a crash.
+    expect(loaded.settings.providers).toEqual([])
+    expect(loaded.settings.selected).toBeNull()
+    // A plain notice that names the problem and the backup.
+    expect(loaded.diagnostic).toMatch(/not valid JSON/)
+    expect(loaded.diagnostic).toMatch(/moved to .*\.corrupt-/)
+    // The user's bytes were preserved (never deleted): the corrupt backup exists and
+    // the original path is gone.
+    const siblings = readdirSync(join(home, '.sketch'))
+    const backup = siblings.find((f) => f.startsWith('providers.json.corrupt-'))
+    expect(backup).toBeDefined()
+    expect(readFileSync(join(home, '.sketch', backup!), 'utf8')).toBe('{ this is not valid json ]')
+    expect(existsSync(path)).toBe(false)
+  })
+
+  it('backupCorruptConfig preserves the file and reports a rename failure instead of throwing', async () => {
+    const home = makeHome()
+    const path = join(home, 'does-not-exist.json')
+    // Inject a rename that fails; the helper must report, not throw.
+    const result = await backupCorruptConfig(path, async () => {
+      throw new Error('read-only volume')
+    })
+    expect(result.backedUpTo).toBeNull()
+    expect('reason' in result && result.reason).toMatch(/read-only volume/)
+  })
+
+  it('leaves a merely-missing file as the honest empty state (no backup, no notice)', async () => {
+    const home = makeHome()
+    const path = providersFilePath(home)
+    const loaded = await loadProviderSettings(path)
+    expect(loaded.settings.providers).toEqual([])
+    expect(loaded.diagnostic).toBeUndefined()
   })
 })
 
@@ -515,6 +562,49 @@ describe('the connection test names WHICH failure it is (Requirements 17.1, 17.7
     )
     expect(result.code).toBe('timeout')
     expect(result.message).toContain('150 ms')
+  })
+
+  it('reports a 403 as forbidden — a key accepted but not permitted, distinct from 401', async () => {
+    const baseUrl = await serve(() => ({ status: 403, body: JSON.stringify({ error: { message: 'no access to this model' } }) }))
+    const result = await testProviderConnection({ id: 'openai', kind: 'openai-compatible', baseUrl, model: 'gpt-4o', apiKey: SECRET })
+    expect(result.ok).toBe(false)
+    expect(result.code).toBe('forbidden')
+    expect(result.status).toBe(403)
+    expect(result.message).toMatch(/not permitted|permission|plan|organisation/i)
+    expect(result.message).not.toContain(SECRET)
+  })
+
+  it('reports a 429 as rate-limited and parses Retry-After seconds', async () => {
+    const server = createServer((_req, res) => {
+      res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': '42' })
+      res.end(JSON.stringify({ error: { message: 'slow down' } }))
+    })
+    servers.push(server)
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const address = server.address()
+    if (address === null || typeof address === 'string') throw new Error('no port')
+
+    const result = await testProviderConnection({
+      id: 'groq',
+      kind: 'openai-compatible',
+      baseUrl: `http://127.0.0.1:${address.port}/v1`,
+      model: 'llama-3.3-70b',
+      apiKey: SECRET,
+    })
+    expect(result.ok).toBe(false)
+    expect(result.code).toBe('rate-limited')
+    expect(result.status).toBe(429)
+    expect(result.retryAfterSeconds).toBe(42)
+    expect(result.message).toMatch(/42 seconds/)
+    expect(result.message).not.toContain(SECRET)
+  })
+
+  it('reports a 429 without Retry-After and leaves the seconds unset', async () => {
+    const baseUrl = await serve(() => ({ status: 429, body: JSON.stringify({ error: { message: 'slow down' } }) }))
+    const result = await testProviderConnection({ id: 'groq', kind: 'openai-compatible', baseUrl, model: 'x', apiKey: SECRET })
+    expect(result.code).toBe('rate-limited')
+    expect(result.retryAfterSeconds).toBeUndefined()
+    expect(result.message).toMatch(/rate-limiting/i)
   })
 })
 

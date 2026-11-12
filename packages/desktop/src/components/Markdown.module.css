@@ -1,0 +1,158 @@
+.markdown {
+  font-size: var(--text-md);
+  line-height: 1.6;
+  color: var(--text-primary);
+  /* Long unbroken strings (a URL, a long identifier, a hash) wrap inside the bubble
+     instead of widening the panel. Code blocks opt back into horizontal scroll below. */
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.markdown > * + * {
+  margin-top: 10px;
+}
+
+.para {
+  white-space: normal;
+}
+
+.heading {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.35;
+  margin-top: 14px;
+}
+
+h3.heading { font-size: var(--text-lg); }
+h4.heading { font-size: 15px; }
+h5.heading, h6.heading { font-size: var(--text-md); }
+
+.list {
+  padding-left: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.list li::marker {
+  color: var(--text-muted);
+}
+
+.quote {
+  border-left: 3px solid var(--border-strong);
+  padding: 2px 0 2px 12px;
+  color: var(--text-secondary);
+}
+
+.inlineCode {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 1px 5px;
+  color: var(--accent-hover);
+}
+
+.link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.link:hover {
+  color: var(--accent-hover);
+}
+
+.link:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--radius-sm);
+}
+
+.codeBlock {
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.codeHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 6px 12px;
+  background-color: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  color: var(--text-muted);
+}
+
+.codeLang {
+  text-transform: lowercase;
+  margin-right: auto;
+}
+
+.copyBtn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-secondary);
+  font-size: var(--text-2xs);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+}
+
+.copyBtn:hover {
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+}
+
+.copyBtn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.codeContent {
+  padding: 12px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.55;
+  color: var(--text-primary);
+  /* A long line scrolls INSIDE the block; it never widens the chat panel. */
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.table {
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+  min-width: 50%;
+}
+
+.table th,
+.table td {
+  border: 1px solid var(--border-strong);
+  padding: 6px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.table th {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+.rule {
+  border: none;
+  border-top: 1px solid var(--border-strong);
+  margin: 14px 0;
+}

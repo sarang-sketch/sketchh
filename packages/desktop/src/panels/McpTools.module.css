@@ -1,5 +1,6 @@
 /* MCP Tools. Status is always a word as well as a colour: "configured" and "needs
-   setup", never a bare green or amber dot. */
+   setup", never a bare green or amber dot. All colours are W3 design tokens
+   (see styles/global.css), so the panel matches the shell in both themes. */
 
 .container {
   display: flex;
@@ -7,7 +8,7 @@
   height: 100%;
   overflow: hidden;
   font-size: 12px;
-  color: var(--text-primary, #ccc);
+  color: var(--text-primary);
 }
 
 .header {
@@ -16,7 +17,7 @@
   justify-content: space-between;
   gap: 8px;
   padding: 8px 10px;
-  border-bottom: 1px solid var(--border, #2a2a2a);
+  border-bottom: 1px solid var(--border);
   flex: 0 0 auto;
 }
 
@@ -28,11 +29,13 @@
   text-transform: uppercase;
   letter-spacing: 0.04em;
   font-size: 11px;
+  color: var(--text-secondary);
 }
 
 .body {
   flex: 1 1 auto;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 8px 10px 16px;
 }
 
@@ -42,10 +45,10 @@
   gap: 6px;
   padding: 7px 8px;
   margin-bottom: 8px;
-  border: 1px solid #6b2b2b;
-  border-radius: 4px;
-  background: rgba(120, 40, 40, 0.18);
-  color: #f0a0a0;
+  border: 1px solid color-mix(in srgb, var(--error) 45%, transparent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--error) 12%, transparent);
+  color: var(--error);
   line-height: 1.45;
 }
 
@@ -55,13 +58,14 @@
   gap: 3px;
   padding: 8px 9px;
   margin-bottom: 10px;
-  border: 1px solid var(--border, #2a2a2a);
-  border-radius: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
   line-height: 1.5;
+  color: var(--text-primary);
 }
 
 .summary span {
-  color: var(--text-secondary, #9a9a9a);
+  color: var(--text-secondary);
 }
 
 .servers {
@@ -72,7 +76,8 @@
 
 .server {
   padding: 9px 0;
-  border-bottom: 1px solid var(--border, #232323);
+  border-bottom: 1px solid var(--border);
+  min-width: 0;
 }
 
 .head {
@@ -80,17 +85,19 @@
   align-items: center;
   gap: 8px;
   margin-bottom: 5px;
+  flex-wrap: wrap;
 }
 
 .title {
   font-weight: 600;
+  color: var(--text-primary);
 }
 
 .id {
   margin-left: auto;
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--text-tertiary, #7a7a7a);
+  color: var(--text-muted);
 }
 
 .badge {
@@ -99,29 +106,30 @@
   gap: 4px;
   min-width: 96px;
   padding: 2px 6px;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.03em;
   border: 1px solid transparent;
+  white-space: nowrap;
 }
 
 /* "Could start", not "is running". Nothing runs between runs. */
 .ready {
-  color: #7fc98a;
-  border-color: #2f5c34;
-  background: rgba(46, 92, 52, 0.2);
+  color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 45%, transparent);
+  background: color-mix(in srgb, var(--success) 18%, transparent);
 }
 
 .needs {
-  color: #e0c060;
-  border-color: #6b5a1f;
-  background: rgba(181, 137, 0, 0.15);
+  color: var(--warning);
+  border-color: color-mix(in srgb, var(--warning) 45%, transparent);
+  background: color-mix(in srgb, var(--warning) 15%, transparent);
 }
 
 .summaryText {
   margin: 0 0 5px;
-  color: var(--text-secondary, #9a9a9a);
+  color: var(--text-secondary);
   line-height: 1.5;
 }
 
@@ -130,41 +138,41 @@
   align-items: flex-start;
   gap: 6px;
   margin: 0 0 5px;
-  color: var(--text-secondary, #9a9a9a);
+  color: var(--text-secondary);
   line-height: 1.5;
 }
 
 .capability code {
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--text-primary, #ccc);
+  color: var(--text-primary);
 }
 
 .sensitiveMark {
-  color: #e0a060;
+  color: var(--warning);
 }
 
 .command {
   margin: 0 0 5px;
   padding: 5px 7px;
   overflow-x: auto;
-  border: 1px solid var(--border, #2a2a2a);
-  border-radius: 3px;
-  background: var(--bg-code, #1a1a1a);
-  font-family: var(--font-mono, ui-monospace, monospace);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  font-family: var(--font-mono);
   font-size: 11px;
   line-height: 1.45;
   white-space: pre-wrap;
   word-break: break-all;
-  color: var(--text-secondary, #9a9a9a);
+  color: var(--text-secondary);
 }
 
 .missing {
   margin: 0 0 5px;
   padding: 5px 7px;
-  border-left: 2px solid #b58900;
-  background: rgba(181, 137, 0, 0.1);
-  color: #e0c060;
+  border-left: 2px solid var(--warning);
+  background: color-mix(in srgb, var(--warning) 10%, transparent);
+  color: var(--warning);
   line-height: 1.5;
 }
 
@@ -173,13 +181,13 @@
   align-items: flex-start;
   gap: 6px;
   margin: 0;
-  color: var(--text-tertiary, #7a7a7a);
+  color: var(--text-muted);
   line-height: 1.5;
 }
 
 .footNote {
   margin: 12px 0 0;
-  color: var(--text-tertiary, #7a7a7a);
+  color: var(--text-muted);
   line-height: 1.55;
 }
 
@@ -191,11 +199,12 @@
 .emptyText {
   font-weight: 600;
   margin-bottom: 6px;
+  color: var(--text-primary);
 }
 
 .emptySubtext {
   margin: 0;
-  color: var(--text-tertiary, #7a7a7a);
+  color: var(--text-muted);
   line-height: 1.55;
   text-align: left;
 }

@@ -37,13 +37,15 @@
 // Validates: Requirements 11.1, 11.2, 11.4, 11.6, 14.6, 27.1, 27.3
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { AlertCircle, Check, Package, Search, Shield, Zap } from '../components/Icons'
+import { AlertCircle, Check, Package, Search, Shield, Trash, Zap } from '../components/Icons'
 import { useSketchClient } from '../lib/ClientProvider'
 import { useAppState } from '../state/AppState'
+import { useConfirm } from '../components/ConfirmDialog'
 import type {
   SkillInstallResult,
   SkillPromoteResult,
   SkillTrainResult,
+  SkillUninstallResult,
   SkillsCatalogEntry,
   SkillsCatalogResult,
 } from '../lib/client'
@@ -76,14 +78,34 @@ const SENSITIVE = new Set(['fs:read:home', 'fs:write:home', 'proc:spawn', 'secre
 
 type Tab = 'installed' | 'registry'
 
+/**
+ * How training proposes changes. 'edits' is Microsoft SkillOpt's update rule (a few
+ * edits tied to exact text, per round); 'rewrite' asks for a whole new body. Either
+ * way the held-out gate decides, so the default is the one whose result is easier to
+ * read: a small edit that raised the score says which change helped.
+ */
+type TrainMode = 'edits' | 'rewrite'
+
+const TRAIN_MODE_TEXT: Record<TrainMode, { label: string; hint: string }> = {
+  edits: {
+    label: 'Small edits (SkillOpt)',
+    hint: 'Up to 4 small edits per round, each tied to exact text in the skill. The skill changes only if your held-out runs score higher, and edits that did not help are listed.',
+  },
+  rewrite: {
+    label: 'Full rewrite',
+    hint: 'A whole new version of the skill per round. It changes only if your held-out runs score higher.',
+  },
+}
+
 interface Busy {
-  kind: 'loading' | 'installing' | 'training' | 'promoting'
+  kind: 'loading' | 'installing' | 'training' | 'promoting' | 'uninstalling'
   name?: string
 }
 
 export function SkillsMarketplace() {
   const { projectRoot } = useAppState()
   const client = useSketchClient()
+  const confirm = useConfirm()
 
   const [catalog, setCatalog] = useState<SkillsCatalogResult | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -93,7 +115,9 @@ export function SkillsMarketplace() {
   /** The entry awaiting confirmation. Nothing installs without passing through this. */
   const [pending, setPending] = useState<SkillsCatalogEntry | null>(null)
   const [installed, setInstalled] = useState<SkillInstallResult | null>(null)
+  const [uninstalled, setUninstalled] = useState<SkillUninstallResult | null>(null)
   const [trained, setTrained] = useState<SkillTrainResult | null>(null)
+  const [trainMode, setTrainMode] = useState<TrainMode>('edits')
   const [promoted, setPromoted] = useState<SkillPromoteResult | null>(null)
 
   /** Discards a response for a superseded request (a different project, a refresh). */
@@ -158,6 +182,44 @@ export function SkillsMarketplace() {
     }
   }, [client, pending, projectRoot, refresh])
 
+  const uninstall = useCallback(
+    async (skill: { name: string; capabilities: string[] }) => {
+      const call = client.skillUninstall
+      if (call === undefined || projectRoot === null) return
+      // A destructive action gets an explicit confirmation, naming the grant that
+      // will be withdrawn. The dialog keeps the keyboard and marks Uninstall danger.
+      const grant =
+        skill.capabilities.length === 0
+          ? 'It is granted no capabilities.'
+          : `It is granted: ${skill.capabilities.join(', ')}.`
+      const answer = await confirm({
+        title: `Uninstall "${skill.name}"?`,
+        message: `Its files under .sketch/skills/${skill.name} and its saved capability grant are removed. ${grant} A run can no longer load it.`,
+        detail: 'You can install it again from the Registry; its content hash is re-verified each time.',
+        buttons: [
+          { id: 'uninstall', label: 'Uninstall', kind: 'danger' },
+          { id: 'cancel', label: 'Cancel', kind: 'secondary' },
+        ],
+        cancelId: 'cancel',
+      })
+      if (answer !== 'uninstall') return
+      setBusy({ kind: 'uninstalling', name: skill.name })
+      setError(null)
+      setUninstalled(null)
+      setInstalled(null)
+      try {
+        const result = await call.call(client, { root: projectRoot, name: skill.name })
+        setUninstalled(result)
+        await refresh(projectRoot)
+      } catch (err) {
+        setError(`Uninstall failed: ${message(err)}`)
+      } finally {
+        setBusy(null)
+      }
+    },
+    [client, confirm, projectRoot, refresh],
+  )
+
   const train = useCallback(
     async (name: string) => {
       const call = client.skillTrain
@@ -169,14 +231,14 @@ export function SkillsMarketplace() {
       try {
         // Write only the measured candidate artifact. It lives outside the active
         // skill directory and cannot affect a run until the user reviews and promotes it.
-        setTrained(await call.call(client, { root: projectRoot, name, write: true }))
+        setTrained(await call.call(client, { root: projectRoot, name, write: true, mode: trainMode }))
       } catch (err) {
         setError(`Training failed: ${message(err)}`)
       } finally {
         setBusy(null)
       }
     },
-    [client, projectRoot],
+    [client, projectRoot, trainMode],
   )
 
   const promote = useCallback(
@@ -320,7 +382,7 @@ export function SkillsMarketplace() {
                       </span>
                     ) : (
                       <button
-                        className={styles.actionButton}
+                        className={`${styles.actionButton} ${styles.actionButtonInline}`}
                         disabled={busy !== null}
                         onClick={() => {
                           setInstalled(null)
@@ -332,7 +394,9 @@ export function SkillsMarketplace() {
                     )}
                   </div>
 
-                  <div className={styles.description}>{entry.summary}</div>
+                  <div className={styles.description} title={entry.summary}>
+                    {entry.summary}
+                  </div>
 
                   {/* The grant, on the card, before anyone clicks anything. */}
                   <Capabilities capabilities={entry.capabilities} />
@@ -360,6 +424,26 @@ export function SkillsMarketplace() {
             />
           ) : (
             <div className={styles.skillList}>
+              {client.skillTrain !== undefined && (
+                <div className={styles.trainMethod}>
+                  <label className={styles.trainMethodRow}>
+                    <span>Training method</span>
+                    <select
+                      className={styles.trainSelect}
+                      value={trainMode}
+                      disabled={busy !== null}
+                      onChange={(event) => setTrainMode(event.target.value as TrainMode)}
+                    >
+                      {(Object.keys(TRAIN_MODE_TEXT) as TrainMode[]).map((mode) => (
+                        <option key={mode} value={mode}>
+                          {TRAIN_MODE_TEXT[mode].label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <div className={styles.trainHint}>{TRAIN_MODE_TEXT[trainMode].hint}</div>
+                </div>
+              )}
               {catalog.installed.map((skill) => (
                 <article key={skill.name} className={styles.skillCard} data-installed={skill.name}>
                   <div className={styles.cardHeader}>
@@ -367,9 +451,21 @@ export function SkillsMarketplace() {
                       <Package size={14} />
                       <span className={styles.name}>{skill.name}</span>
                     </div>
+                    <span className={styles.installedTag}>
+                      <Check size={12} /> installed
+                    </span>
+                  </div>
+                  <div className={styles.description} title={skill.description}>
+                    {skill.description}
+                  </div>
+                  <Capabilities capabilities={skill.capabilities} />
+                  <div className={styles.meta} title={skill.source}>
+                    {skill.source}
+                  </div>
+                  <div className={styles.cardActions}>
                     {client.skillTrain !== undefined && (
                       <button
-                        className={styles.actionButton}
+                        className={`${styles.actionButton} ${styles.actionButtonInline}`}
                         disabled={busy !== null}
                         onClick={() => void train(skill.name)}
                         title="Score this skill against your captured runs and propose an improvement"
@@ -379,10 +475,23 @@ export function SkillsMarketplace() {
                           : 'Train on my project'}
                       </button>
                     )}
+                    {client.skillUninstall !== undefined && (
+                      <button
+                        className={`${styles.dangerButton} ${styles.actionButtonInline}`}
+                        disabled={busy !== null}
+                        onClick={() => void uninstall(skill)}
+                        title={`Remove ${skill.name} and its capability grant from this project`}
+                      >
+                        {busy?.kind === 'uninstalling' && busy.name === skill.name ? (
+                          'Uninstalling…'
+                        ) : (
+                          <>
+                            <Trash size={12} /> Uninstall
+                          </>
+                        )}
+                      </button>
+                    )}
                   </div>
-                  <div className={styles.description}>{skill.description}</div>
-                  <Capabilities capabilities={skill.capabilities} />
-                  <div className={styles.meta}>{skill.source}</div>
                 </article>
               ))}
             </div>
@@ -396,6 +505,7 @@ export function SkillsMarketplace() {
         )}
 
         {installed !== null && <InstallOutcome result={installed} />}
+        {uninstalled !== null && <UninstallOutcome result={uninstalled} />}
         {trained !== null && (
           <TrainOutcome
             result={trained}
@@ -556,6 +666,33 @@ function InstallOutcome({ result }: { result: SkillInstallResult }) {
   )
 }
 
+function UninstallOutcome({ result }: { result: SkillUninstallResult }) {
+  if (!result.ok) {
+    return (
+      <div className={styles.error} role="alert">
+        <AlertCircle size={13} />
+        <span>{result.reason}</span>
+      </div>
+    )
+  }
+  // The result is honest about an idempotent no-op: "removed" reads differently
+  // from "was already gone", because a user who clicks twice should be told which.
+  const removedSomething = result.removedDir || result.removedGrant
+  return (
+    <div className={styles.notice} role="status">
+      <Check size={13} />{' '}
+      {removedSomething
+        ? `Uninstalled ${result.name}: removed ${[
+            result.removedDir ? 'its files' : null,
+            result.removedGrant ? 'its capability grant' : null,
+          ]
+            .filter(Boolean)
+            .join(' and ')}. Runs will no longer load it.`
+        : `${result.name} was already not installed; nothing to remove.`}
+    </div>
+  )
+}
+
 /**
  * What a training run found.
  *
@@ -596,8 +733,24 @@ function TrainOutcome({
         : `No improvement to ${result.name}. Held-out score stayed at ${fmt(result.valScore)}, so the existing skill was kept.`}{' '}
       Scored {result.cases} captured case(s), split {result.split?.train} train /{' '}
       {result.split?.val} held out. Spent {result.budget?.calls} model call(s).
+      {result.mode !== undefined && ` Method: ${TRAIN_MODE_TEXT[result.mode].label}.`}
       {result.budget?.refusal !== null && result.budget?.refusal !== undefined && (
         <div className={styles.warning}>{result.budget.refusal}</div>
+      )}
+      {result.rejectedEdits !== undefined && result.rejectedEdits.length > 0 && (
+        <details className={styles.rejectedEdits}>
+          <summary>
+            {result.rejectedEdits.length} edit(s) did not raise the held-out score, so they were not
+            applied
+          </summary>
+          <ul aria-label={`Rejected edits for ${result.name}`}>
+            {result.rejectedEdits.map((line, index) => (
+              <li key={index}>
+                <code>{line}</code>
+              </li>
+            ))}
+          </ul>
+        </details>
       )}
       {hasCandidate && (
         <div className={styles.warning}>

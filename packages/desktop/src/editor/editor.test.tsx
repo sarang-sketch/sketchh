@@ -471,13 +471,15 @@ describe('saving — Ctrl/Cmd+S', () => {
   })
 
   it('shows a refused write and keeps the file dirty, never a silent no-op', async () => {
+    // The current Rust containment refusal (W2 wording); ipc/policyMessages.ts is what
+    // describeFileFailure matches it against.
     disk.writeError = new Error(
-      `file '${A}' is outside the open project root ${ROOT}`,
+      `This file is outside the folder you have open in Sketch, so it cannot be reached from here:\n  file: ${A}\n  open folder: ${ROOT}`,
     )
     await typeAndSave({ ctrlKey: true })
 
     await waitFor(() => {
-      expect(screen.getByRole('alert').textContent).toContain('outside the open project')
+      expect(screen.getByRole('alert').textContent).toContain('outside the folder open in Sketch')
     })
     expect(screen.getByRole('alert').textContent).toContain('App.tsx')
     // Still dirty: the tab does not get to look saved when nothing was written.

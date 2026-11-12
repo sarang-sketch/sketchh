@@ -9,7 +9,9 @@
 // This module is the seam tests replace (`vi.mock('./monacoSetup')`). Everything
 // below it — the model map, the reducer, the reconciliation — runs for real.
 
-import { editorExtensionRegistry } from './extensionRegistry'
+import { editorExtensionRegistry, SKETCH_LIGHT_THEME_ID, SKETCH_THEME } from './extensionRegistry'
+import { bindEditorThemeSwitch } from './editorTheme'
+import { workbenchTheme } from './workbenchTheme'
 import type { MonacoApi } from './monacoApi'
 
 let pendingApi: Promise<MonacoApi> | null = null
@@ -23,12 +25,19 @@ export interface LoadedMonaco {
 /** Applies the current registry to a Monaco API. Used by the real lazy loader. */
 export function prepareMonaco(api: MonacoApi): LoadedMonaco {
   for (const registered of editorExtensionRegistry.registeredThemes()) {
-    api.editor.defineTheme(registered.id, registered.definition)
+    api.editor.defineTheme(registered.id, registered.id === SKETCH_THEME || registered.id === SKETCH_LIGHT_THEME_ID ? workbenchTheme(registered.definition) : registered.definition)
   }
   for (const registered of editorExtensionRegistry.registeredLanguages()) {
     api.languages.register({ id: registered.id, extensions: registered.extensions })
     api.languages.setMonarchTokensProvider(registered.id, registered.rules)
   }
+  // Light ↔ dark from now on reaches the editors already open, not only new ones.
+  const setTheme = api.editor.setTheme
+  if (setTheme !== undefined) bindEditorThemeSwitch((id) => {
+    const registered = editorExtensionRegistry.registeredThemes().find((theme) => theme.id === id)
+    if (registered && (id === SKETCH_THEME || id === SKETCH_LIGHT_THEME_ID)) api.editor.defineTheme(id, workbenchTheme(registered.definition))
+    setTheme(id)
+  })
   return { api, theme: editorExtensionRegistry.activeTheme }
 }
 

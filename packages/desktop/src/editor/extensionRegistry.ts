@@ -144,6 +144,43 @@ export const SKETCH_DARK_THEME: EditorThemeDefinition = {
   },
 }
 
+export const SKETCH_LIGHT_THEME_ID = 'sketch-light'
+
+/** The light theme: the dark theme's hues, deepened to read on white (WCAG AA). */
+export const SKETCH_LIGHT_THEME: EditorThemeDefinition = {
+  base: 'vs',
+  inherit: true,
+  rules: [
+    { token: '', foreground: '1f1f1f' },
+    { token: 'comment', foreground: '6b6b6b', fontStyle: 'italic' },
+    { token: 'keyword', foreground: 'be123c' },
+    { token: 'string', foreground: '047857' },
+    { token: 'number', foreground: 'a3480b' },
+    { token: 'type', foreground: '9a3412' },
+    { token: 'type.identifier', foreground: '9a3412' },
+    { token: 'function', foreground: '0369a1' },
+    { token: 'variable', foreground: '1f1f1f' },
+    { token: 'delimiter', foreground: '525252' },
+    { token: 'tag', foreground: 'be123c' },
+    { token: 'attribute.name', foreground: '0369a1' },
+    { token: 'attribute.value', foreground: '047857' },
+  ],
+  colors: {
+    'editor.background': '#ffffff',
+    'editor.foreground': '#1f1f1f',
+    'editorLineNumber.foreground': '#a3a3a3',
+    'editorLineNumber.activeForeground': '#404040',
+    'editorGutter.background': '#ffffff',
+    'editor.lineHighlightBackground': '#f5f5f5',
+    'editor.selectionBackground': '#add6ff',
+    'editorCursor.foreground': '#ea580c',
+    'editorWidget.background': '#f8f8f8',
+    'editorWidget.border': '#e5e5e5',
+    'editorIndentGuide.background1': '#e5e5e5',
+    'scrollbarSlider.background': '#c4c4c499',
+  },
+}
+
 const BUILTIN_LANGUAGES: Readonly<Record<string, string>> = {
   ts: 'typescript', tsx: 'typescript', mts: 'typescript', cts: 'typescript',
   js: 'javascript', jsx: 'javascript', mjs: 'javascript', cjs: 'javascript',
@@ -164,6 +201,7 @@ export class EditorExtensionRegistry {
 
   constructor() {
     this.themes.set(SKETCH_THEME, cloneTheme(SKETCH_DARK_THEME))
+    this.themes.set(SKETCH_LIGHT_THEME_ID, cloneTheme(SKETCH_LIGHT_THEME))
     for (const [extension, languageId] of Object.entries(BUILTIN_LANGUAGES)) {
       this.languages.set(extension, languageId)
     }

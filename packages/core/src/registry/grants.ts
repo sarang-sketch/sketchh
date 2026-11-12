@@ -3,8 +3,8 @@
 // are what production runs enforce.
 
 import { randomUUID } from 'node:crypto'
-import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
-import { dirname, join, resolve } from 'node:path'
+import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { dirname, join, resolve, sep } from 'node:path'
 
 import { parseCapabilities, type CapabilitySet } from '../capabilities/index.js'
 import { loadSkillFile, loadSkills } from '../skills/loader.js'
@@ -151,6 +151,101 @@ export async function readInstalledSkillGrant(
     }
   }
   return { ok: true, grant, reason: null }
+}
+
+export interface UninstallSkillResult {
+  ok: boolean
+  name: string
+  /** True when the skill directory existed and was removed this call. */
+  removedDir: boolean
+  /** True when a persisted grant existed and was removed this call. */
+  removedGrant: boolean
+  /** The skill directory the call targeted, so a surface can name it. */
+  dir: string
+  /** Why it refused, or null. Refuses only an unsafe name, never an absent skill. */
+  reason: string | null
+}
+
+/**
+ * Remove an installed skill: its directory under `.sketch/skills/<name>` AND its
+ * persisted capability grant under `.sketch/skills/.grants/<name>.json`.
+ *
+ * ── CONFINEMENT IS THE SECURITY PROPERTY ────────────────────────────────────
+ *
+ * Nothing here deletes a path the caller names. The only inputs are `projectRoot`
+ * and a skill NAME, and the name is refused by `isSafeSkillName` before any path is
+ * built — `..`, `.`, a name with a slash or a backslash, or surrounding whitespace
+ * never reaches `join`. The two paths that are removed are then recomputed from
+ * `installedSkillsDir(projectRoot)` here, and each is re-checked to resolve to a
+ * descendant of that directory, so even a name that somehow slipped the first gate
+ * cannot escape the project's own skills folder. There is deliberately no path
+ * parameter and no `force`: an uninstall that could be aimed is a delete primitive,
+ * which this is not.
+ *
+ * ── IDEMPOTENT, WITH AN HONEST RESULT ───────────────────────────────────────
+ *
+ * Removing something that is not there is not an error — `rm(..., { force: true })`
+ * returns quietly — but the result says what was actually removed: `removedDir` and
+ * `removedGrant` are each true only when that thing existed and is now gone. So a
+ * second call on the same skill returns `ok: true` with both false, and a caller can
+ * tell "I removed it" from "it was already gone" without the two reading the same.
+ */
+export async function uninstallSkill(
+  projectRoot: string,
+  name: string,
+): Promise<UninstallSkillResult> {
+  const skillsDir = installedSkillsDir(projectRoot)
+  const targetDir = resolve(skillsDir, name)
+  if (!isSafeSkillName(name)) {
+    return {
+      ok: false,
+      name,
+      removedDir: false,
+      removedGrant: false,
+      dir: targetDir,
+      reason: `refusing to uninstall an unsafe skill name: ${JSON.stringify(name)}`,
+    }
+  }
+
+  // Belt and suspenders: the name is already safe, but recompute containment on the
+  // resolved paths so a future change to name-safety cannot silently widen the reach.
+  const containerPrefix = resolve(skillsDir)
+  const grantPath = installedSkillGrantPath(projectRoot, name)
+  for (const [label, path] of [['skill directory', targetDir], ['grant file', grantPath]] as const) {
+    const resolved = resolve(path)
+    if (resolved !== containerPrefix && !resolved.startsWith(containerPrefix + sep)) {
+      return {
+        ok: false,
+        name,
+        removedDir: false,
+        removedGrant: false,
+        dir: targetDir,
+        reason: `refusing to remove ${label} ${JSON.stringify(path)}: it is outside ${skillsDir}`,
+      }
+    }
+  }
+
+  const existedDir = await pathExists(targetDir)
+  const existedGrant = await pathExists(grantPath)
+  await rm(targetDir, { recursive: true, force: true })
+  await rm(grantPath, { force: true })
+  return {
+    ok: true,
+    name,
+    removedDir: existedDir,
+    removedGrant: existedGrant,
+    dir: targetDir,
+    reason: null,
+  }
+}
+
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await stat(path)
+    return true
+  } catch {
+    return false
+  }
 }
 
 export function trainingArtifactPath(projectRoot: string, name: string): string {

@@ -26,6 +26,7 @@ export {
   ProtocolServer,
   createServer,
   main,
+  EXCLUSIVE_METHODS,
   // Shared transport seams. The stdio server and the Vite dev bridge build their
   // handler context and scrub their frames through these same three functions.
   createMethodContext,

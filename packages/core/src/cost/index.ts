@@ -19,6 +19,9 @@ export type { CostAnswer, ModelPrice, PriceLookup } from './pricing.js'
 export { describeLedger, ledgerFor, ledgerForRun } from './ledger.js'
 export type { Ledger, LedgerEntry } from './ledger.js'
 
+export { recordUsage, summarizeUsage, usageDir, USAGE_CAUSES } from './usage-log.js'
+export type { UsageCause, UsageCauseSummary, UsageEntryInput, UsageRecord, UsageSummary } from './usage-log.js'
+
 export { checkBudget, describeBudget, estimateRequestTokens } from './budget.js'
 export type { BreachAction, BudgetVerdict, RunBudget, Router } from './budget.js'
 

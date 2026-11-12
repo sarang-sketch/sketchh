@@ -56,12 +56,20 @@ describe('Phase 3 cross-cutting guards', () => {
     expect(ghost).toContain('DEFAULT_GHOST_COMPLETIONS_ENABLED = false')
   })
 
-  it('keeps option termination in both git implementations', () => {
+  it('keeps option termination in the one git implementation', () => {
+    // B-010 (W8, fix-editor-workbench.md §3): the second, native git parser
+    // (main.rs git_status/git_diff) was REMOVED, so git now has ONE implementation —
+    // the engine's — and this guard follows it there. The old `args.push("--")` in
+    // main.rs it used to also assert is gone with that code; asserting it would now be
+    // asserting a parser that no longer exists. The engine's option termination (the
+    // thing that actually ships) is unchanged and still checked. (W10 invariant 1.)
     const core = read('packages/core/src/tools/git.ts')
     expect(core).toContain("args.push('--', this.#pathspec('diff', options.path))")
     expect(core).toContain("['add', '--', ...pathspecs]")
+    // The native git commands are gone from the Rust backend.
     const rust = read('packages/desktop/src-tauri/src/main.rs')
-    expect(rust).toContain('args.push("--".to_string())')
+    expect(rust).not.toContain('fn git_status')
+    expect(rust).not.toContain('fn git_diff')
     expect(read('packages/desktop/src-tauri/src/command_policy.rs')).toContain('a_git_pathspec_that_looks_like_an_option_is_refused')
   })
 

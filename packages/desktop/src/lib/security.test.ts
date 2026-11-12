@@ -11,6 +11,7 @@
 import { describe, it, expect } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { CURRENT_POLICY_PHRASES } from '../ipc/policyMessages';
 
 describe('Phase 1.5 — Tauri Security Hardening', () => {
   const tauriDir = path.resolve(__dirname, '../../src-tauri');
@@ -19,7 +20,7 @@ describe('Phase 1.5 — Tauri Security Hardening', () => {
   const cargoPath = path.join(tauriDir, 'Cargo.toml');
   const mainRsPath = path.join(tauriDir, 'src/main.rs');
 
-  it('proves tauri.conf.json has non-null CSP and scoped fs permissions', () => {
+  it('proves tauri.conf.json has a non-null CSP and no invalid plugin scope that crashes boot', () => {
     expect(fs.existsSync(confPath)).toBe(true);
     const conf = JSON.parse(fs.readFileSync(confPath, 'utf8'));
 
@@ -27,8 +28,17 @@ describe('Phase 1.5 — Tauri Security Hardening', () => {
     expect(typeof conf.app.security.csp).toBe('string');
     expect(conf.app.security.csp).toContain("default-src 'self'");
 
-    expect(conf.plugins.fs.scope).not.toContain('**');
-    expect(conf.plugins.shell.scope).toHaveLength(0);
+    // The Tauri 2 shell plugin config accepts ONLY `open` (its Config struct is
+    // deny_unknown_fields). A `scope` key here is deserialized at startup and panics
+    // the whole app — "unknown field `scope`, expected `open`". Shell command scope
+    // lives in capabilities (shell:allow-spawn, verified below), not here.
+    expect(conf.plugins.shell).toEqual({ open: true });
+    // The fs plugin's Config is deny_unknown_fields too, so it also rejects a `scope`
+    // key. Filesystem containment here is NOT scope-shaped: it is enforced in
+    // command_policy on the read_dir/read_file/write_file commands (Requirement 13.8,
+    // verified below), and the webview is granted no broad fs permission. So the fs
+    // plugin carries no scope.
+    expect(conf.plugins.fs?.scope).toBeUndefined();
   });
 
   it('proves src-tauri/capabilities/default.json exists with explicit permissions', () => {
@@ -91,7 +101,9 @@ describe('Phase 2 — the engine sidecar is registered, and only the engine', ()
     // A bare string grant would be unscoped: any command, any arguments.
     expect(cap.permissions).not.toContain('shell:allow-spawn');
     expect(cap.permissions).not.toContain('shell:allow-execute');
-    expect(conf.plugins.shell.scope).toHaveLength(0);
+    // And the shell plugin config carries no `scope` key: it is invalid in Tauri 2
+    // (deny_unknown_fields) and panics the app at launch. `open` is the only field.
+    expect(conf.plugins.shell).toEqual({ open: true });
   });
 });
 
@@ -124,7 +136,13 @@ describe('Requirement 22.6 — run_command is an allowlist, not a shell', () => 
     expect(mainRs).toContain('command_policy::resolve_program');
     expect(mainRs).toContain('command_policy::resolve_cwd');
     expect(policyRs).toContain('ALLOWED_PROGRAMS');
-    expect(policyRs).toContain('outside the open project root');
+    // The containment refusal is present. Its exact WORDING is pinned by the contract
+    // test below (against ipc/policyMessages.ts), which is the single list the UI
+    // layers match; this assertion only needs the refusal to exist, in its current
+    // wording. (It said 'outside the open project root' until W2 reworded the Rust
+    // message to 'outside the folder you have open in Sketch'; the stale literal here
+    // was the cross-item regression W8 fixed.)
+    expect(policyRs).toContain('outside the folder you have open in Sketch');
   });
 
   it('keeps the allowlist small and free of shells', () => {
@@ -486,4 +504,34 @@ describe('Requirement 13.8 — the dev bridge answers loopback and same origin o
     // The guard runs for bridge paths before the endpoint handlers.
     expect(viteConfig).toMatch(/if \(isBridgePath\)[\s\S]{0,200}refusalReason\(req\)/);
   });
+});
+
+// B-010-adjacent cross-item regression (W8): the UI layers that turn a policy refusal
+// into a sentence (editor/fileIo.ts) or tell a denial from a breakage
+// (terminal/commandLine.ts) match the WORDS of command_policy.rs. Those words live in
+// one place, ipc/policyMessages.ts, and W2's reword of the Rust message silently broke
+// the match until this list was centralised. This contract test asserts every CURRENT
+// phrase the UI relies on is still present in command_policy.rs, so the next reword
+// fails here loudly instead of regressing the UI quietly. It weakens no other security
+// assertion: it only pins wording the UI already depends on.
+describe('the policy refusal wording the UI matches is still what command_policy.rs emits', () => {
+  const policyRs = fs.readFileSync(
+    path.resolve(__dirname, '../../src-tauri/src/command_policy.rs'),
+    'utf8',
+  ).toLowerCase();
+
+  // CURRENT_POLICY_PHRASES is imported from the single source of truth, not re-typed,
+  // so the test cannot drift from what the UI actually matches.
+  it.each(Object.entries(CURRENT_POLICY_PHRASES))(
+    'command_policy.rs still emits the %s phrase (%s)',
+    (_key, phrase) => {
+      expect(
+        policyRs.includes(phrase),
+        `command_policy.rs no longer contains "${phrase}". If you reworded the Rust ` +
+          `message, update ipc/policyMessages.ts (current + legacy) in the same change, ` +
+          `or the editor file-error messages and the terminal denial classifier silently ` +
+          `stop matching it.`,
+      ).toBe(true);
+    },
+  );
 });

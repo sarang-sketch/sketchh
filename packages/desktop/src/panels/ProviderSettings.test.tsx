@@ -653,14 +653,14 @@ describe('the key box is wired to the OS credential store (Requirements 17.3, 17
     expect(document.body.textContent ?? '').not.toContain(SECRET)
   })
 
-  it('offers removal only for a stored key, and says the key is never read back', async () => {
+  it('offers removal only for a stored key, and says what the stored key is used for', async () => {
     const keys = new FakeOsKeyStore()
     keys.rows.set('openai', SECRET)
     mountWithKeys(new EngineClient(makeHome()), keys)
 
     fireEvent.click(await screen.findByLabelText('Add OpenAI'))
     await waitFor(() =>
-      expect(screen.getByText(/It is never read back into this window/)).toBeDefined(),
+      expect(screen.getByText(/Runs and connection tests use it/)).toBeDefined(),
     )
 
     fireEvent.click(screen.getByLabelText('Remove the stored API key for openai'))

@@ -3,7 +3,7 @@
   flex-direction: column;
   height: 100%;
   width: 100%;
-  background-color: #121212;
+  background-color: var(--bg-primary);
   color: var(--text-primary);
   font-family: var(--font-sans);
   overflow: hidden;
@@ -12,48 +12,35 @@
 .editorAreaTeal {
   align-items: center;
   justify-content: center;
-  padding: 40px 20px;
+  padding: 28px 16px;
+  container-type: inline-size;
+  overflow-y: auto;
 }
 
-.antigravityWelcome {
+.welcome {
   display: flex;
   flex-direction: column;
   align-items: center;
   width: 100%;
-  max-width: 480px;
+  max-width: 440px;
+  margin: auto;
 }
 
-.agLogoWrapper {
-  width: 54px;
-  height: 54px;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 16px;
-  box-shadow: 0 0 24px rgba(234, 88, 12, 0.4);
-}
-
-.agLogoText {
-  color: #ffffff;
-  font-size: 32px;
-  font-weight: 800;
-  letter-spacing: -1px;
-}
+.welcomeMark { margin-bottom: 22px; flex: 0 0 auto; }
 
 .agTitle {
-  color: #f8fafc;
-  font-size: 24px;
+  color: var(--text-primary);
+  font-size: 27px;
   font-weight: 600;
-  margin-bottom: 24px;
+  letter-spacing: -0.8px;
+  margin-bottom: 16px;
 }
 
 .agBtnRow {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   gap: 10px;
-  width: 100%;
+  justify-content: center;
   margin-bottom: 32px;
 }
 
@@ -62,20 +49,20 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  width: 100%;
-  background-color: #ea580c;
-  border: 1px solid #f97316;
-  color: #ffffff;
-  font-size: 14px;
+  flex: 1 0 auto;
+  background-color: var(--accent-fill);
+  border: 1px solid var(--accent-fill);
+  color: var(--text-on-accent);
+  font-size: var(--text-sm);
   font-weight: 500;
-  padding: 10px;
-  border-radius: 8px;
+  padding: 10px 16px;
+  border-radius: 7px;
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
 .agPrimaryBtn:hover {
-  background-color: #f97316;
+  background-color: var(--accent-fill-hover);
 }
 
 .agSecondaryBtn {
@@ -83,20 +70,20 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  width: 100%;
-  background-color: #262626;
-  border: 1px solid #333333;
-  color: #e5e5e5;
-  font-size: 14px;
+  flex: 1 0 auto;
+  background-color: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
   font-weight: 500;
-  padding: 10px;
-  border-radius: 8px;
+  padding: 10px 16px;
+  border-radius: 7px;
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
 .agSecondaryBtn:hover {
-  background-color: #303030;
+  background-color: var(--bg-hover);
 }
 
 .workspacesSection {
@@ -106,7 +93,7 @@
 }
 
 .workspacesTitle {
-  color: #a3a3a3;
+  color: var(--text-secondary);
   font-size: 13px;
   font-weight: 500;
   margin-bottom: 12px;
@@ -116,44 +103,90 @@
 .workspacesList {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 2px;
   margin-bottom: 16px;
 }
 
 .workspaceCard {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-  background-color: #171717;
-  border: 1px solid #262626;
-  padding: 12px 14px;
-  border-radius: 8px;
+  align-items: center;
+  gap: 12px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  text-align: left;
+  padding: 9px 10px;
+  border-radius: 6px;
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
 .workspaceCard:hover {
-  background-color: #222222;
-  border-color: #333333;
+  background-color: var(--bg-hover);
+  border-color: var(--border-strong);
 }
 
 .wsName {
-  color: #ffffff;
+  color: var(--text-primary);
   font-size: 13px;
   font-weight: 600;
 }
 
 .wsPath {
-  color: #737373;
+  color: var(--text-muted);
   font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspaceInfo { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
+.welcomeLinks { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-top: 6px; }
+.welcomeLinks button { display: flex; align-items: center; gap: 16px; color: var(--text-muted); font-size: var(--text-xs); }
+.welcomeLinks button:hover { color: var(--text-primary); }
+.welcomeLinks kbd { font: inherit; color: var(--text-secondary); }
+.emptyMark { margin-bottom: 18px; }
+.projectTitle { max-width: 80%; overflow-wrap: anywhere; color: var(--text-primary); font-size: 22px; font-weight: 550; letter-spacing: -0.5px; margin-bottom: 4px; }
+
+/* With both side panels open on a small window the welcome column can be only a
+   couple of hundred pixels wide. Drop the decoration before the actions. */
+@container (max-width: 340px) {
+  .welcomeMark {
+    display: none;
+  }
+
+  .agTitle {
+    font-size: 18px;
+    margin-bottom: 12px;
+  }
+
+  .agSubtitle {
+    display: none;
+  }
+
+  .agBtnRow {
+    gap: 6px;
+    margin-bottom: 16px;
+  }
+
+  .agPrimaryBtn,
+  .agSecondaryBtn {
+    gap: 6px;
+    padding: 8px;
+    font-size: 12px;
+  }
+
+  .workspacesSection {
+    display: none;
+  }
 }
 
 /* Tab Bar & Code Body */
 .tabBar {
   display: flex;
   height: 36px;
-  background-color: #171717;
-  border-bottom: 1px solid #262626;
+  background-color: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
 }
 
 .tab {
@@ -162,28 +195,28 @@
   gap: 8px;
   padding: 0 14px;
   background-color: transparent;
-  color: #a3a3a3;
+  color: var(--text-secondary);
   font-size: 12px;
-  border-right: 1px solid #262626;
+  border-right: 1px solid var(--border);
   cursor: pointer;
 }
 
 .tab.active {
-  background-color: #121212;
-  color: #ffffff;
-  border-top: 2px solid #ea580c;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  border-top: 2px solid var(--accent-active);
 }
 
 .tabClose {
   background: transparent;
   border: none;
-  color: #737373;
+  color: var(--text-muted);
   cursor: pointer;
   padding: 2px;
 }
 
 .tabClose:hover {
-  color: #ffffff;
+  color: var(--text-primary);
 }
 
 .breadcrumb {
@@ -192,21 +225,21 @@
   gap: 6px;
   height: 24px;
   padding: 0 14px;
-  background-color: #121212;
-  border-bottom: 1px solid #262626;
+  background-color: var(--bg-primary);
+  border-bottom: 1px solid var(--border);
   font-size: 11px;
-  color: #737373;
+  color: var(--text-muted);
 }
 
 .tabIcon {
   display: flex;
   align-items: center;
-  color: #a3a3a3;
+  color: var(--text-secondary);
 }
 
 /* An unsaved buffer. The engine-write conflict marker sits in the same slot. */
 .tabDirty {
-  color: #ea580c;
+  color: var(--accent-active);
   font-size: 10px;
   line-height: 1;
 }
@@ -214,13 +247,38 @@
 .tabConflict {
   display: flex;
   align-items: center;
-  color: #fbbf24;
+  color: var(--warning);
+}
+
+/* The file is gone from disk; the tab and its text remain until saved or closed. */
+.tabDeletedName {
+  text-decoration: line-through;
+  opacity: 0.75;
 }
 
 .breadcrumbRow {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+/* One segment of the path: the file itself, or a folder button. */
+.breadcrumbItem {
+  padding: 0 2px;
+  border-radius: 3px;
+  color: inherit;
+  font-size: inherit;
+  white-space: nowrap;
+}
+
+/* A folder in the path: click to show it in the Explorer. */
+.breadcrumbLink {
+  color: inherit;
+}
+
+.breadcrumbLink:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
 }
 
 /* The editor body is now Monaco's host plus a real cursor readout. Line numbers,
@@ -249,7 +307,7 @@
   z-index: 2;
   max-width: calc(100% - 96px);
   overflow: hidden;
-  color: #737373;
+  color: var(--text-muted);
   font-family: var(--font-mono);
   font-size: 12px;
   line-height: 19px;
@@ -264,10 +322,10 @@
   right: 16px;
   padding: 2px 6px;
   border-radius: 4px;
-  background-color: rgba(18, 18, 18, 0.85);
+  background-color: rgba(18, 18, 18, 0.85); /* theme: fixed — a dark scrim over Monaco, not a surface */
   font-family: var(--font-mono);
   font-size: 11px;
-  color: #737373;
+  color: var(--text-muted);
   pointer-events: none;
 }
 
@@ -278,7 +336,7 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  color: #fca5a5;
+  color: var(--error);
   font-size: 13px;
   text-align: center;
   padding: 24px;
@@ -291,12 +349,22 @@
   align-items: center;
   justify-content: center;
   gap: 4px;
-  color: #737373;
+  color: var(--text-muted);
   font-size: 13px;
+  padding: 24px 16px;
+  overflow-y: auto;
+}
+
+/* Below 1000px the chat floats over the editor (IdeLayout). Its opaque panel
+   covers the middle of the editor, so centred empty-state copy would peek out
+   from under it; closing the chat reveals these again. */
+:global([data-chat-overlay='true']) .editorAreaTeal,
+:global([data-chat-overlay='true']) .emptyEditor {
+  display: none;
 }
 
 .emptyHint {
-  color: #525252;
+  color: var(--text-disabled);
   font-size: 12px;
 }
 
@@ -308,17 +376,17 @@
   gap: 8px;
   padding: 8px 12px;
   font-size: 12px;
-  border-bottom: 1px solid #262626;
+  border-bottom: 1px solid var(--border);
 }
 
 .notice {
-  background-color: #2a1414;
-  color: #fca5a5;
+  background-color: #2a1414; /* theme: fixed — a dark error wash behind --error text */
+  color: var(--error);
 }
 
 .conflict {
-  background-color: #2a2412;
-  color: #fbbf24;
+  background-color: #2a2412; /* theme: fixed — a dark warning wash behind --warning text */
+  color: var(--warning);
 }
 
 .noticeText {
@@ -337,9 +405,9 @@
 }
 
 .conflictAction {
-  background-color: #262626;
-  border: 1px solid #3f3f3f;
-  color: #e5e5e5;
+  background-color: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  color: var(--text-primary);
   font-size: 11px;
   padding: 4px 8px;
   border-radius: 6px;
@@ -348,6 +416,123 @@
 }
 
 .conflictAction:hover {
-  background-color: #303030;
+  background-color: var(--bg-hover);
 }
 
+
+/* -- Tabs: a strip that scrolls instead of clipping, and drag-to-reorder -- */
+.tabBar {
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  flex: 0 0 auto;
+}
+.tabBar::-webkit-scrollbar { height: 3px; }
+.tabBar .tab { flex: 0 0 auto; cursor: pointer; user-select: none; }
+.tabDragging { opacity: 0.45; }
+
+/* -- Markdown preview -- */
+.previewToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  padding: 1px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+.previewToggle:hover { background: var(--bg-hover); color: var(--text-primary); }
+.previewToggle[aria-pressed='true'] { border-color: var(--accent); color: var(--text-primary); }
+/* Changes and Preview sit together at the right end of the path bar. */
+.breadcrumbActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+.breadcrumbActions .previewToggle { margin-left: 0; }
+.markdownPreview {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 24px max(24px, calc((100% - 860px) / 2));
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1.65;
+  user-select: text;
+}
+.editorStack {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* -- Welcome and empty editor -- */
+.agSubtitle {
+  max-width: 440px;
+  margin: -6px auto 18px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: center;
+}
+.shortcutGrid {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 4px 22px;
+  align-items: center;
+  margin-top: 14px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+/* The rows are the commands themselves: with no file open this is the quickest
+   way into the editor, so they are buttons rather than a legend of keycaps. */
+.shortcutItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 8px;
+  margin-left: -8px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.shortcutItem svg {
+  color: var(--text-muted);
+  flex: 0 0 auto;
+}
+
+.shortcutItem:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.shortcutItem:hover svg {
+  color: var(--accent);
+}
+
+.shortcutItem:focus-visible {
+  outline: var(--focus-ring-width) solid var(--accent);
+  outline-offset: -1px;
+}
+
+.shortcutGrid kbd {
+  justify-self: end;
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font: 11px var(--font-mono);
+}

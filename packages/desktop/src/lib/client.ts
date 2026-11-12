@@ -46,6 +46,151 @@ export interface ProviderCatalogResult {
   path: string
   /** Set when the file could not be read, or carried something it should not. */
   diagnostic?: string
+  /**
+   * Providers whose key is already in the engine's environment, by variable NAME
+   * (`{ openai: 'OPENAI_API_KEY' }`). Never a value.
+   */
+  envKeys?: Record<string, string>
+}
+
+/** One model a provider serves, with what it published about it. */
+export interface ProviderModel {
+  id: string
+  name?: string
+  contextLength?: number
+  free?: boolean
+  inputPerMillion?: number
+  outputPerMillion?: number
+}
+
+export interface ProviderModelsResult {
+  ok: boolean
+  code: 'ok' | 'invalid-endpoint' | 'unreachable' | 'unauthorized' | 'endpoint-error' | 'timeout' | 'cancelled' | 'unlisted'
+  message: string
+  url: string
+  models: ProviderModel[]
+  status?: number
+}
+
+export interface OAuthStartResult {
+  id: string
+  /** The exact callback URL to hand the provider. */
+  callbackUrl: string
+  port: number
+  expiresAt: number
+}
+
+export type OAuthWaitResult = { ok: true; code: string } | { ok: false; error: string }
+
+// ── "Sign in with ChatGPT" ─────────────────────────────────────────────────
+// The engine completes this sign-in and keeps the tokens; none of these shapes can
+// carry one. The window learns whether it worked, as whom, and on which plan.
+
+export interface ChatGPTStatus {
+  signedIn: boolean
+  /** Signed in before, but the sign-in has ended and must be repeated. */
+  needsSignIn: boolean
+  email?: string
+  plan?: string
+  /** Where the engine keeps the sign-in on this computer. */
+  path: string
+}
+
+export type ChatGPTLoginStart =
+  | { ok: true; mode: 'browser'; id: string; authUrl: string; port: number; expiresAt: number }
+  | { ok: true; mode: 'device'; id: string; verificationUrl: string; userCode: string; expiresAt: number }
+  | { ok: false; code: string; error: string }
+
+export type ChatGPTLoginOutcome =
+  | { ok: true; account: { email?: string; plan?: string } }
+  | { ok: false; code: string; error: string }
+
+export interface ChatGPTModelInfo {
+  id: string
+  name: string
+  description?: string
+  contextLength?: number
+}
+
+export interface ChatGPTModelsResult {
+  ok: boolean
+  /** `live` — asked of the account; `fallback` — the built-in verified list. */
+  source: 'live' | 'fallback' | 'none'
+  models: ChatGPTModelInfo[]
+  defaultModel: string
+  message: string
+  code?: string
+}
+
+export interface UndoRunResult {
+  runId: string
+  found: boolean
+  restored: string[]
+  removed: string[]
+  skipped: Array<{ path: string; reason: string }>
+}
+
+/** What the Search panel's Find in Files asks for (engine: `find-in-files`). */
+export interface FindInFilesParams {
+  root: string
+  query: string
+  isRegex?: boolean
+  matchCase?: boolean
+  wholeWord?: boolean
+  /** Comma-separated globs, e.g. `src, *.ts`. Empty: every file. */
+  include?: string
+  exclude?: string
+  /** With a replacement, each match carries what Replace would put there. */
+  replacement?: string
+  maxHits?: number
+  /** A newer search with the same id stops the older one. */
+  requestId?: string
+}
+
+export interface FindInFilesSpan {
+  start: number
+  length: number
+  replacement?: string
+}
+
+export interface FindInFilesHit {
+  /** 1-based. */
+  line: number
+  text: string
+  /** Where `text` starts in the full line: the column is `textStart + start + 1`. */
+  textStart: number
+  spans: FindInFilesSpan[]
+}
+
+export interface FindInFilesResult {
+  root: string
+  query: string
+  groups: Array<{ path: string; hits: FindInFilesHit[]; matches: number }>
+  matchCount: number
+  fileCount: number
+  filesSearched: number
+  truncated: boolean
+  cancelled?: boolean
+  skipped: { tooLarge: number; binary: number }
+  durationMs: number
+}
+
+export interface ReplaceInFilesParams extends Omit<FindInFilesParams, 'replacement' | 'maxHits' | 'requestId'> {
+  /** May be empty: the matches are deleted. */
+  replacement: string
+  /** Only these project-relative files. */
+  paths?: string[]
+  /** Only this one line, refused if it no longer reads as it did when found. */
+  only?: { path: string; line: number; text: string; textStart: number }
+}
+
+export interface ReplaceInFilesResult {
+  root: string
+  files: Array<{ path: string; replaced: number }>
+  replaced: number
+  skipped: Array<{ path: string; reason: string }>
+  /** Pass to `undoRun` to put every rewritten file back. Null when nothing changed. */
+  snapshotId: string | null
 }
 
 /**
@@ -172,6 +317,25 @@ export interface SkillTrainResult {
   artifactPath?: string
   /** The winning body, so a surface can show it before writing anything. */
   body?: string
+  /** How candidates were proposed: a whole new body, or SkillOpt's bounded edits. */
+  mode?: 'rewrite' | 'edits'
+  /** Edits mode only: edits the held-out gate rejected, one line each. */
+  rejectedEdits?: string[]
+}
+
+/**
+ * Result of removing an installed skill. Idempotent: `ok` is true even when there
+ * was nothing to remove, and `removedDir`/`removedGrant` say what actually went.
+ */
+export interface SkillUninstallResult {
+  ok: boolean
+  name: string
+  removedDir: boolean
+  removedGrant: boolean
+  /** The `.sketch/skills/<name>` directory the removal targeted. */
+  dir: string
+  /** Why it refused (an unsafe name only), or null. */
+  reason: string | null
 }
 
 /** Result of explicitly activating a reviewed training candidate. */
@@ -295,6 +459,122 @@ export interface McpCatalogEntryStatus {
   caveat?: string
 }
 
+/** One MCP server from the user's own settings (`~/.sketch/mcp.json` or the project's). */
+export interface UserMcpServerInfo {
+  name: string
+  /** `user-<slug>`: its tools are named `<id>.<tool>`. */
+  id: string
+  scope: 'global' | 'project'
+  file: string
+  command: string | null
+  args: string[]
+  env: Record<string, string>
+  url: string | null
+  /** Why it cannot start; empty when it can. */
+  problems: string[]
+  /** Global servers always; a project server once the user approved this exact launch. */
+  trusted: boolean
+  fingerprint: string
+}
+
+export interface UserMcpServersResult {
+  servers: UserMcpServerInfo[]
+  files: { global: string; project?: string; trust: string }
+  diagnostics: string[]
+}
+
+export interface UserMcpTestResult {
+  ok: boolean
+  name: string
+  detail: string
+  tools: Array<{ name: string; description: string }>
+}
+
+/** One installed Ollama model, as `local-models` reports it. */
+export interface LocalModelInfo {
+  name: string
+  /** Bytes on disk. */
+  size: number
+  modifiedAt?: string
+  family?: string
+  parameterSize?: string
+  quantization?: string
+  /** What Ollama says it can do (`completion`, `tools`, `vision`, `embedding`...); null when it did not say. */
+  capabilities: string[] | null
+  contextLength: number | null
+  loaded: boolean
+  vram?: number
+  expiresAt?: string
+}
+
+export interface LocalModelSuggestion {
+  name: string
+  size: number
+  contextTokens: number
+  purpose: 'coding' | 'embedding'
+  note: string
+  fit: 'fits' | 'tight' | 'too-big'
+  memoryNeeded: number
+  installed: boolean
+  best: boolean
+}
+
+/** `local-models`: the Ollama server, the program, the machine, and what fits it. */
+export interface LocalModelsResult {
+  server: { baseUrl: string; reachable: boolean; version?: string; error?: string }
+  install: { found: boolean; version?: string; path?: string }
+  models: LocalModelInfo[]
+  error?: string
+  hardware: {
+    totalMemory: number
+    freeMemory: number
+    cpuCount: number
+    platform: string
+    gpus: Array<{ name: string; memoryTotal: number; memoryUsed: number }>
+  }
+  recommendations: LocalModelSuggestion[]
+}
+
+/** A model download, polled with `local-model-pull-status`. */
+export interface LocalModelPull {
+  id: string
+  model: string
+  state: 'running' | 'done' | 'failed' | 'cancelled'
+  status: string
+  completed: number
+  total: number
+  error?: string
+  startedAt: number
+  endedAt?: number
+}
+
+/** One request the engine process made: origin and outcome only, never a path or query. */
+export interface NetworkActivityEntry {
+  at: number
+  method: string
+  origin: string
+  local: boolean
+  outcome: 'sent' | 'blocked' | 'failed'
+  status?: number
+}
+
+/** `privacy-status` / `privacy-set`. */
+export interface PrivacyStatus {
+  offline: boolean
+  /** What decided it: SKETCH_OFFLINE in the engine's environment, the saved setting, or the default. */
+  source: 'environment' | 'setting' | 'default'
+  /** The settings file. */
+  file: string
+  /** The file exists but could not be read; Offline Mode is then on. */
+  error?: string
+  /** Whether the engine's request guard is in place in this process. */
+  guard: boolean
+  /** Newest first. */
+  activity: NetworkActivityEntry[]
+  /** Where Sketch keeps its own data. */
+  storage: { user: string; project?: string }
+}
+
 export interface McpCatalogResult {
   servers: McpCatalogEntryStatus[]
   total: number
@@ -410,6 +690,25 @@ export interface CostReport {
   summary: string
   runs: CostRunSummary[]
   entries: CostEntry[]
+}
+
+/** One cause's rollup of model calls NOT tied to a message. */
+export interface UsageCauseSummary {
+  cause: 'completion' | 'inline-edit' | 'commit-message' | 'connection-test' | 'model-list'
+  calls: number
+  tokensIn: number
+  tokensOut: number
+  /** Calls whose tokens the provider did not report — shown as unknown, never 0. */
+  usageUnknown: number
+  usageEstimated: number
+  failed: number
+}
+
+/** Model calls not tied to a message, rolled up by cause (from ~/.sketch/usage). */
+export interface UsageSummary {
+  total: { calls: number; tokensIn: number; tokensOut: number; usageUnknown: number; usageEstimated: number; failed: number }
+  byCause: UsageCauseSummary[]
+  skipped: number
 }
 
 export interface BenchmarkReportResult {
@@ -630,6 +929,151 @@ export interface RunOptions {
     maxCalls?: number
     onBreach: 'stop' | 'downgrade'
   }
+  /**
+   * Give the run the read-only project tools (`read_file`, `list_dir`, `find_files`,
+   * `search_code`). Each costs `fs:read:project`, which the default grant holds.
+   */
+  projectTools?: boolean
+  /** Build or refresh the repository index before retrieval, so a new project is not blind. */
+  autoIndex?: boolean
+  /** Model turns allowed for this run. */
+  maxIterations?: number
+  /**
+   * Resolve the project's own verification contract (`verify.yaml`, or detected from
+   * package.json / pyproject / Cargo / go.mod) so "done" means the project's checks
+   * passed. This RUNS the project's scripts, so it is a user preference.
+   */
+  verifyPolicy?: boolean
+  /** Earlier turns of this conversation, oldest first. The engine keeps the newest few. */
+  history?: Array<{ role: 'user' | 'assistant'; content: string }>
+  /** Ask mode: the engine refuses every edit, and no command tool is offered. */
+  readOnly?: boolean
+  /**
+   * Give the run `run_command`. `ask` puts every command to the user (the run must be
+   * `interactive`); `auto` runs ordinary commands and asks only for destructive ones.
+   */
+  commands?: 'ask' | 'auto'
+  /** Auto mode: the model's questions are answered with "use your judgement". */
+  autonomous?: boolean
+  /** List the project's installed skills to the model and let it load one on demand. */
+  autoSkills?: boolean
+  /** The user's own MCP servers this run may start, by name (MCP panel → "Use in chats"). */
+  userMcpServers?: string[]
+}
+
+/** One inline completion. `text` is empty when there is nothing to suggest. */
+export interface CompletionResult {
+  text: string
+  latencyMs?: number
+  usage?: { in: number; out: number }
+  model?: string
+  /** Set when the engine's per-minute ceiling paused suggestions. */
+  throttled?: boolean
+  cancelled?: boolean
+}
+
+/** One inline edit (Ctrl+K): the code that replaces the selection. Empty when the model gave nothing usable. */
+export interface InlineEditResult {
+  text: string
+  latencyMs?: number
+  usage?: { in: number; out: number }
+  model?: string
+  cancelled?: boolean
+}
+
+export interface ProjectFilesResult {
+  root: string
+  /** Project-relative, `/`-separated, sorted. `.gitignore` applied. */
+  files: string[]
+  truncated: boolean
+  maxFiles: number
+}
+
+/** A custom slash command from `.sketch/commands/` or `~/.sketch/commands/`. */
+export interface SlashCommandEntry {
+  name: string
+  description: string
+  argumentHint?: string
+  body: string
+  scope: 'project' | 'user'
+  path: string
+}
+
+export interface CommandsListResult {
+  commands: SlashCommandEntry[]
+  directories: string[]
+  diagnostics: string[]
+}
+
+/** A fresh id for one completion request, so it can be cancelled by name. */
+/** What `term-start` did: started a process, or moved the terminal with `cd`. */
+export type TerminalStartResult =
+  | { kind: 'run'; id: string; cwd: string; shellName: string }
+  | { kind: 'cd'; cwd: string }
+
+export interface TerminalChunk {
+  seq: number
+  stream: 'stdout' | 'stderr'
+  text: string
+}
+
+export interface TerminalReadResult {
+  id: string
+  chunks: TerminalChunk[]
+  next: number
+  running: boolean
+  exitCode: number | null
+  signal: string | null
+  error: string | null
+  truncated: boolean
+  durationMs: number
+}
+
+export interface GitBranchesResult {
+  current: string | null
+  branches: Array<{ name: string; current: boolean; upstream: string | null }>
+}
+
+/** One answer from the project watcher (`fs-watch`). See core tools/watcher.ts. */
+export interface FsWatchBatch {
+  /** Pass as `since` next time. */
+  cursor: number
+  /** Absolute paths that changed. */
+  paths: string[]
+  /** Too many (or unnamed) changes to list: re-read everything. */
+  overflow: boolean
+  /** HEAD, the index or a branch changed. */
+  git: boolean
+  /** False: this folder cannot be watched; fall back to focus and command triggers. */
+  watching: boolean
+  degraded: boolean
+  error: string | null
+}
+
+export interface GitCommitSummary {
+  hash: string
+  author: string
+  /** Relative, as git says it: "3 hours ago". */
+  when: string
+  subject: string
+}
+
+/** `deleted: false` with `trashUnavailable` means NOTHING was deleted. */
+export interface FsDeleteResult {
+  deleted: boolean
+  path?: string
+  trashed?: boolean
+  trashUnavailable?: boolean
+  message?: string
+}
+
+export function completionRequestId(): string {
+  const webcrypto = globalThis.crypto as { randomUUID?: () => string } | undefined
+  const unique =
+    typeof webcrypto?.randomUUID === 'function'
+      ? webcrypto.randomUUID()
+      : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+  return `complete-${unique}`
 }
 
 export interface SketchClient {
@@ -700,6 +1144,32 @@ export interface SketchClient {
     root: string
     message: string
   }): Promise<{ output: string; status: GitStatusResult }>
+
+  /** Throw away working-tree edits to tracked files. Staged changes are kept. */
+  gitDiscard?(params: { root: string; paths: string[] }): Promise<GitStatusResult>
+  gitBranches?(params: { root: string }): Promise<GitBranchesResult>
+  /** Switch branch, or `create` one from HEAD and switch to it. */
+  gitSwitch?(params: { root: string; branch: string; create?: boolean }): Promise<GitStatusResult>
+  /** Push the current branch; a branch with no upstream is published to origin. */
+  gitPush?(params: { root: string }): Promise<{ output: string; status: GitStatusResult }>
+  /** Pull, fast-forward only. */
+  gitPull?(params: { root: string }): Promise<{ output: string; status: GitStatusResult }>
+  gitFetch?(params: { root: string }): Promise<GitStatusResult>
+  gitLog?(params: { root: string; limit?: number }): Promise<{ commits: GitCommitSummary[] }>
+  /**
+   * A file as it is in HEAD (the default) or in the index (`ref: 'index'`), for the
+   * editor's change markers and the diff view. Null: nothing to compare with.
+   */
+  gitShow?(params: { root: string; path: string; ref?: 'HEAD' | 'index' }): Promise<{ content: string | null }>
+  /**
+   * A commit message for the staged changes (or, with nothing staged, the working-tree
+   * changes), drafted by the connected model. One model call; nothing is committed.
+   */
+  gitCommitMessage?(params: {
+    root: string
+    provider: ProviderSettingsEntry
+    apiKey?: string
+  }): Promise<{ message: string; source: 'staged' | 'unstaged'; model?: string }>
 
   // ── provider settings ─────────────────────────────────────────────────────
   //
@@ -779,6 +1249,12 @@ export interface SketchClient {
     maxHits?: number
   }): Promise<ProjectSearchResult>
 
+  /** Editor-style Find in Files: exactly what was typed, or a regular expression. Read-only. */
+  findInFiles?(params: FindInFilesParams): Promise<FindInFilesResult>
+
+  /** Replace what Find in Files shows. Contained, snapshotted: `undoRun(snapshotId)` reverses it. */
+  replaceInFiles?(params: ReplaceInFilesParams): Promise<ReplaceInFilesResult>
+
   // ── skills ────────────────────────────────────────────────────────────────
   //
   // Hashing a directory, writing into `.sketch/skills/`, and scoring an eval set are
@@ -800,6 +1276,13 @@ export interface SketchClient {
   }): Promise<SkillInstallResult>
 
   /**
+   * Remove one installed skill: its directory under `.sketch/skills/<name>` and its
+   * persisted capability grant. Confined to the project's skills folder, idempotent,
+   * and the returned `removedDir`/`removedGrant` say what was actually removed.
+   */
+  skillUninstall?(params: { root: string; name: string }): Promise<SkillUninstallResult>
+
+  /**
    * Train one installed skill on this project's captured evals.
    *
    * THE ONLY CAPABILITY ON THIS SEAM THAT CAN REACH A PROVIDER, and therefore the
@@ -816,6 +1299,9 @@ export interface SketchClient {
       write?: boolean
       maxCalls?: number
       maxTokens?: number
+      /** 'edits' trains with SkillOpt's bounded edits; 'rewrite' proposes whole bodies. */
+      mode?: 'rewrite' | 'edits'
+      maxEdits?: number
     },
     options?: { signal?: AbortSignal },
   ): Promise<SkillTrainResult>
@@ -858,6 +1344,43 @@ export interface SketchClient {
   /** The curated catalog, with each entry's missing environment named. */
   mcpCatalog?(): Promise<McpCatalogResult>
 
+  // ── Offline Mode and the privacy view ──────────────────────────────────────
+
+  /** The Offline Mode switch, where it is saved, and what this engine process sent where. */
+  privacyStatus?(options?: { root?: string }): Promise<PrivacyStatus>
+  /** Turn Offline Mode on or off. Saved in the user's home, so every window sees it. */
+  privacySet?(offline: boolean, options?: { root?: string }): Promise<PrivacyStatus>
+
+  // ── the user's own MCP servers ─────────────────────────────────────────────
+
+  mcpServers?(options?: { root?: string }): Promise<UserMcpServersResult>
+  mcpServerSave?(params: {
+    scope: 'global' | 'project'
+    name: string
+    command: string
+    args?: string[]
+    env?: Record<string, string>
+    root?: string
+  }): Promise<UserMcpServersResult & { saved: string }>
+  mcpServerRemove?(params: { scope: 'global' | 'project'; name: string; root?: string }): Promise<UserMcpServersResult & { removed: boolean }>
+  /** Approve (or withdraw) a project server's exact launch. */
+  mcpServerTrust?(params: { name: string; trusted: boolean; root?: string }): Promise<UserMcpServersResult>
+  /** Start the server once, list its tools, stop it. */
+  mcpServerTest?(params: { name: string; root?: string }): Promise<UserMcpTestResult>
+
+  // ── local models (Ollama) ──────────────────────────────────────────────────
+
+  /** The Ollama server and program, installed and loaded models, the machine, and what fits it. */
+  localModels?(options?: { baseUrl?: string }): Promise<LocalModelsResult>
+  /** Start a download. `confirmed` must be true: the user agreed, having seen the size. */
+  localModelPull?(params: { model: string; baseUrl?: string; confirmed: true }): Promise<LocalModelPull>
+  localModelPullStatus?(id: string): Promise<LocalModelPull>
+  localModelPullCancel?(id: string): Promise<{ id: string; cancelled: boolean }>
+  /** Remove a model's files. `confirmed` must be true. */
+  localModelDelete?(params: { model: string; baseUrl?: string; confirmed: true }): Promise<{ ok: boolean; model: string }>
+  /** Load a model into memory, or (`unload: true`) free it. */
+  localModelLoad?(params: { model: string; baseUrl?: string; unload?: boolean }): Promise<{ ok: boolean; model: string; loaded: boolean }>
+
   // ── strategies and roles ──────────────────────────────────────────────────
 
   /**
@@ -879,6 +1402,12 @@ export interface SketchClient {
 
   /** What this project's runs have cost, derived from the durable log. */
   cost?(params: { root: string; runId?: string }): Promise<CostReport>
+  /**
+   * Model calls NOT tied to a message — completions, inline edits, commit messages,
+   * connection tests, model listing — rolled up by cause from the engine's
+   * `~/.sketch/usage` log. Never carries a key, a prompt, or a reply.
+   */
+  costUsage?(params?: { home?: string }): Promise<UsageSummary>
 
   /** Latest validated benchmark artifact. Read-only: never starts work on mount. */
   benchmarkReport?(params: { root: string }): Promise<BenchmarkReportResult>
@@ -924,6 +1453,137 @@ export interface SketchClient {
     reason: string
     replacementText?: string
   }): Promise<MemorySupersedeResult>
+
+  // ── connecting a model ────────────────────────────────────────────────────
+
+  /**
+   * The models a provider serves, asked of the provider. A real network call made
+   * only because a picker asked; `apiKey` is for this one call and is never saved.
+   */
+  providerModels?(params: {
+    provider: {
+      id: string
+      kind: ProviderSettingsFile['providers'][number]['kind']
+      baseUrl: string
+      apiKey?: string
+    }
+    timeoutMs?: number
+  }): Promise<ProviderModelsResult>
+
+  /**
+   * Open the loopback listener for a desktop account sign-in (OpenRouter PKCE). The
+   * engine reports the one-time code; the exchange and the key never pass through it.
+   */
+  oauthStart?(params?: { timeoutMs?: number }): Promise<OAuthStartResult>
+  /** Long-poll for the callback of a started sign-in. */
+  oauthWait?(params: { id: string }): Promise<OAuthWaitResult>
+  /** Abandon a started sign-in. */
+  oauthCancel?(params: { id: string }): Promise<{ id: string; cancelled: boolean }>
+
+  /** Whether a ChatGPT account is signed in, as whom, on which plan. Never a token. */
+  chatgptStatus?(): Promise<ChatGPTStatus>
+  /**
+   * Start "Sign in with ChatGPT". `browser` opens a loopback callback the user's
+   * browser returns to; `device` shows a code to type at auth.openai.com/codex/device.
+   */
+  chatgptLoginStart?(params: { mode: 'browser' | 'device' }): Promise<ChatGPTLoginStart>
+  /** Long-poll for the outcome of a started ChatGPT sign-in. */
+  chatgptLoginWait?(params: { id: string }): Promise<ChatGPTLoginOutcome>
+  /** Abandon a started ChatGPT sign-in. */
+  chatgptLoginCancel?(params: { id: string }): Promise<{ id: string; cancelled: boolean }>
+  /** Sign out: revoke at OpenAI (best effort) and forget the sign-in on this computer. */
+  chatgptLogout?(): Promise<{ signedOut: boolean; revoked: boolean }>
+  /** The models the signed-in ChatGPT account can use, best first. */
+  chatgptModels?(): Promise<ChatGPTModelsResult>
+
+  /** Put back every file an auto-applied run changed, from its snapshot. No Git needed. */
+  undoRun?(params: { root: string; runId: string }): Promise<UndoRunResult>
+
+  /** Clone a repository into a NEW folder under `parent`. */
+  gitClone?(params: { url: string; parent: string; name?: string }): Promise<{ path: string; name: string }>
+
+  /**
+   * Inline completion at the cursor. A real model call, made only while the user has
+   * Autocomplete switched on; `signal` abandons it (the engine is told to stop too).
+   */
+  complete?(
+    params: {
+      provider: ProviderSettingsEntry
+      apiKey?: string
+      path: string
+      language?: string
+      prefix: string
+      suffix: string
+      maxTokens?: number
+    },
+    options?: { signal?: AbortSignal },
+  ): Promise<CompletionResult>
+
+  /**
+   * Inline edit (Ctrl+K): the selection rewritten as `instruction` says. One model call,
+   * made when the user asks; nothing is written — the editor shows the diff to accept.
+   * `signal` abandons it, and the engine is told to stop too.
+   */
+  inlineEdit?(
+    params: {
+      provider: ProviderSettingsEntry
+      apiKey?: string
+      path: string
+      language?: string
+      before: string
+      selection: string
+      after: string
+      instruction: string
+      maxTokens?: number
+    },
+    options?: { signal?: AbortSignal },
+  ): Promise<InlineEditResult>
+
+  /** Every indexable file in the project, for Quick Open and `@` mentions. Paths only. */
+  projectFiles?(params: { root: string }): Promise<ProjectFilesResult>
+
+  /** Custom slash commands for this project and this user. Reads only. */
+  commandsList?(params: { root?: string }): Promise<CommandsListResult>
+
+  // ── terminal ──────────────────────────────────────────────────────────────
+  //
+  // The Code surface's terminal runs in the ENGINE: the user's shell, one process per
+  // line, output streamed by polling `termRead`, stoppable with `termKill`, answerable
+  // on stdin with `termWrite`. It replaced the blocking Tauri `run_command`, which ran
+  // on the window's main thread and froze the app until the program exited. `termStart`
+  // requires `confirmed: true`; the panel asks before the first command in a folder.
+
+  /** Run one line, or apply a `cd`. */
+  termStart?(params: { root: string; cwd?: string; line: string; confirmed: true }): Promise<TerminalStartResult>
+  /** Output since `since`, and whether the command is still running. */
+  termRead?(params: { id: string; since?: number }): Promise<TerminalReadResult>
+  /** Type into the running program; `end` closes its input (Ctrl+D). */
+  termWrite?(params: { id: string; data?: string; end?: boolean }): Promise<{ ok: boolean }>
+  /** Stop the command and everything it started. */
+  termKill?(params: { id: string }): Promise<{ stopped: boolean }>
+
+  /**
+   * What changed in the project on disk, by long poll. Without `since`: the current
+   * cursor at once. With it: as soon as something changes, or an empty batch after
+   * `timeoutMs`. Aborting forgets the request (the engine's poll simply times out).
+   */
+  fsWatch?(params: { root: string; since?: number; timeoutMs?: number }, signal?: AbortSignal): Promise<FsWatchBatch>
+
+  /** Show a project file or folder in the system's file manager, selected. */
+  osReveal?(params: { root: string; path: string }): Promise<{ label: string }>
+  /** Open the system's own terminal app (Windows Terminal, Terminal.app…) in a project folder. */
+  osOpenTerminal?(params: { root: string; path?: string }): Promise<{ label: string }>
+
+  // ── explorer file operations ──────────────────────────────────────────────
+  //
+  // Contained by real path in the engine; none of them overwrites. `fsDelete` moves to
+  // the operating system's trash by default and answers `trashUnavailable` (deleting
+  // nothing) when it cannot, so the window can offer a permanent delete instead.
+
+  fsCreateFile?(params: { root: string; path: string; content?: string }): Promise<{ path: string }>
+  fsCreateFolder?(params: { root: string; path: string }): Promise<{ path: string }>
+  fsRename?(params: { root: string; from: string; to: string }): Promise<{ from: string; to: string }>
+  fsDelete?(params: { root: string; path: string; trash?: boolean }): Promise<FsDeleteResult>
 
   /**
    * Attach a handler to the engine's event stream. Called for every event from

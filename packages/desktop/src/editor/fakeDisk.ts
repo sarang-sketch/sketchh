@@ -11,10 +11,11 @@
 //
 // WHAT IS FAITHFUL, on purpose: the refusals. Containment lives in Rust
 // (src-tauri/src/command_policy.rs) and is never weakened or bypassed here; this
-// double reproduces the SHAPE of its two refusal messages ("… is outside the open
-// project root …", "… escapes the project root …") and the OS "os error 2", because
-// `describeFileFailure` reads those strings and a test that invented friendlier
-// wording would prove nothing about what a user sees.
+// double reproduces the SHAPE of its CURRENT refusal messages ("This file is outside
+// the folder you have open in Sketch …", "… escapes the open folder …") and the OS
+// "os error 2", because `describeFileFailure` reads those strings and a test that
+// invented friendlier wording would prove nothing about what a user sees. The exact
+// phrases are centralised in ipc/policyMessages.ts.
 //
 // WHAT IS REAL IN EVERY TEST THAT USES IT: `readForEditor`, `writeFromEditor`,
 // `describeFileFailure`, `useFileActions`, the `AppState` reducer, `ModelRegistry`
@@ -51,10 +52,13 @@ export interface FakeDisk {
 function refuseOutside(root: string, path: string): void {
   if (root.trim() === '') throw new Error('no project root is open, so no path may be used')
   if (path.includes('..')) {
-    throw new Error(`file '${path}' escapes the project root ${root}`)
+    throw new Error(`file '${path}' escapes the open folder ${root}`)
   }
   if (!isWithinRoot(root, path)) {
-    throw new Error(`file '${path}' is outside the open project root ${root}`)
+    throw new Error(
+      `This file is outside the folder you have open in Sketch, so it cannot be reached from here:\n  file: ${path}\n  open folder: ${root}\n` +
+        'To work with it, open the folder that contains it (File \u2192 Open Folder).',
+    )
   }
 }
 

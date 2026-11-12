@@ -70,7 +70,22 @@ manifest records `passed: true`, and each is strictly under the unchanged 100,00
 | macOS | `dmg/Sketch_0.1.0_aarch64.dmg` | 40,239,845 | `68ef4372f90b9387b9be0ed588e69a5d190430887cd45900f52d8dbcf749a437` | UDIF `koly` trailer |
 | Linux | `deb/Sketch_0.1.0_amd64.deb` | 48,572,918 | `c155fdd3a9d97efa637b39daaab1bfd8b5b2cb807f6cb628f7b6e9116720b93b` | `ar` archive, `debian-binary` 2.0 |
 
-Task 12.1 is complete on this evidence. Two limits are explicit: local Windows packaging on the
-development host remains blocked by Application Control (OS error 4551) and missing `dlltool.exe`,
-and none of these packages is Authenticode- or Developer ID-signed. A successful native matrix is
-also not release publication, so task 12.3 stays open.
+Task 12.1 is complete on this evidence. One limit is explicit: none of these packages is
+Authenticode- or Developer ID-signed. A successful native matrix is also not release publication, so
+task 12.3 stays open.
+
+## Local Windows builds
+
+The MSVC linker needs the Windows SDK, which the *Desktop development with C++* workload of the
+Visual Studio Build Tools includes. `LNK1181: cannot open input file 'kernel32.lib'` means the SDK is
+missing: add it in the Visual Studio Installer, then `npm run package:windows -w @sketch/desktop`
+works as in CI.
+
+Without the SDK, the GNU toolchain also builds a working installer, with one difference to know
+about. Install `stable-x86_64-pc-windows-gnu` with `rustup`, put MinGW-w64 on `PATH`, and set
+`RUSTUP_TOOLCHAIN=stable-x86_64-pc-windows-gnu` and `SKETCH_TARGET_TRIPLE=x86_64-pc-windows-gnu`.
+A GNU build loads `WebView2Loader.dll` at run time instead of linking it in, so the installer must
+carry that file beside `sketch-desktop.exe`, or the installed app cannot start. Pass a `--config`
+whose `bundle.resources` keeps `resources/sketch-engine.mjs` and adds
+`target/release/WebView2Loader.dll` as `WebView2Loader.dll`. Published installers come from the
+MSVC build in `package.yml`.

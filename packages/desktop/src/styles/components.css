@@ -1,0 +1,309 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+ * SKETCH SHARED COMPONENT PRIMITIVES
+ *
+ * One definition of the controls every surface reuses: buttons, inputs, selects,
+ * toggles, the modal/dialog frame, dropdown and context menus, tooltips, and
+ * badges/chips. Every value here is a token from global.css, so these controls look
+ * the same in both themes and change in one place.
+ *
+ * HOW TO USE (also in docs/overhaul/fix-design-system.md):
+ *   Buttons  — class "sk-btn" + a variant: sk-btn--primary | --secondary | --ghost
+ *              | --danger, and optionally a size: sk-btn--sm | --lg (default is md).
+ *              Add sk-btn--loading while an action is in flight (shows a spinner and
+ *              disables pointer events); the native `disabled` attribute styles it too.
+ *              An icon-only button: add sk-btn--icon (square, centred). Always give an
+ *              icon-only button an aria-label (and a title for the tooltip).
+ *   Inputs   — class "sk-input" (text/textarea), "sk-select" (a <select>). Add
+ *              sk-field--error for the error outline. `disabled` is styled.
+ *   Toggle   — a <button role="switch"> with class "sk-toggle" and aria-checked; the
+ *              knob is drawn with ::after. A checkbox: class "sk-checkbox".
+ *   Modal    — "sk-modal-backdrop" wraps "sk-modal" (role="dialog" aria-modal="true").
+ *   Menu     — "sk-menu" is the floating surface; "sk-menu-item" a row; "sk-menu-sep"
+ *              a divider; "sk-menu-hint" the trailing shortcut text.
+ *   Tooltip  — "sk-tooltip" for a styled bubble when the native title is not enough.
+ *   Badge    — "sk-badge" + optional tone: sk-badge--accent | --success | --warning
+ *              | --error | --info; "sk-chip" for a removable/selectable pill.
+ *
+ * These are plain global classes (not a CSS module), so a component applies them by
+ * string and may still add its own module class for layout.
+ * ───────────────────────────────────────────────────────────────────────────── */
+
+/* ── Buttons ─────────────────────────────────────────────────────────────────── */
+.sk-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  height: var(--control-md);
+  padding: 0 var(--space-6);
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.sk-btn--sm { height: var(--control-sm); padding: 0 var(--space-5); font-size: var(--text-xs); }
+.sk-btn--lg { height: var(--control-lg); padding: 0 var(--space-8); font-size: var(--text-base); }
+.sk-btn--icon { width: var(--control-md); padding: 0; }
+.sk-btn--icon.sk-btn--sm { width: var(--control-sm); }
+.sk-btn--icon.sk-btn--lg { width: var(--control-lg); }
+
+.sk-btn:focus-visible { outline: var(--focus-ring-width) solid var(--accent); outline-offset: 1px; }
+
+/* Primary — a white label on the deep accent fill (the one call to action). */
+.sk-btn--primary {
+  background: var(--accent-fill);
+  border-color: var(--accent-fill);
+  color: var(--text-on-accent);
+}
+.sk-btn--primary:hover:not(:disabled):not(.sk-btn--loading) {
+  background: var(--accent-fill-hover);
+  border-color: var(--accent-fill-hover);
+}
+
+/* Secondary — an outlined control on a surface. */
+.sk-btn--secondary {
+  background: var(--bg-elevated);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+.sk-btn--secondary:hover:not(:disabled):not(.sk-btn--loading) { background: var(--bg-hover); }
+
+/* Ghost — no chrome until hovered; for toolbar and inline actions. */
+.sk-btn--ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-secondary);
+}
+.sk-btn--ghost:hover:not(:disabled):not(.sk-btn--loading) { background: var(--bg-hover); color: var(--text-primary); }
+
+/* Danger — a destructive action; tinted, deepening on hover. */
+.sk-btn--danger {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.6);
+  color: #fecaca;
+}
+.sk-btn--danger:hover:not(:disabled):not(.sk-btn--loading) { background: rgba(239, 68, 68, 0.28); }
+
+.sk-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Loading: a spinner takes the place of interaction; pointer events are off. */
+.sk-btn--loading {
+  cursor: progress;
+  pointer-events: none;
+  position: relative;
+  color: transparent !important;
+}
+.sk-btn--loading::after {
+  content: '';
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: var(--radius-full);
+  color: var(--text-primary);
+  animation: spin 0.7s linear infinite;
+}
+.sk-btn--primary.sk-btn--loading::after { color: var(--text-on-accent); }
+
+/* ── Inputs ──────────────────────────────────────────────────────────────────── */
+.sk-input,
+.sk-select {
+  height: var(--control-md);
+  width: 100%;
+  padding: 0 var(--space-5);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+/* A textarea gets the same skin but grows vertically. */
+textarea.sk-input { height: auto; min-height: var(--control-lg); padding: var(--space-4) var(--space-5); line-height: 1.5; resize: vertical; }
+
+.sk-input::placeholder { color: var(--text-muted); }
+
+.sk-input:hover:not(:disabled),
+.sk-select:hover:not(:disabled) { border-color: var(--text-muted); }
+
+.sk-input:focus,
+.sk-select:focus,
+.sk-input:focus-visible,
+.sk-select:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.sk-input:disabled,
+.sk-select:disabled { opacity: 0.55; cursor: not-allowed; background: var(--bg-secondary); }
+
+/* Error state — a red outline the eye catches, plus the helper text class. */
+.sk-field--error { border-color: var(--error) !important; }
+.sk-field--error:focus,
+.sk-field--error:focus-visible { box-shadow: 0 0 0 1px var(--error) !important; }
+.sk-field-error-text { color: var(--error); font-size: var(--text-xs); margin-top: var(--space-2); }
+
+/* Checkbox — a native box tinted with the accent. */
+.sk-checkbox {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.sk-checkbox:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Toggle switch — a <button role="switch"> whose knob is ::after. */
+.sk-toggle {
+  position: relative;
+  width: 34px;
+  height: 18px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: var(--radius-full);
+  background: var(--bg-hover);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+.sk-toggle::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius-full);
+  background: #ffffff; /* theme: fixed */
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.15s ease;
+}
+.sk-toggle[aria-checked='true'] { background: var(--accent-fill); }
+.sk-toggle[aria-checked='true']::after { transform: translateX(16px); }
+.sk-toggle:focus-visible { outline: var(--focus-ring-width) solid var(--accent); outline-offset: 2px; }
+.sk-toggle:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Modal / dialog ──────────────────────────────────────────────────────────── */
+.sk-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-overlay);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 14vh;
+  background: rgba(0, 0, 0, 0.5);
+  animation: fadeIn 0.12s ease;
+}
+.sk-modal {
+  position: relative;
+  z-index: var(--z-modal);
+  width: min(480px, calc(100vw - 32px));
+  max-height: calc(100vh - 96px);
+  overflow: auto;
+  padding: var(--space-10) var(--space-10) var(--space-8);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-xl);
+  color: var(--text-primary);
+}
+
+/* ── Menus / dropdowns / context menus ───────────────────────────────────────── */
+.sk-menu {
+  min-width: 200px;
+  max-height: calc(100vh - 60px);
+  overflow-y: auto;
+  padding: var(--space-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+}
+.sk-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-8);
+  width: 100%;
+  padding: var(--space-3) var(--space-5);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  text-align: left;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+.sk-menu-item:hover:not(:disabled) { background: var(--accent-fill); color: var(--text-on-accent); }
+.sk-menu-item:disabled { color: var(--text-disabled); cursor: default; }
+.sk-menu-item:focus-visible { outline: var(--focus-ring-width) solid var(--accent); outline-offset: -2px; }
+.sk-menu-hint { color: var(--text-muted); font-size: var(--text-xs); white-space: nowrap; }
+.sk-menu-item:hover:not(:disabled) .sk-menu-hint { color: var(--text-on-accent); }
+.sk-menu-sep { height: 1px; margin: var(--space-2) var(--space-3); background: var(--border); }
+
+/* ── Tooltip ─────────────────────────────────────────────────────────────────── */
+.sk-tooltip {
+  position: absolute;
+  z-index: var(--z-tooltip);
+  max-width: 260px;
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+  box-shadow: var(--shadow-md);
+  pointer-events: none;
+}
+
+/* ── Badges and chips ────────────────────────────────────────────────────────── */
+.sk-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 1px var(--space-3);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-2xs);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.5;
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+}
+.sk-badge--accent { background: var(--accent-subtle); color: var(--accent); }
+.sk-badge--success { background: rgba(34, 197, 94, 0.18); color: var(--success); }
+.sk-badge--warning { background: rgba(234, 179, 8, 0.18); color: var(--warning); }
+.sk-badge--error { background: rgba(239, 68, 68, 0.18); color: var(--error); }
+.sk-badge--info { background: rgba(59, 130, 246, 0.18); color: var(--info); }
+
+.sk-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-5);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-full);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+.sk-chip:hover { background: var(--bg-hover); color: var(--text-primary); }
+.sk-chip[aria-pressed='true'] { background: var(--accent-subtle); border-color: var(--accent); color: var(--accent); }

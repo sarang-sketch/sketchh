@@ -1,32 +1,79 @@
-import React, { useState } from 'react';
+import React, { lazy, Suspense, useEffect, useState } from 'react';
 import styles from './SidePanel.module.css';
-import { useAppState } from '../../state/AppState';
+import { useAppDispatch, useAppState, type AppState } from '../../state/AppState';
 import { FileExplorer } from '../../panels/FileExplorer';
 import SearchPanel from '../../panels/ide/SearchPanel';
 import { GitPanel } from '../../panels/GitPanel';
 import { DiffReview } from '../../panels/DiffReview';
-import { LiveArchitecture } from '../../panels/LiveArchitecture';
-import { AgentTeamPanel } from '../../panels/agent/AgentTeamPanel';
-import { SkillsMarketplace } from '../../panels/SkillsMarketplace';
-import { AgentTimelinePanel } from '../../ui/panels/AgentTimeline';
-import { AgentConsolePanel } from '../../ui/panels/AgentConsole';
-import DebuggerPanel from '../../panels/ide/DebuggerPanel';
-import { ProviderSettings } from '../../panels/ProviderSettings';
-import { McpTools } from '../../panels/McpTools';
-import { TestResults } from '../../panels/TestResults';
-import { CostDashboard } from '../../panels/CostDashboard';
-import { BenchmarksPanel } from '../../panels/BenchmarksPanel';
-import { MemoryPanel } from '../../panels/MemoryPanel';
+import { ResizeHandle } from '../ResizeHandle';
+import { X } from '../Icons';
+
+// The common editing tools stay immediate; optional workbenches load on first use.
+const LiveArchitecture = lazy(() => import('../../panels/LiveArchitecture').then((m) => ({ default: m.LiveArchitecture })));
+const AgentTeamPanel = lazy(() => import('../../panels/agent/AgentTeamPanel').then((m) => ({ default: m.AgentTeamPanel })));
+const TeamPanel = lazy(() => import('../../team/TeamPanel').then((m) => ({ default: m.TeamPanel })));
+const SkillsMarketplace = lazy(() => import('../../panels/SkillsMarketplace').then((m) => ({ default: m.SkillsMarketplace })));
+const AgentTimelinePanel = lazy(() => import('../../ui/panels/AgentTimeline').then((m) => ({ default: m.AgentTimelinePanel })));
+const AgentConsolePanel = lazy(() => import('../../ui/panels/AgentConsole').then((m) => ({ default: m.AgentConsolePanel })));
+const RunPanel = lazy(() => import('../../panels/ide/RunPanel'));
+const ProviderSettings = lazy(() => import('../../panels/ProviderSettings').then((m) => ({ default: m.ProviderSettings })));
+const McpTools = lazy(() => import('../../panels/McpTools').then((m) => ({ default: m.McpTools })));
+const TestResults = lazy(() => import('../../panels/TestResults').then((m) => ({ default: m.TestResults })));
+const CostDashboard = lazy(() => import('../../panels/CostDashboard').then((m) => ({ default: m.CostDashboard })));
+const BenchmarksPanel = lazy(() => import('../../panels/BenchmarksPanel').then((m) => ({ default: m.BenchmarksPanel })));
+const MemoryPanel = lazy(() => import('../../panels/MemoryPanel').then((m) => ({ default: m.MemoryPanel })));
+
+type PanelId = NonNullable<AppState['ideActivePanel']>;
+
+const SIDE_WIDTH_KEY = 'sketch.layout.sideWidth.v1';
+const DEFAULT_SIDE_WIDTH = 280;
+const MIN_SIDE_WIDTH = 220;
+const MAX_SIDE_WIDTH = 560;
+
+/** Panels whose own header already names them; a second one is noise. */
+const OWNS_HEADER = new Set<PanelId>([
+  'explorer',
+  'architecture',
+  'mcp',
+  'skills',
+  'tests',
+  'cost',
+  'benchmarks',
+  'memory',
+  'timeline',
+  'console',
+  'settings',
+]);
+
+function readWidth(): number {
+  try {
+    const value = Number(window.localStorage.getItem(SIDE_WIDTH_KEY));
+    return Number.isFinite(value) && value >= MIN_SIDE_WIDTH ? Math.min(MAX_SIDE_WIDTH, value) : DEFAULT_SIDE_WIDTH;
+  } catch {
+    return DEFAULT_SIDE_WIDTH;
+  }
+}
 
 export default function SidePanel() {
-  const { ideActivePanel } = useAppState();
-  const [width, setWidth] = useState(280);
+  const { ideActivePanel, appearance } = useAppState();
+  const dispatch = useAppDispatch();
+  const [width, setWidth] = useState(readWidth);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(SIDE_WIDTH_KEY, String(width));
+    } catch {
+      /* not remembered, still applied */
+    }
+  }, [width]);
 
   let content: React.ReactNode = null;
   let title = '';
 
   switch (ideActivePanel) {
     case 'explorer':
+      // FileExplorer owns its header, so it can keep the new-file / refresh
+      // actions in the same row as the view's name.
       title = 'Explorer';
       content = <FileExplorer />;
       break;
@@ -52,6 +99,10 @@ export default function SidePanel() {
       title = 'AI Team';
       content = <AgentTeamPanel />;
       break;
+    case 'team':
+      title = 'Build Team';
+      content = <TeamPanel />;
+      break;
     case 'skills':
       title = 'Skills';
       content = <SkillsMarketplace />;
@@ -65,8 +116,8 @@ export default function SidePanel() {
       content = <AgentConsolePanel />;
       break;
     case 'run':
-      title = 'Run & Debug';
-      content = <DebuggerPanel />;
+      title = 'Run';
+      content = <RunPanel />;
       break;
     case 'settings':
       title = 'Provider Settings';
@@ -102,33 +153,38 @@ export default function SidePanel() {
       return null;
   }
 
-  const handleMouseDown = (e: React.MouseEvent) => {
-    const startX = e.clientX;
-    const startWidth = width;
-
-    const onMouseMove = (moveEvent: MouseEvent) => {
-      const newWidth = Math.max(150, Math.min(600, startWidth + (moveEvent.clientX - startX)));
-      setWidth(newWidth);
-    };
-
-    const onMouseUp = () => {
-      document.removeEventListener('mousemove', onMouseMove);
-      document.removeEventListener('mouseup', onMouseUp);
-    };
-
-    document.addEventListener('mousemove', onMouseMove);
-    document.addEventListener('mouseup', onMouseUp);
-  };
+  const showHeader = ideActivePanel !== null && !OWNS_HEADER.has(ideActivePanel);
 
   return (
-    <div className={styles.sidePanel} style={{ width }}>
-      <div className={styles.header}>
-        <span>{title}</span>
-      </div>
+    <div className={styles.sidePanel} style={{ width }} data-position={appearance.sidebarPosition}>
+      {showHeader && (
+        <div className={styles.header}>
+          <span className={styles.headerTitle}>{title}</span>
+          <button
+            type="button"
+            className={styles.headerClose}
+            onClick={() => dispatch({ type: 'SET_ACTIVE_PANEL', payload: null })}
+            title="Hide side panel (Ctrl+B)"
+            aria-label="Hide side panel"
+          >
+            <X size={13} />
+          </button>
+        </div>
+      )}
       <div className={styles.content}>
-        {content}
+        <Suspense fallback={<div className={styles.loading} role="status">Opening {title.toLowerCase()}…</div>}>{content}</Suspense>
       </div>
-      <div className={styles.resizeHandle} onMouseDown={handleMouseDown} />
+      <ResizeHandle
+        orientation="vertical"
+        size={width}
+        min={MIN_SIDE_WIDTH}
+        max={MAX_SIDE_WIDTH}
+        direction={appearance.sidebarPosition === 'right' ? -1 : 1}
+        defaultSize={DEFAULT_SIDE_WIDTH}
+        onResize={setWidth}
+        label="Resize the side panel"
+        className={styles.resizeHandle}
+      />
     </div>
   );
 }

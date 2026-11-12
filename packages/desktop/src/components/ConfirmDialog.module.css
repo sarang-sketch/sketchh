@@ -1,0 +1,74 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 14vh;
+  background: rgba(0, 0, 0, 0.5);
+  animation: fadeIn 0.12s ease;
+}
+
+.dialog {
+  width: min(460px, calc(100vw - 32px));
+  padding: 18px 20px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+  color: var(--text-primary);
+}
+
+.title { font-size: 14px; font-weight: 600; }
+
+.message {
+  margin-top: 8px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.detail {
+  margin-top: 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.button {
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.button:hover { background: var(--bg-hover); }
+
+.primary {
+  border-color: var(--accent-fill);
+  background: var(--accent-fill);
+  color: var(--text-on-accent);
+}
+
+.primary:hover { background: var(--accent-fill-hover); }
+
+.danger {
+  border-color: rgba(239, 68, 68, 0.6);
+  background: rgba(239, 68, 68, 0.15);
+  color: #fecaca;
+}
+
+.danger:hover { background: rgba(239, 68, 68, 0.28); }
+

@@ -56,3 +56,10 @@ export type {
   ProviderProposeEditOptions,
   TrainingBudget,
 } from './optimizer.js'
+
+// SkillOpt's update rule (github.com/microsoft/SkillOpt): a few anchored add/delete/
+// replace edits per step, and a buffer of edits validation already rejected.
+export { applyEdits, DEFAULT_MAX_EDITS, describeEdit, EDITS_FENCE, parseEdits } from './edits.js'
+export type { ApplyResult, SkillEdit } from './edits.js'
+export { providerProposeEdits } from './editOptimizer.js'
+export type { EditProposer, ProviderProposeEditsOptions } from './editOptimizer.js'

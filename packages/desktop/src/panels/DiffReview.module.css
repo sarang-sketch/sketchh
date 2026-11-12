@@ -301,12 +301,12 @@
 }
 
 .applyBtn {
-  background-color: var(--accent);
-  color: #fff;
+  background-color: var(--accent-fill);
+  color: var(--text-on-accent);
 }
 
 .applyBtn:hover:not(:disabled) {
-  background-color: var(--accent-hover);
+  background-color: var(--accent-fill-hover);
 }
 
 .rejectBtn {

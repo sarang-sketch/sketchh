@@ -84,6 +84,57 @@ export async function walkProjectDetailed(
   root: string,
   options: WalkOptions = {}
 ): Promise<WalkResult> {
+  return walkWith(root, options, describeFile)
+}
+
+/** One file a hash-free walk found: what Find in Files searches. */
+export interface PlainFile {
+  path: string
+  relativePath: string
+  size: number
+}
+
+export interface PlainWalkResult {
+  files: PlainFile[]
+  truncated: boolean
+  maxFiles: number
+  /** Files skipped for being larger than `maxFileBytes`. */
+  tooLarge: number
+}
+
+/**
+ * Every regular file the index walk would enter — same project boundary, same skip
+ * list, same `.gitignore` — but with NO extension allowlist and NO hashing. A text
+ * search must find a match in a `.rb`, `.cs` or `Dockerfile` the index does not
+ * chunk, and has no use for a content hash it would compute only to throw away.
+ */
+export async function walkPlainFiles(
+  root: string,
+  options: WalkOptions & { maxFileBytes?: number } = {}
+): Promise<PlainWalkResult> {
+  const maxFileBytes = Math.max(1, options.maxFileBytes ?? MAX_FILE_SIZE)
+  let tooLarge = 0
+  const result = await walkWith(root, options, async (full, rel, name) => {
+    let info
+    try { info = await stat(full) } catch { return null }
+    if (!info.isFile()) return null
+    if (info.size > maxFileBytes) {
+      tooLarge++
+      return null
+    }
+    return { path: full, relativePath: rel, size: info.size, hash: '', extension: extname(name).toLowerCase() }
+  })
+  return {
+    files: result.files.map(({ path, relativePath, size }) => ({ path, relativePath, size })),
+    truncated: result.truncated,
+    maxFiles: result.maxFiles,
+    tooLarge,
+  }
+}
+
+type Describe = (full: string, rel: string, name: string) => Promise<WalkedFile | null>
+
+async function walkWith(root: string, options: WalkOptions, describe: Describe): Promise<WalkResult> {
   const absRoot = resolve(root)
   const maxFiles = Math.max(0, options.maxFiles ?? DEFAULT_MAX_FILES)
 
@@ -100,6 +151,7 @@ export async function walkProjectDetailed(
     files: [],
     truncated: false,
     visited: new Set([realRoot]),
+    describe,
   }
 
   await walk(ctx, absRoot)
@@ -123,6 +175,8 @@ interface WalkContext {
   truncated: boolean
   /** Resolved real paths of directories already entered — the loop breaker. */
   visited: Set<string>
+  /** What a walked file becomes; null drops it. */
+  describe: Describe
 }
 
 async function walk(ctx: WalkContext, dir: string): Promise<void> {
@@ -157,7 +211,7 @@ async function walk(ctx: WalkContext, dir: string): Promise<void> {
 
   // Hash this directory's files in parallel, then append in sorted order so the
   // sequence — and therefore where the cap cuts — does not depend on I/O timing.
-  const hashed = await Promise.all(files.map(f => describeFile(f.full, f.rel, f.name)))
+  const hashed = await Promise.all(files.map(f => ctx.describe(f.full, f.rel, f.name)))
   for (const file of hashed) {
     if (file === null) continue
     if (ctx.files.length >= ctx.maxFiles) {

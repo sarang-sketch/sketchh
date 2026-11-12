@@ -48,6 +48,8 @@ import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 import type { Plugin, ViteDevServer } from 'vite'
 
+import { themeColors } from './src/styles/themeColors'
+
 const RPC_PATH = '/__sketch'
 const EVENTS_PATH = '/__sketch/events'
 
@@ -76,7 +78,12 @@ export type BridgeMiddleware = (req: IncomingMessage, res: ServerResponse, next:
 /** Loaded once per process, on first request, so config load stays cheap. */
 let corePromise: Promise<typeof import('@sketch/core')> | undefined
 function loadCore(): Promise<typeof import('@sketch/core')> {
-  corePromise ??= import('@sketch/core')
+  // The bridge hosts the engine in this process, so it installs the engine's Offline
+  // Mode guard here, as the sidecar's entry point does. Older builds of core lack it.
+  corePromise ??= import('@sketch/core').then((core) => {
+    core.installNetworkGuard?.()
+    return core
+  })
   return corePromise
 }
 
@@ -397,6 +404,13 @@ export function sketchBridgePlugin(options: SketchBridgeOptions = {}): Plugin {
 export default defineConfig({
   plugins: [react(), sketchBridgePlugin()],
   clearScreen: false,
+  css: {
+    postcss: {
+      // The light theme is derived from the dark stylesheets here (src/styles/themeColors.ts).
+      // Only the app's own CSS: Monaco and xterm are themed through their own options.
+      plugins: [themeColors((file) => /[\\/]src[\\/]/.test(file) && !/[\\/]node_modules[\\/]/.test(file))],
+    },
+  },
   server: {
     // Stated rather than left to the default. `--host` on the command line still
     // overrides it, which is why the bridge refuses a non-loopback Host itself.
@@ -407,6 +421,7 @@ export default defineConfig({
   },
   envPrefix: ['VITE_', 'TAURI_'],
   build: {
+    manifest: true,
     target: 'esnext',
     minify: !process.env.TAURI_DEBUG ? 'esbuild' : false,
     sourcemap: !!process.env.TAURI_DEBUG,

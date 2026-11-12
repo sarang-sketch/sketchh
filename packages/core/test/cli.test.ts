@@ -17,7 +17,7 @@
 // `process.execPath dist/cli.js`.
 //
 // The dispatch LOGIC that does not need a pipe — frame decoding, error codes, the
-// sequential queue — is additionally exercised as pure functions and against an
+// two-lane dispatch — is additionally exercised as pure functions and against an
 // in-process `ProtocolServer`, where a failure points at one function instead of
 // at "the child said something odd".
 //
@@ -185,6 +185,76 @@ async function session(lines: readonly string[], options: SessionOptions = {}): 
 const request = (id: unknown, method: string, params: Record<string, unknown> = {}): string =>
   JSON.stringify({ id, method, params })
 
+/**
+ * Like {@link session}, but each line is written after its own delay and stdin is
+ * closed only once every response has arrived. This is how a real client behaves
+ * when a person presses Stop mid-run: the second request is written WHILE the first
+ * is still open, which `session` (all lines in one tick) cannot express.
+ */
+async function timedSession(
+  steps: ReadonlyArray<{ line: string; afterMs: number }>,
+  expectResponses: number,
+  options: SessionOptions = {},
+): Promise<Transcript> {
+  const env: NodeJS.ProcessEnv = { ...process.env }
+  if (options.fakeProvider === false) delete env['SKETCH_FAKE_PROVIDER']
+  else env['SKETCH_FAKE_PROVIDER'] = '1'
+  delete env['OPENAI_API_KEY']
+  delete env['ANTHROPIC_API_KEY']
+
+  const child = spawn(process.execPath, [CLI_PATH], { env, stdio: ['pipe', 'pipe', 'pipe'] })
+  let stdout = ''
+  let stderr = ''
+  child.stdout.setEncoding('utf8')
+  child.stderr.setEncoding('utf8')
+  let responses = 0
+  let allAnswered: () => void = () => {}
+  const answered = new Promise<void>((resolveAll) => {
+    allAnswered = resolveAll
+  })
+  child.stdout.on('data', (chunk: string) => {
+    stdout += chunk
+    responses = stdout
+      .split('\n')
+      .filter((line) => line.trim() !== '')
+      .filter((line) => {
+        try {
+          return isResponseFrame(JSON.parse(line))
+        } catch {
+          return false
+        }
+      }).length
+    if (responses >= expectResponses) allAnswered()
+  })
+  child.stderr.on('data', (chunk: string) => {
+    stderr += chunk
+  })
+  const closed = new Promise<[number | null, NodeJS.Signals | null]>((resolveClose) => {
+    child.on('close', (code, sig) => resolveClose([code, sig]))
+  })
+
+  for (const step of steps) {
+    await new Promise((r) => setTimeout(r, step.afterMs))
+    child.stdin.write(`${step.line}\n`)
+  }
+  await answered
+  child.stdin.end()
+  const [exitCode, signal] = await closed
+
+  const outLines = stdout.split('\n').filter((line) => line.trim() !== '')
+  const parsed: unknown[] = outLines.map((line) => JSON.parse(line) as unknown)
+  return {
+    exitCode,
+    signal,
+    stdout,
+    stderr,
+    lines: outLines,
+    parsed,
+    responses: parsed.filter(isResponseFrame),
+    events: parsed.filter(isEventFrame),
+  }
+}
+
 const responseFor = (t: Transcript, id: unknown): ResponseFrame => {
   const found = t.responses.find((frame) => frame.id === id)
   if (found === undefined) {
@@ -222,7 +292,7 @@ interface ModelServer {
 
 async function scriptedModel(
   script: readonly string[],
-  options: { status?: number; body?: (auth: string) => string } = {},
+  options: { status?: number; body?: (auth: string) => string; delayMs?: number } = {},
 ): Promise<ModelServer> {
   let calls = 0
   const server = createHttpServer((req, res) => {
@@ -239,13 +309,18 @@ async function scriptedModel(
         return
       }
       const text = script[Math.min(calls - 1, script.length - 1)] ?? ''
-      res.writeHead(200, { 'content-type': 'application/json' })
-      res.end(
-        JSON.stringify({
-          choices: [{ message: { content: text } }],
-          usage: { prompt_tokens: 11, completion_tokens: 13 },
-        }),
-      )
+      const answer = () => {
+        if (res.destroyed) return
+        res.writeHead(200, { 'content-type': 'application/json' })
+        res.end(
+          JSON.stringify({
+            choices: [{ message: { content: text } }],
+            usage: { prompt_tokens: 11, completion_tokens: 13 },
+          }),
+        )
+      }
+      if (options.delayMs !== undefined && options.delayMs > 0) setTimeout(answer, options.delayMs)
+      else answer()
     })
   })
 
@@ -683,15 +758,15 @@ describeCli(`resilience (Requirements 12.3, 12.4)${CLI_SKIP_NOTE}`, () => {
       JSON.stringify({ id: 'no-params-key', method: 'ping' }),
     ])
 
-    expect(t.responses.map((r) => r.id)).toEqual([
-      0,
-      'str-id',
-      -42.5,
-      'bad-params',
-      'not-impl',
-      'no-method',
-      'no-params-key',
-    ])
+    // Every id exactly once. Order is not part of this contract any more: only the
+    // exclusive lane (`run`, `eval`, `skill-train`) is answered in arrival order, and
+    // an error frame for anything else is written as soon as it is known.
+    const ids = t.responses.map((r) => JSON.stringify(r.id)).sort()
+    expect(ids).toEqual(
+      [0, 'str-id', -42.5, 'bad-params', 'not-impl', 'no-method', 'no-params-key']
+        .map((id) => JSON.stringify(id))
+        .sort(),
+    )
     expect(responseFor(t, 0).ok).toBe(true)
     expect(responseFor(t, 'no-params-key').ok).toBe(true) // absent params means {}
     const invalid = responseFor(t, 'bad-params')
@@ -733,9 +808,9 @@ describeCli(`lifecycle and correlation (Requirement 12.1)${CLI_SKIP_NOTE}`, () =
   }, 30_000)
 
   it('correlates two overlapping requests unambiguously, and serves them in order', async () => {
-    // Both requests are on the wire before the first responds. The server is
-    // SEQUENTIAL: request order is response order, and every event frame between
-    // a request and its response belongs to that request.
+    // Both requests are on the wire before the first responds. `run` is in the
+    // server's EXCLUSIVE lane: request order is response order, and every event frame
+    // between a request and its response belongs to that request.
     const rootA = await makeTmp()
     const rootB = await makeTmp()
     const t = await session([
@@ -765,6 +840,49 @@ describeCli(`lifecycle and correlation (Requirement 12.1)${CLI_SKIP_NOTE}`, () =
     // Both runs really ran, in their own roots.
     expect(await exists(join(rootA, '.sketch'))).toBe(true)
     expect(await exists(join(rootB, '.sketch'))).toBe(true)
+  }, 45_000)
+
+  it('stops a run that is still in flight when cancel arrives over the same pipe', async () => {
+    // The packaged app's Stop button, end to end: one process, one pipe, the run
+    // still open when `cancel` is written. A model that only ever thinks keeps the
+    // run alive until the abort lands — each thought distinct, so the loop breaker
+    // (which stops identical repeats) is not what ends it.
+    const model = await scriptedModel(
+      Array.from({ length: 200 }, (_, i) => JSON.stringify({ action: 'think', text: `still going ${i}` })),
+      { delayMs: 150 },
+    )
+    try {
+      const root = await makeTmp()
+      const runId = 'stop-me-1'
+      const t = await timedSession(
+        [
+          {
+            afterMs: 0,
+            line: request('run-1', 'run', {
+              root,
+              runId,
+              maxIterations: 200,
+              task: { id: 'stop', prompt: 'never finishes', verify: [] },
+              provider: { id: 'custom', kind: 'openai-compatible', baseUrl: model.baseUrl, model: 'm' },
+            }),
+          },
+          { afterMs: 700, line: request('cancel-1', 'cancel', { runId }) },
+        ],
+        2,
+        { fakeProvider: false },
+      )
+
+      expect(t.exitCode).toBe(0)
+      // Answered BEFORE the run it stopped: it was not queued behind it.
+      expect(t.responses.map((r) => r.id)).toEqual(['cancel-1', 'run-1'])
+      expect(okResult<{ cancelled: boolean }>(t, 'cancel-1').cancelled).toBe(true)
+      const result = okResult<RunResult>(t, 'run-1')
+      expect(result.ok).toBe(false)
+      const failed = t.events.find((frame) => frame.event.kind === 'run_failed')
+      expect(failed?.event.payload['reason']).toBe('aborted')
+    } finally {
+      await model.close()
+    }
   }, 45_000)
 })
 
@@ -1008,7 +1126,7 @@ describe('dispatch, with the pipe replaced by an array', () => {
     return { server, captured }
   }
 
-  it('handles queued lines strictly in arrival order, whatever their durations', async () => {
+  it('answers a non-exclusive request while a slow one is still running', async () => {
     const order: string[] = []
     const { server, captured } = serverWith({
       slow: async () => {
@@ -1027,12 +1145,91 @@ describe('dispatch, with the pipe replaced by an array', () => {
     void server.handleLine(JSON.stringify({ id: 2, method: 'fast' }))
     await server.drain()
 
-    // The slow handler finished before the fast one started: sequential, in order.
-    expect(order).toEqual(['slow:start', 'slow:end', 'fast'])
+    // The fast request did not wait for the slow one: that is what lets a Stop or a
+    // reply reach a run that is still open.
+    expect(order).toEqual(['slow:start', 'fast', 'slow:end'])
     expect(captured.out.map((line) => JSON.parse(line))).toEqual([
-      { id: 1, ok: true, result: 'slow' },
       { id: 2, ok: true, result: 'fast' },
+      { id: 1, ok: true, result: 'slow' },
     ])
+    expect(server.handled).toBe(2)
+  })
+
+  it('keeps exclusive methods strictly in arrival order, whatever their durations', async () => {
+    const order: string[] = []
+    let first = true
+    const { server, captured } = serverWith({
+      run: async (params) => {
+        const label = String((params as { label?: unknown }).label)
+        order.push(`${label}:start`)
+        if (first) {
+          first = false
+          await new Promise((r) => setTimeout(r, 25))
+        }
+        order.push(`${label}:end`)
+        return label
+      },
+    })
+
+    void server.handleLine(JSON.stringify({ id: 'A', method: 'run', params: { label: 'A' } }))
+    void server.handleLine(JSON.stringify({ id: 'B', method: 'run', params: { label: 'B' } }))
+    await server.drain()
+
+    expect(order).toEqual(['A:start', 'A:end', 'B:start', 'B:end'])
+    expect(captured.out.map((line) => JSON.parse(line).id)).toEqual(['A', 'B'])
+  })
+
+  it('delivers a control request to a run that is still in flight', async () => {
+    // A stand-in for `run` that only finishes when `cancel` reaches it. Under the old
+    // single queue this test deadlocked: `cancel` waited for the run it was cancelling.
+    let release: (() => void) | null = null
+    const { server, captured } = serverWith({
+      run: () =>
+        new Promise((resolveRun) => {
+          release = () => resolveRun('stopped')
+        }),
+      cancel: async () => {
+        release?.()
+        return { cancelled: true }
+      },
+    })
+
+    const running = server.handleLine(JSON.stringify({ id: 'r', method: 'run', params: {} }))
+    await new Promise((r) => setTimeout(r, 5))
+    await server.handleLine(JSON.stringify({ id: 'c', method: 'cancel', params: {} }))
+    await running
+    await server.drain()
+
+    // Both answered: the run finished ONLY because the cancel reached it while it was
+    // open. Which frame is written first is a microtask detail, not the contract.
+    const frames = captured.out.map((line) => JSON.parse(line) as { id: string })
+    expect(frames).toHaveLength(2)
+    expect(frames).toEqual(
+      expect.arrayContaining([
+        { id: 'c', ok: true, result: { cancelled: true } },
+        { id: 'r', ok: true, result: 'stopped' },
+      ]),
+    )
+  })
+
+  it('drain waits for work accepted in both lanes', async () => {
+    const done: string[] = []
+    const { server } = serverWith({
+      run: async () => {
+        await new Promise((r) => setTimeout(r, 15))
+        done.push('run')
+        return null
+      },
+      other: async () => {
+        await new Promise((r) => setTimeout(r, 30))
+        done.push('other')
+        return null
+      },
+    })
+    void server.handleLine(JSON.stringify({ id: 1, method: 'run' }))
+    void server.handleLine(JSON.stringify({ id: 2, method: 'other' }))
+    await server.drain()
+    expect(done.sort()).toEqual(['other', 'run'])
     expect(server.handled).toBe(2)
   })
 

@@ -7,37 +7,44 @@
   font-family: var(--font-sans);
 }
 
+/* The Explorer owns this row: view name on the left, file actions on the right. */
 .header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 16px;
-  height: 32px;
+  flex: 0 0 auto;
+  gap: var(--space-4);
+  height: var(--control-lg);
+  padding: 0 var(--space-2) 0 var(--space-6);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .title {
-  font-size: 11px;
-  font-weight: 600;
+  overflow: hidden;
   color: var(--text-secondary);
-  letter-spacing: 0.5px;
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.6px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .actions {
   display: flex;
-  gap: 4px;
+  flex: 0 0 auto;
+  gap: 1px;
 }
 
 .actionBtn {
-  background: transparent;
-  border: none;
-  color: var(--text-secondary);
-  cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 4px;
+  width: 26px;
+  height: 26px;
   border-radius: var(--radius-sm);
-  transition: all 0.2s ease;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease;
 }
 
 .actionBtn:hover:not(:disabled) {
@@ -46,7 +53,7 @@
 }
 
 .actionBtn:disabled {
-  opacity: 0.4;
+  opacity: 0.35;
   cursor: default;
 }
 
@@ -55,32 +62,68 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 32px 16px;
+  gap: var(--space-2);
+  padding: 32px 20px;
   text-align: center;
   color: var(--text-secondary);
   font-size: 13px;
 }
 
 .emptyIcon {
-  margin-bottom: 16px;
+  margin-bottom: var(--space-2);
   color: var(--text-muted);
 }
 
+.emptyTitle {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-medium);
+}
+
+.emptyHint {
+  max-width: 210px;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.emptyActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+
 .openBtn {
-  margin-top: 16px;
-  background: linear-gradient(135deg, var(--accent), var(--purple));
-  color: #fff;
-  border: none;
+  border: 1px solid var(--accent-fill);
   border-radius: var(--radius);
-  padding: 8px 16px;
-  font-size: 13px;
-  font-weight: 500;
+  background: var(--accent-fill);
+  color: var(--text-on-accent);
+  padding: 7px 14px;
+  font-size: 12.5px;
+  font-weight: var(--font-weight-medium);
   cursor: pointer;
-  transition: opacity 0.2s ease;
+  transition: background-color 0.15s ease;
 }
 
 .openBtn:hover {
-  opacity: 0.9;
+  background: var(--accent-fill-hover);
+}
+
+.cloneBtn {
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  padding: 7px 14px;
+  font-size: 12.5px;
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.cloneBtn:hover {
+  background: var(--bg-hover);
 }
 
 .treeContainer {
@@ -89,15 +132,42 @@
   overflow-x: hidden;
 }
 
+/* The project row is a disclosure: clicking it collapses or expands the tree. */
 .projectName {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 8px;
-  font-size: 12px;
-  font-weight: 700;
+  gap: var(--space-2);
+  width: 100%;
+  padding: 6px var(--space-3);
+  border-radius: var(--radius-sm);
   color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.2px;
+  text-align: left;
   text-transform: uppercase;
+}
+
+.projectName:hover {
+  background-color: var(--bg-hover);
+}
+
+.rootChevron {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  transition: transform 0.15s ease;
+}
+
+.rootChevronOpen {
+  transform: rotate(90deg);
+}
+
+.rootName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .tree {
@@ -124,35 +194,68 @@
   align-items: center;
   gap: 6px;
   padding: 4px 8px;
-  font-size: 12px;
   color: var(--text-muted);
+  font-size: 12px;
   font-style: italic;
+  line-height: 1.45;
 }
 
 .noteError {
+  align-items: flex-start;
+  margin: 4px 8px;
+  padding: 7px 8px;
+  border: 1px solid rgba(239, 68, 68, 0.28);
+  border-radius: var(--radius);
+  background: rgba(239, 68, 68, 0.07);
   color: var(--error);
   font-style: normal;
 }
 
+.noteIcon {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
 .noteText {
+  flex: 1;
   overflow-wrap: anywhere;
 }
 
+.noteRetry {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  border-radius: var(--radius-sm);
+  color: var(--error);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+
+.noteRetry:hover {
+  background: rgba(239, 68, 68, 0.14);
+}
+
 .treeNode {
-  display: flex;
-  align-items: center;
-  padding: 4px 8px;
-  font-size: 13px;
-  color: var(--text-primary);
-  cursor: pointer;
-  user-select: none;
   position: relative;
   z-index: 1;
+  display: flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 3px 8px;
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+  user-select: none;
   transition: background-color 0.1s ease;
 }
 
 .treeNode:hover {
   background-color: var(--bg-hover);
+}
+
+.treeNode:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
 }
 
 .treeNode.active {
@@ -164,8 +267,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--text-muted);
   margin-right: 4px;
+  color: var(--text-muted);
   transition: transform 0.15s ease;
 }
 
@@ -174,21 +277,21 @@
 }
 
 .fileIconSpacer {
-  margin-left: 18px;
-  margin-right: 6px;
   display: flex;
   align-items: center;
+  margin-left: 18px;
+  margin-right: 6px;
 }
 
 .iconFolder {
-  color: var(--text-secondary);
   margin-right: 6px;
+  color: var(--text-secondary);
 }
 
 .nodeName {
-  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* File type colors */
@@ -199,3 +302,43 @@
 .iconRust { color: var(--error); }
 .iconPython { color: var(--accent-hover); }
 .iconDefault { color: var(--text-secondary); }
+
+/* -- Inline name box (new file, new folder, rename) -- */
+.inputRow {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding-right: 8px;
+}
+
+.nameInput {
+  flex: 1;
+  min-width: 0;
+  height: 20px;
+  padding: 0 6px;
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font: 12px var(--font-sans);
+}
+
+.selected {
+  background: var(--bg-hover);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+
+.dropTarget {
+  outline: 1px dashed var(--accent);
+  outline-offset: -1px;
+  background: var(--bg-active);
+}
+
+.dirtyDot {
+  margin-left: auto;
+  padding-right: 6px;
+  color: var(--accent);
+  font-size: 9px;
+}

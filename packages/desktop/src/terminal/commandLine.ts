@@ -33,6 +33,8 @@
 //
 // Validates: Requirements 22.6, 27.1, 27.4, 27.5
 
+import { isDenialMessage } from '../ipc/policyMessages'
+
 /** A parsed line, ready for `run_command`. */
 export interface ParsedCommand {
   program: string
@@ -180,27 +182,19 @@ export function programGate(program: string, allowed: readonly string[]): Progra
 /** How a `run_command` rejection is classified for display. */
 export type RunFailureKind = 'denied' | 'failed'
 
-/** Phrases the Rust policy uses when it REFUSES, as opposed to when it breaks. */
-const DENIAL_PHRASES = [
-  'not on the terminal allowlist',
-  'is refused',
-  'not confirmed',
-  'outside the open project root',
-  'escapes the project root',
-  'no project root is open',
-  'contains a nul byte',
-  'is not a directory',
-]
-
 /**
  * A refusal and a breakage read differently and must not be conflated: a denied
  * command means the policy did its job, a failed one means the machine could not
  * do it. Collapsing them would make a missing `python` look like a security event
  * and a blocked program look like a bug.
+ *
+ * The phrases that mark a denial live in ipc/policyMessages.ts, so this classifier
+ * and the editor's file-error messages read the same list — and so a W2-style reword
+ * of the Rust policy wording cannot leave this keyed on a phrase the backend no
+ * longer emits (which would have mis-read an out-of-project refusal as a breakage).
  */
 export function classifyRunFailure(message: string): RunFailureKind {
-  const lower = message.toLowerCase()
-  return DENIAL_PHRASES.some((phrase) => lower.includes(phrase)) ? 'denied' : 'failed'
+  return isDenialMessage(message) ? 'denied' : 'failed'
 }
 
 /** The line as it would be re-typed. Quoted only where a space forces it. */

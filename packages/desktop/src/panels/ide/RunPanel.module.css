@@ -1,0 +1,128 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 12px;
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px 4px;
+}
+
+.hint { color: var(--text-muted); font-size: 11px; }
+
+.iconBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+}
+
+.iconBtn:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+.group { padding: 4px 0; }
+
+.groupTitle {
+  padding: 6px 12px 4px;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.script {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+}
+
+.script:hover { background: var(--bg-hover); }
+.primary .label { color: var(--accent-hover); }
+
+.scriptText {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.label { font-weight: 600; }
+
+.command {
+  overflow: hidden;
+  color: var(--text-muted);
+  font: 11px var(--font-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.runBtn,
+.stopBtn {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+}
+
+.runBtn {
+  border: 1px solid rgba(34, 197, 94, 0.45);
+  background: rgba(34, 197, 94, 0.1);
+  color: #86efac;
+}
+
+.runBtn:hover { background: rgba(34, 197, 94, 0.2); }
+
+.stopBtn {
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  background: rgba(239, 68, 68, 0.1);
+  color: #fca5a5;
+}
+
+.stopBtn:hover { background: rgba(239, 68, 68, 0.2); }
+
+.empty {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 14px 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.error { color: var(--error); }
+
+.note {
+  display: flex;
+  gap: 6px;
+  margin: 10px 12px 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.note svg { flex: 0 0 auto; margin-top: 2px; }
+
+.panel code,
+.empty code {
+  padding: 0 4px;
+  border-radius: 3px;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font: 11px var(--font-mono);
+}

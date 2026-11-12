@@ -6,8 +6,11 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "check:bundle": "node scripts/check-workbench-bundle.mjs",
     "build:sidecar": "node scripts/build-sidecar.mjs",
     "verify:sidecar": "node scripts/verify-sidecar.mjs",
+    "smoke:boot": "node scripts/smoke-boot.mjs",
+    "qa:drive": "node scripts/qa-drive.mjs",
     "preflight:ollama": "node scripts/preflight-ollama.mjs",
     "package": "tauri build",
     "package:windows": "tauri build --bundles nsis",
@@ -25,6 +28,8 @@
     "@tauri-apps/api": "^2.5.0",
     "@tauri-apps/plugin-fs": "^2.2.0",
     "@tauri-apps/plugin-shell": "^2.2.0",
+    "@xterm/addon-fit": "0.11.0",
+    "@xterm/xterm": "6.0.0",
     "monaco-editor": "0.52.2",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
@@ -33,12 +38,14 @@
     "@sketch/core": "*",
     "@tauri-apps/cli": "^2.5.0",
     "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^14.6.1",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "@vitejs/plugin-react": "^4.5.2",
     "jsdom": "^25.0.1",
+    "postcss": "8.5.23",
     "typescript": "~5.7.2",
-    "vite": "^6.3.5",
-    "vitest": "^2.1.8"
+    "vite": "^6.4.6",
+    "vitest": "^4.1.12"
   }
 }

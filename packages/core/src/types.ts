@@ -74,7 +74,23 @@ export interface ChatAdapter {
    * `llm_response` events the ledger has to report as UNPRICED rather than as free.
    */
   readonly model?: string;
-  chat(m: Message[], o?: { signal?: AbortSignal }): Promise<{ text: string; usage?: Usage }>;
+  /**
+   * `chat` resolves `{ text, usage?, model?, attempts? }`.
+   *
+   * `model` is the model the PROVIDER says produced THIS reply, taken from the provider's
+   * own response (a router such as OpenRouter's `auto` can answer with a different model
+   * than requested). It is returned per call on the value — never kept on the adapter
+   * instance — so overlapping calls never misattribute, and it is `undefined` when the
+   * provider does not say. The requested model is never copied into it: the whole point is
+   * to tell the requested and the answered model apart.
+   *
+   * `attempts` is how many wire requests this ONE logical call cost, counting the first
+   * try plus every bounded automatic retry (a 429/5xx/reset backed off and re-sent). `1`
+   * or `undefined` means a single request; `> 1` means retries happened. One logical call
+   * is still one `llm_response`, so the receipt's call count stays logical while the retry
+   * count is visible.
+   */
+  chat(m: Message[], o?: { signal?: AbortSignal }): Promise<{ text: string; usage?: Usage; model?: string; attempts?: number }>;
 }
 export type ProviderKind = "openai-compatible" | "anthropic-messages";
 export interface ProviderConfig {

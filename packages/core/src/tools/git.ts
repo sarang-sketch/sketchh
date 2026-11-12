@@ -476,6 +476,23 @@ function saysNotARepository(stderr: string): boolean {
   return /not a git repository|does not appear to be a git repository/i.test(stderr)
 }
 
+/** Push, pull and fetch talk to a server; they get longer than local commands. */
+export const NETWORK_TIMEOUT_MS = 180_000
+
+/**
+ * A branch name git would accept AND that can never be read as an option, or null.
+ * Mirrors `git check-ref-format --branch` for the cases a person types.
+ */
+export function validBranchName(raw: string): string | null {
+  const name = raw.trim()
+  if (name === '' || name.length > 200) return null
+  if (name.startsWith('-') || name.startsWith('/') || name.endsWith('/') || name.endsWith('.')) return null
+  if (name.endsWith('.lock') || name.includes('..') || name.includes('//') || name.includes('@{') || name === '@') return null
+  if (/[\s~^:?*[\\\u0000-\u001f\u007f]/.test(name)) return null
+  if (name.split('/').some((part) => part.startsWith('.'))) return null
+  return name
+}
+
 export class GitTool {
   readonly root: string
   readonly #events: EventStore | undefined
@@ -539,6 +556,55 @@ export class GitTool {
     return run.stdout
   }
 
+  /**
+   * A file as it is in HEAD, for the editor's change markers ("this line is new, this
+   * one changed") and their Revert Change. `git show HEAD:<path>`, read-only.
+   *
+   * Null when HEAD has nothing to compare with — a new or untracked file, a repository
+   * with no commit yet, or a folder that is not a repository: each is a result, not an
+   * error, and the editor simply shows no markers.
+   */
+  async showHead(path: string): Promise<string | null> {
+    return this.#showAt('HEAD', path)
+  }
+
+  /**
+   * A file as it is in the INDEX — what was last staged, which is HEAD's copy when
+   * nothing is — for the diff view: "Changes" compare the index with the working
+   * tree and "Staged Changes" compare HEAD with the index, exactly as git's own
+   * `git diff` and `git diff --staged` do. `git show :./<path>`, read-only.
+   *
+   * Null when the index has no such file (a new file not staged yet, an unresolved
+   * conflict, a folder that is not a repository).
+   */
+  async showIndex(path: string): Promise<string | null> {
+    return this.#showAt('', path)
+  }
+
+  async #showAt(revision: 'HEAD' | '', path: string): Promise<string | null> {
+    const spec = this.#pathspec('show', path)
+    // `HEAD:./path` (and the index's `:./path`) is relative to the working directory
+    // (the opened folder), where a bare `HEAD:path` would be relative to the
+    // repository's top level and name the wrong file when the folder is inside a
+    // larger repository. One argv element that starts with `HEAD:` or `:`, so it can
+    // never be read as an option.
+    const run = await this.#run('show', ['show', '--no-color', `${revision}:./${spec}`])
+    if (run.exitCode === 0) {
+      // Past the runner's output cap the text is a truncated copy; markers computed
+      // against it would mark the tail of a huge file as deleted. None is better.
+      return /\n\[output truncated at \d+ bytes\]$/.test(run.stdout) ? null : run.stdout
+    }
+    if (
+      saysNotARepository(run.stderr) ||
+      /does not exist in|exists on disk, but not in|neither on disk nor in the index|is in the index, but not at stage|invalid object name|bad revision|unknown revision|ambiguous argument|bad object|not a valid object name/i.test(
+        run.stderr,
+      )
+    ) {
+      return null
+    }
+    throw this.#failure('show', run)
+  }
+
   // ── mutations ────────────────────────────────────────────────────────────
 
   /** Stage paths. `git add -- <paths>`. */
@@ -583,6 +649,101 @@ export class GitTool {
     const run = await this.#run('commit', ['commit', '-m', message], { record: true })
     if (run.exitCode !== 0) throw this.#failure('commit', run)
     return { output: run.stdout }
+  }
+
+  /**
+   * Throw away the working-tree edits to tracked files: `git restore --worktree`. The
+   * index (anything staged) is untouched. Untracked files are not git's to discard —
+   * the window deletes those through the trash instead.
+   */
+  async discard(paths: string[]): Promise<void> {
+    const pathspecs = this.#pathspecs('discard', paths)
+    const run = await this.#run('discard', ['restore', '--worktree', '--', ...pathspecs], { record: true })
+    if (run.exitCode !== 0) throw this.#failure('discard', run)
+  }
+
+  /** Local branches, the current one marked, each with its upstream when it has one. */
+  async branches(): Promise<{ current: string | null; branches: Array<{ name: string; current: boolean; upstream: string | null }> }> {
+    const run = await this.#run('branches', [
+      'for-each-ref',
+      '--format=%(refname:short)%09%(HEAD)%09%(upstream:short)',
+      'refs/heads',
+    ])
+    if (run.exitCode !== 0) {
+      if (saysNotARepository(run.stderr)) throw new GitError('branches', 'not a git repository', run.exitCode)
+      throw this.#failure('branches', run)
+    }
+    const branches = run.stdout
+      .split('\n')
+      .map((line) => line.replace(/\r$/, ''))
+      .filter((line) => line.trim() !== '')
+      .map((line) => {
+        const [name = '', head = '', upstream = ''] = line.split('\t')
+        return { name, current: head.trim() === '*', upstream: upstream.trim() === '' ? null : upstream.trim() }
+      })
+    return { current: branches.find((b) => b.current)?.name ?? null, branches }
+  }
+
+  /** Switch to a branch, or create it from HEAD and switch (`create`). */
+  async switchBranch(name: string, options: { create?: boolean } = {}): Promise<void> {
+    const branch = validBranchName(name)
+    if (branch === null) throw await this.#deny('switch', `'${name}' is not a valid branch name`)
+    const args = options.create === true ? ['switch', '-c', branch] : ['switch', branch]
+    const run = await this.#run('switch', args, { record: true })
+    if (run.exitCode !== 0) throw this.#failure('switch', run)
+  }
+
+  /**
+   * Push the current branch. A branch with no upstream is published to `origin` and set
+   * to track it, which is what the first push of a new branch always needs.
+   */
+  async push(): Promise<{ output: string }> {
+    const status = await this.status()
+    if (status.branch === null) throw await this.#deny('push', 'there is no branch to push (a detached HEAD)')
+    let args = ['push']
+    if (status.upstream === null) {
+      const remotes = await this.#run('push', ['remote'])
+      const names = remotes.stdout.split('\n').map((r) => r.trim()).filter(Boolean)
+      if (names.length === 0) throw await this.#deny('push', 'this repository has no remote to push to; add one with git remote add origin <url>')
+      const remote = names.includes('origin') ? 'origin' : names[0]!
+      args = ['push', '-u', remote, status.branch]
+    }
+    const run = await this.#run('push', args, { record: true, timeoutMs: NETWORK_TIMEOUT_MS })
+    if (run.exitCode !== 0) throw this.#failure('push', run)
+    // git reports progress on stderr even when it succeeds.
+    return { output: [run.stdout, run.stderr].filter((s) => s.trim() !== '').join('\n') }
+  }
+
+  /** Pull, fast-forward only: never a merge commit or a conflict the user did not ask for. */
+  async pull(): Promise<{ output: string }> {
+    const run = await this.#run('pull', ['pull', '--ff-only'], { record: true, timeoutMs: NETWORK_TIMEOUT_MS })
+    if (run.exitCode !== 0) throw this.#failure('pull', run)
+    return { output: [run.stdout, run.stderr].filter((s) => s.trim() !== '').join('\n') }
+  }
+
+  async fetch(): Promise<void> {
+    const run = await this.#run('fetch', ['fetch', '--prune'], { record: true, timeoutMs: NETWORK_TIMEOUT_MS })
+    if (run.exitCode !== 0) throw this.#failure('fetch', run)
+  }
+
+  /** The most recent commits on HEAD, newest first. */
+  async log(limit = 30): Promise<Array<{ hash: string; author: string; when: string; subject: string }>> {
+    const n = Math.max(1, Math.min(200, Math.floor(limit)))
+    const run = await this.#run('log', ['log', `-n${n}`, '--pretty=format:%h%x09%an%x09%ar%x09%s'])
+    if (run.exitCode !== 0) {
+      // A repository with no commits yet has no log, which is not an error.
+      if (/does not have any commits yet|bad default revision|unknown revision/i.test(run.stderr)) return []
+      if (saysNotARepository(run.stderr)) throw new GitError('log', 'not a git repository', run.exitCode)
+      throw this.#failure('log', run)
+    }
+    return run.stdout
+      .split('\n')
+      .map((line) => line.replace(/\r$/, ''))
+      .filter((line) => line.trim() !== '')
+      .map((line) => {
+        const [hash = '', author = '', when = '', ...rest] = line.split('\t')
+        return { hash, author, when, subject: rest.join('\t') }
+      })
   }
 
   // ── internals ────────────────────────────────────────────────────────────
@@ -630,12 +791,12 @@ export class GitTool {
   async #run(
     action: string,
     args: string[],
-    options: { record?: boolean } = {},
+    options: { record?: boolean; timeoutMs?: number } = {},
   ): Promise<GitExecResult & { durationMs: number }> {
     const started = Date.now()
     let result: GitExecResult
     try {
-      result = await this.#exec(args, { cwd: this.root, timeoutMs: this.#timeoutMs })
+      result = await this.#exec(args, { cwd: this.root, timeoutMs: options.timeoutMs ?? this.#timeoutMs })
     } catch (err) {
       // The default exec never rejects; an injected one might.
       throw new GitError(action, `git ${action} could not run: ${(err as Error).message}`)

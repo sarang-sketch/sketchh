@@ -248,6 +248,60 @@ describe('the ledger', () => {
     expect(entry.model).toBe('gpt-4o')
     expect(entry.usage).toEqual({ in: 10, out: 20 })
   })
+
+  it('prices by the ANSWERED model when a router resolved one, and surfaces the requested model', () => {
+    // Requested a cheap alias; the router answered with gpt-4o (16x the price of
+    // gpt-4o-mini). The user is billed for the model that actually ran.
+    const ledger = ledgerFor([
+      event('llm_response', {
+        model: 'gpt-4o-mini',
+        responseModel: 'gpt-4o',
+        usage: { in: 1_000_000, out: 0 },
+      }),
+    ])
+    const entry = ledger.entries[0]!
+    // gpt-4o input is $2.50/M; gpt-4o-mini would have been $0.15/M.
+    expect(entry.model).toBe('gpt-4o')
+    expect(entry.requestedModel).toBe('gpt-4o-mini')
+    expect(entry.usd).toBeCloseTo(2.5, 6)
+    expect(ledger.usd).toBeCloseTo(2.5, 6)
+  })
+
+  it('leaves requestedModel null when no alias was recorded', () => {
+    const ledger = ledgerFor([event('llm_response', { model: 'gpt-4o', usage: { in: 1_000, out: 0 } })])
+    expect(ledger.entries[0]!.model).toBe('gpt-4o')
+    expect(ledger.entries[0]!.requestedModel).toBeNull()
+  })
+
+  it('shows UNKNOWN usage as unknown, never as 0, and its cost as unknown not $0.00', () => {
+    const ledger = ledgerFor([
+      // The provider reported no usage: the zeros are a placeholder, flagged usageKnown:false.
+      event('llm_response', { model: 'gpt-4o', usage: { in: 0, out: 0 }, usageKnown: false }),
+      event('llm_response', { model: 'gpt-4o', usage: { in: 1_000_000, out: 0 } }),
+    ])
+    const entry = ledger.entries[0]!
+    expect(entry.usageKnown).toBe(false)
+    expect(entry.usd).toBeNull() // cost is UNKNOWN, not $0.00
+    // The unknown call's placeholder zeros are NOT summed as real tokens.
+    expect(ledger.tokensIn).toBe(1_000_000)
+    expect(ledger.usageUnknown).toBe(1)
+    // The one known, priced call still prices.
+    expect(ledger.usd).toBeCloseTo(2.5, 6)
+    expect(describeLedger(ledger)).toContain('tokens unknown for 1 of 2 call(s)')
+  })
+
+  it('flags the fake provider\'s numbers as estimates', () => {
+    const ledger = ledgerFor([event('llm_response', { model: 'fake', usage: { in: 10, out: 10 }, usageEstimated: true })])
+    expect(ledger.entries[0]!.usageEstimated).toBe(true)
+    expect(ledger.usageEstimatedCalls).toBe(1)
+  })
+
+  it('reads an OLD log (no usageKnown field) as known, exactly as before', () => {
+    const ledger = ledgerFor([event('llm_response', { model: 'gpt-4o', usage: { in: 1_000, out: 0 } })])
+    expect(ledger.entries[0]!.usageKnown).toBe(true)
+    expect(ledger.usageUnknown).toBe(0)
+    expect(ledger.tokensIn).toBe(1_000)
+  })
 })
 
 // ── 3. a real run is priceable end to end ───────────────────────────────────

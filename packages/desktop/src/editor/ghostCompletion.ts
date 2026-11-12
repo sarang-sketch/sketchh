@@ -10,6 +10,8 @@ export interface GhostCompletionInput {
   path: string
   content: string
   cursorOffset: number
+  /** Monaco's language id, when the editor knows it. */
+  language?: string
 }
 
 export interface GhostCompletionRequest extends GhostCompletionInput {

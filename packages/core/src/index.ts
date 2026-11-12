@@ -150,3 +150,41 @@ export {
 } from './rpc/server.js'
 export type { MethodContextIO } from './rpc/server.js'
 
+
+// Offline Mode: the switch, the network guard and the activity record.
+export {
+  OFFLINE_ENV,
+  OfflineModeError,
+  assertReachable,
+  clearActivity,
+  installNetworkGuard,
+  isOfflineModeError,
+  networkGuardInstalled,
+  offlineState,
+  originOf,
+  privacyFile,
+  recentActivity,
+  recordActivity,
+  saveOfflineSetting,
+} from './privacy/offline.js'
+export type { NetworkActivity, OfflineOptions, OfflineState } from './privacy/offline.js'
+
+// The local model manager (Ollama) and the hardware check behind its recommendations.
+export {
+  OLLAMA_DEFAULT_URL,
+  applyPullLine,
+  cancelPull,
+  contextLengthOf,
+  deleteLocalModel,
+  isModelName,
+  listLocalModels,
+  loadLocalModel,
+  ollamaBase,
+  ollamaServer,
+  pullStatus,
+  startPull,
+  unloadLocalModel,
+} from './local/ollama.js'
+export type { LocalModel, OllamaServer, PullState } from './local/ollama.js'
+export { SUGGESTED_MODELS, findOllama, fitFor, memoryNeeded, parseNvidiaSmi, readHardware, recommend } from './local/hardware.js'
+export type { Fit, GpuInfo, Hardware, ModelSuggestion, OllamaInstall, Recommendation } from './local/hardware.js'

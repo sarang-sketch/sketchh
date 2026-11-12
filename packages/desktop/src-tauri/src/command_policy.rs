@@ -131,6 +131,34 @@ fn is_within(root: &Path, candidate: &Path) -> bool {
     candidate.starts_with(root)
 }
 
+/// The project root as a user should see it in a message.
+///
+/// `std::fs::canonicalize` on Windows returns an EXTENDED-LENGTH ("verbatim") path:
+/// `\\?\C:\Users\me\project`, or `\\?\UNC\server\share` for a UNC path. That prefix
+/// is a Win32 API detail — it tells the OS to skip path parsing — and it is never a
+/// spelling a user typed or recognises. Printed in a containment refusal it reads as
+/// a *different* location than the folder they opened ("a different workspace
+/// boundary"), which is exactly the confusion this strips away. The containment test
+/// itself still runs on the real canonical `PathBuf`; only the DISPLAYED string is
+/// cleaned, so nothing about what is allowed changes.
+///
+/// On non-Windows targets there is no verbatim prefix, so this is `display()`.
+fn display_root(root: &Path) -> String {
+    let shown = root.display().to_string();
+    #[cfg(windows)]
+    {
+        // `\\?\UNC\server\share` is really `\\server\share`.
+        if let Some(rest) = shown.strip_prefix(r"\\?\UNC\") {
+            return format!(r"\\{}", rest);
+        }
+        // `\\?\C:\path` is really `C:\path`.
+        if let Some(rest) = shown.strip_prefix(r"\\?\") {
+            return rest.to_string();
+        }
+    }
+    shown
+}
+
 /// Reject a path that tries to climb with `..` before the disk is even consulted,
 /// so the error names the real problem. Applied to absolute and relative candidates
 /// alike: an absolute path with `..` in it has no legitimate use here, and refusing
@@ -173,10 +201,10 @@ fn absolutize(root: &Path, candidate: &str, label: &str) -> Result<PathBuf, Stri
     let raw = PathBuf::from(candidate);
     if has_parent_escape(&raw) {
         return Err(format!(
-            "{} '{}' escapes the project root {}",
+            "{} '{}' escapes the open folder {}",
             label,
             candidate,
-            root.display()
+            display_root(root)
         ));
     }
     Ok(if raw.is_relative() {
@@ -191,12 +219,21 @@ fn absolutize(root: &Path, candidate: &str, label: &str) -> Result<PathBuf, Stri
 /// Deliberately reports the path AS THE CALLER GAVE IT, not the canonical target.
 /// Echoing the resolved path would turn a refusal into a disclosure — where a
 /// symlink actually points, or which of several roots exists.
+///
+/// The root is shown through `display_root`, so a Windows user sees the folder they
+/// opened (`C:\Users\me\project`) and not its verbatim form (`\\?\C:\Users\me\project`),
+/// which read as a boundary they never set. The message names the file, names the
+/// open folder, and says what to do — open the folder that contains the file — so the
+/// refusal is actionable rather than a dead end. This is message wording only; the
+/// containment decision above it is unchanged.
 fn outside(label: &str, candidate: &str, root: &Path) -> String {
     format!(
-        "{} '{}' is outside the open project root {}",
-        label,
-        candidate,
-        root.display()
+        "This {label} is outside the folder you have open in Sketch, so it cannot be \
+         reached from here:\n  {label}: {candidate}\n  open folder: {root}\n\
+         To work with it, open the folder that contains it (File \u{2192} Open Folder).",
+        label = label,
+        candidate = candidate,
+        root = display_root(root),
     )
 }
 
@@ -497,10 +534,10 @@ mod tests {
         assert_eq!(resolve_cwd(&root_str, "").unwrap(), root);
 
         let err = resolve_cwd(&root_str, &s(&outside)).unwrap_err();
-        assert!(err.contains("outside the open project root"), "{}", err);
+        assert!(err.contains("outside the folder you have open"), "{}", err);
 
         let err = resolve_cwd(&root_str, "../..").unwrap_err();
-        assert!(err.contains("escapes the project root"), "{}", err);
+        assert!(err.contains("escapes the open folder"), "{}", err);
     }
 
     // ── Requirement 13.8: read/write paths are contained the same way ────────
@@ -531,11 +568,11 @@ mod tests {
             "..",
         ] {
             let err = resolve_file_within(&s(&root), candidate).unwrap_err();
-            assert!(err.contains("escapes the project root"), "{}", err);
+            assert!(err.contains("escapes the open folder"), "{}", err);
         }
         // The same rule applies to the write side.
         let err = resolve_write_target(&s(&root), "../escaped.txt").unwrap_err();
-        assert!(err.contains("escapes the project root"), "{}", err);
+        assert!(err.contains("escapes the open folder"), "{}", err);
     }
 
     #[test]
@@ -546,13 +583,13 @@ mod tests {
         touch(&file);
 
         let err = resolve_file_within(&s(&root), &s(&file)).unwrap_err();
-        assert!(err.contains("outside the open project root"), "{}", err);
+        assert!(err.contains("outside the folder you have open"), "{}", err);
 
         let err = resolve_dir_within(&s(&root), &s(&outside)).unwrap_err();
-        assert!(err.contains("outside the open project root"), "{}", err);
+        assert!(err.contains("outside the folder you have open"), "{}", err);
 
         let err = resolve_write_target(&s(&root), &s(&outside.join("planted.txt"))).unwrap_err();
-        assert!(err.contains("outside the open project root"), "{}", err);
+        assert!(err.contains("outside the folder you have open"), "{}", err);
     }
 
     #[test]
@@ -701,14 +738,14 @@ mod tests {
         // `..` is refused before the disk is consulted, existing or not.
         for candidate in ["../escape", "../git-escape-outside/id_rsa", "src/../../x"] {
             let err = resolve_pathspec_within(&s(&root), candidate).unwrap_err();
-            assert!(err.contains("escapes the project root"), "{}", err);
+            assert!(err.contains("escapes the open folder"), "{}", err);
         }
 
         // An absolute path elsewhere on disk fails containment, present or absent.
         let err = resolve_pathspec_within(&s(&root), &s(&secret)).unwrap_err();
-        assert!(err.contains("outside the open project root"), "{}", err);
+        assert!(err.contains("outside the folder you have open"), "{}", err);
         let err = resolve_pathspec_within(&s(&root), &s(&outside.join("nope"))).unwrap_err();
-        assert!(err.contains("outside the open project root"), "{}", err);
+        assert!(err.contains("outside the folder you have open"), "{}", err);
 
         // And with no project open there is no pathspec at all.
         assert!(resolve_pathspec_within("", "src/main.ts").is_err());
@@ -752,17 +789,75 @@ mod tests {
         }
 
         let err = resolve_file_within(&s(&root), "escape.txt").unwrap_err();
-        assert!(err.contains("outside the open project root"), "{}", err);
+        assert!(err.contains("outside the folder you have open"), "{}", err);
 
         let err = resolve_dir_within(&s(&root), "escape-dir").unwrap_err();
-        assert!(err.contains("outside the open project root"), "{}", err);
+        assert!(err.contains("outside the folder you have open"), "{}", err);
 
         // Writing THROUGH the link is refused too: the link exists, so it is
         // canonicalized, and its real target fails containment.
         let err = resolve_write_target(&s(&root), "escape.txt").unwrap_err();
-        assert!(err.contains("outside the open project root"), "{}", err);
+        assert!(err.contains("outside the folder you have open"), "{}", err);
 
         let err = resolve_write_target(&s(&root), "escape-dir/planted.txt").unwrap_err();
-        assert!(err.contains("outside the open project root"), "{}", err);
+        assert!(err.contains("outside the folder you have open"), "{}", err);
+    }
+
+    /// The containment refusal must read in the user's own terms: it names the file,
+    /// names the folder they opened, tells them what to do, and shows the OPEN FOLDER
+    /// WITHOUT the Windows `\\?\` verbatim prefix that `canonicalize` adds. That prefix
+    /// on the open-folder line is exactly what made the message read as "a different
+    /// workspace boundary" (BUG_AUDIT B-001).
+    #[test]
+    fn the_refusal_names_the_file_and_the_open_folder_without_a_verbatim_prefix() {
+        // A project whose name contains a space, like the reported `unicef india`.
+        let root = scratch("unicef india");
+        let outside = scratch("unicef india outside");
+        let intruder = outside.join("index.mjs");
+        touch(&intruder);
+
+        // The caller (the UI) passes a HUMAN-SPELLED absolute path, never a verbatim one:
+        // this is the shape `read_file`/`write_file` receive from the editor.
+        let human_candidate = intruder.to_string_lossy().replace(r"\\?\", "");
+        let err = resolve_file_within(&s(&root), &human_candidate).unwrap_err();
+
+        // It names the file the caller asked for, and tells them what to do.
+        assert!(err.contains("index.mjs"), "{}", err);
+        assert!(err.contains("Open Folder"), "{}", err);
+
+        // The OPEN-FOLDER line — the one `display_root` controls — carries no verbatim
+        // prefix. (We check that line specifically; the caller-supplied candidate line is
+        // echoed verbatim and is the caller's own spelling, not ours to rewrite.)
+        let open_folder_line = err
+            .lines()
+            .find(|l| l.trim_start().starts_with("open folder:"))
+            .expect("the refusal should name the open folder");
+        assert!(
+            !open_folder_line.contains(r"\\?\"),
+            "the open-folder line still shows a verbatim prefix: {}",
+            open_folder_line
+        );
+
+        // `display_root` strips the prefix for display while the real canonical path
+        // (what containment compares) keeps it — the two are allowed to differ.
+        let canonical = resolve_root(&s(&root)).unwrap();
+        let shown = display_root(&canonical);
+        assert!(!shown.contains(r"\\?\"), "display_root left a prefix: {}", shown);
+        #[cfg(windows)]
+        {
+            // On Windows the real canonical form DOES begin with the prefix, proving
+            // the strip is doing real work rather than matching nothing.
+            assert!(
+                canonical.to_string_lossy().starts_with(r"\\?\"),
+                "expected a verbatim canonical path on Windows, got {}",
+                canonical.display()
+            );
+            // The stripped form still points at the same place, spelled normally.
+            assert!(
+                shown.to_lowercase().ends_with("unicef india"),
+                "stripped root should still name the folder: {}",
+                shown
+            );
+        }
     }
 }

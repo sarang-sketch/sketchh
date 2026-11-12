@@ -1,0 +1,23 @@
+[package]
+name = "sketch-terminal"
+version = "0.1.0"
+edition = "2021"
+description = "Sketch's integrated terminal: real pseudo-terminal sessions and shell detection, with no Tauri dependency so it is unit testable on its own."
+license = "Apache-2.0"
+publish = false
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+# wezterm's cross-platform PTY layer: ConPTY on Windows 10 1809+, openpty elsewhere.
+portable-pty = "=0.9.0"
+serde = { version = "1", features = ["derive"] }
+
+# The Windows build number tells the emulator which ConPTY quirks to expect. The same
+# version portable-pty already uses, so it adds nothing to the build.
+[target.'cfg(windows)'.dependencies]
+winreg = "=0.10.1"
+
+[dev-dependencies]
+serde_json = "1"

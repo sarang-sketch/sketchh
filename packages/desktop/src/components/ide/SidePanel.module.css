@@ -1,48 +1,65 @@
 .sidePanel {
   width: 280px;
-  background-color: #171717;
-  border-right: 1px solid #262626;
+  background-color: var(--bg-secondary);
+  border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   position: relative;
   flex-shrink: 0;
-  overflow: hidden;
+  overflow: visible;
   font-family: var(--font-sans);
 }
 
 .header {
-  height: 36px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 16px;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: #a3a3a3;
-  border-bottom: 1px solid #262626;
-  background-color: #171717;
+  gap: var(--space-4);
+  height: var(--control-lg);
+  flex: 0 0 auto;
+  padding: 0 var(--space-3) 0 var(--space-8);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border);
+  background-color: var(--bg-secondary);
+}
+
+.headerTitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.headerClose {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+}
+
+.headerClose:hover {
+  color: var(--text-primary);
+  background-color: var(--bg-hover);
 }
 
 .content {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
 }
 
+.loading { padding: 20px; font-size: var(--text-sm); color: var(--text-muted); }
+
+/* The shared splitter: keyboard-resizable and pointer-captured. */
 .resizeHandle {
-  position: absolute;
   right: -3px;
-  top: 0;
-  bottom: 0;
-  width: 6px;
-  cursor: col-resize;
-  z-index: 10;
-  background-color: transparent;
 }
-
-.resizeHandle:hover {
-  background-color: rgba(234, 88, 12, 0.4);
-}
-
+.sidePanel[data-position='right'] { border-right: 0; border-left: 1px solid var(--border); }
+.sidePanel[data-position='right'] .resizeHandle { right: auto; left: -3px; }

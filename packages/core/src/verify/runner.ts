@@ -22,6 +22,7 @@
 
 import { spawn, type ChildProcess } from 'node:child_process'
 import type { VerifyCommand, VerifyResult } from '../types.js'
+import { resolveForSpawn } from './spawnTarget.js'
 
 /**
  * Minimal event-emitting collaborator. Deliberately structural and local so the
@@ -225,7 +226,10 @@ export async function runCommand(
     let child: ChildProcess
 
     try {
-      child = spawn(command.cmd, args, {
+      // On Windows `npm`, `npx` and every Node CLI are .cmd shims that cannot start
+      // without cmd.exe; resolve them to `node <script>` so the rule below holds.
+      const target = resolveForSpawn(command.cmd, args, opts.env ?? process.env)
+      child = spawn(target.cmd, target.args, {
         cwd: command.cwd,
         env: opts.env,
         // Non-negotiable: no shell means no shell metacharacter interpretation.

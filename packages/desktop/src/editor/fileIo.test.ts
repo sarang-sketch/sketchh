@@ -36,7 +36,7 @@ describe('readForEditor', () => {
     const outcome = await readForEditor(disk.io, ROOT, 'C:/elsewhere/id_rsa')
     expect(outcome.ok).toBe(false)
     expect(outcome.ok === false && outcome.message).toContain('id_rsa')
-    expect(outcome.ok === false && outcome.message).toContain('outside the open project')
+    expect(outcome.ok === false && outcome.message).toContain('outside the folder open in Sketch')
   })
 
   it('says a missing file is missing instead of opening an empty buffer', async () => {
@@ -77,7 +77,7 @@ describe('writeFromEditor', () => {
 
     const outcome = await writeFromEditor(disk.io, ROOT, 'C:/elsewhere/planted.txt', 'x')
     expect(outcome.ok).toBe(false)
-    expect(outcome.ok === false && outcome.message).toContain('outside the open project')
+    expect(outcome.ok === false && outcome.message).toContain('outside the folder open in Sketch')
     expect(disk.writes).toEqual([])
     expect(disk.files.size).toBe(0)
   })
@@ -85,8 +85,19 @@ describe('writeFromEditor', () => {
 
 describe('describeFileFailure', () => {
   it('names the operation and the file for each distinct failure', () => {
+    // A LEGACY-wording refusal (pre-W2) is still recognised via ipc/policyMessages.ts,
+    // so a message produced by a not-yet-rebuilt engine does not fall through to the
+    // raw-string branch. This is the deliberate legacy-phrase coverage.
     expect(describeFileFailure('open', A, new Error("file 'x' escapes the project root C:/app")))
-      .toContain('outside the open project')
+      .toContain('outside the folder open in Sketch')
+    // And the CURRENT Rust containment wording is recognised too.
+    expect(
+      describeFileFailure(
+        'open',
+        A,
+        new Error('This file is outside the folder you have open in Sketch, so it cannot be reached from here:'),
+      ),
+    ).toContain('outside the folder open in Sketch')
     expect(
       describeFileFailure('save', A, new Error('no project root is open, so no path may be used')),
     ).toContain('no project folder is open')

@@ -282,6 +282,39 @@ export function serializeProviderSettings(value: unknown): string {
   return text
 }
 
+// ── corrupt-file backup (shared by the whole-file JSON config loaders) ────────
+
+/**
+ * Move an unreadable config file aside so the app starts clean WITHOUT deleting the
+ * user's data: the bytes are preserved at `<path>.corrupt-<timestamp>`, never removed.
+ *
+ * Called only when a config file is genuinely corrupt — invalid JSON, or JSON that is
+ * not the object shape the file must have. It is NOT called for a missing file (that is
+ * the honest empty state) and NOT for a file that merely contains an unexpected extra
+ * field (the sanitizer handles that without losing the file). The move is best-effort:
+ * a failure to rename is reported in the returned reason and never throws into the
+ * loader, so a read-only directory or a locked file still yields a clean start rather
+ * than a crash.
+ *
+ * Both whole-file config loaders write through temp-then-rename, so a reader never sees
+ * a half-written file; "corrupt" therefore means a hand-edit or disk damage, which is
+ * safe to set aside. Returns the backup path on success, or null with the reason.
+ */
+export async function backupCorruptConfig(
+  path: string,
+  rename_: (from: string, to: string) => Promise<void> = rename,
+): Promise<{ backedUpTo: string } | { backedUpTo: null; reason: string }> {
+  // A filesystem-safe timestamp: colons are illegal on Windows, so use a compact form.
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+  const backup = `${path}.corrupt-${stamp}`
+  try {
+    await rename_(path, backup)
+    return { backedUpTo: backup }
+  } catch (err) {
+    return { backedUpTo: null, reason: err instanceof Error ? err.message : String(err) }
+  }
+}
+
 // ── file IO ──────────────────────────────────────────────────────────────────
 
 /** Structural problems in a parsed file. Values are never echoed into diagnostics. */
@@ -337,10 +370,17 @@ export async function loadProviderSettings(
   try {
     parsed = JSON.parse(raw)
   } catch (err) {
+    // Genuinely corrupt JSON: set the file aside (never deleted) so the next save
+    // starts clean, and say plainly where the old bytes went.
+    const moved = await backupCorruptConfig(path)
+    const where =
+      moved.backedUpTo !== null
+        ? ` The unreadable file was moved to ${moved.backedUpTo}; a fresh one will be written when you change a setting.`
+        : ` The unreadable file could not be moved aside (${moved.reason}); fix or remove it by hand.`
     return {
       settings: emptyProviderSettings(),
       path,
-      diagnostic: `${path} is not valid JSON: ${err instanceof Error ? err.message : String(err)}`,
+      diagnostic: `${path} is not valid JSON: ${err instanceof Error ? err.message : String(err)}.${where}`,
     }
   }
 

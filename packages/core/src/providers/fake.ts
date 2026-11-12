@@ -82,6 +82,16 @@ export class FakeChatAdapter implements ChatAdapter {
    */
   readonly model: string
 
+  /**
+   * This adapter ESTIMATES its token numbers (~len/4); it does not receive them from a
+   * provider, because no provider is contacted. A surface reads this to label the
+   * numbers "estimated" rather than presenting them as a provider's own count. It is a
+   * fixed property of the adapter TYPE (the fake always estimates), not per-call state,
+   * so reading it structurally carries none of the shared-state hazard of a per-call
+   * field.
+   */
+  readonly estimatesUsage = true
+
   /** The scripted responses, in order. */
   readonly script: readonly string[]
 

@@ -22,6 +22,8 @@ import type { ProviderAdapter, ProviderConfig as LegacyProviderConfig } from './
 import { ProviderError } from './types.js'
 import { OpenAICompatibleAdapter } from './openaiCompatible.js'
 import { AnthropicMessagesAdapter } from './anthropicMessages.js'
+import { ChatGPTCodexAdapter } from './chatgpt.js'
+import { CHATGPT_CODEX_BASE_URL, CHATGPT_PROVIDER_ID } from '../settings/chatgptAuth.js'
 import { FakeChatAdapter } from './fake.js'
 import { OpenAIAdapter } from './openai.js'
 import { AnthropicAdapter } from './anthropic.js'
@@ -64,6 +66,13 @@ export interface ProviderDescriptor {
  */
 export const PROVIDER_CATALOG: readonly ProviderDescriptor[] = [
   {
+    // A ChatGPT account (Free, Plus, Pro, Business…) instead of an API key. Signed in
+    // through the browser; the engine keeps and renews the tokens (settings/chatgptAuth).
+    // The endpoint is fixed: a signed-in account's tokens are only ever sent to OpenAI.
+    id: CHATGPT_PROVIDER_ID, name: 'ChatGPT (sign in)', kind: 'openai-compatible',
+    defaultBaseUrl: CHATGPT_CODEX_BASE_URL, needsKey: false, serverless: false,
+  },
+  {
     id: 'openai', name: 'OpenAI', kind: 'openai-compatible',
     defaultBaseUrl: 'https://api.openai.com/v1', needsKey: true, serverless: false,
   },
@@ -89,8 +98,26 @@ export const PROVIDER_CATALOG: readonly ProviderDescriptor[] = [
     defaultBaseUrl: 'https://api.x.ai/v1', needsKey: true, serverless: false,
   },
   {
+    // The international platform (platform.moonshot.ai). Accounts created on the
+    // mainland platform use https://api.moonshot.cn/v1 — the endpoint is editable.
     id: 'kimi', name: 'Kimi (Moonshot)', kind: 'openai-compatible',
-    defaultBaseUrl: 'https://api.moonshot.cn/v1', needsKey: true, serverless: false,
+    defaultBaseUrl: 'https://api.moonshot.ai/v1', needsKey: true, serverless: false,
+  },
+  {
+    id: 'deepseek', name: 'DeepSeek', kind: 'openai-compatible',
+    defaultBaseUrl: 'https://api.deepseek.com/v1', needsKey: true, serverless: false,
+  },
+  {
+    id: 'mistral', name: 'Mistral', kind: 'openai-compatible',
+    defaultBaseUrl: 'https://api.mistral.ai/v1', needsKey: true, serverless: false,
+  },
+  {
+    id: 'cerebras', name: 'Cerebras', kind: 'openai-compatible',
+    defaultBaseUrl: 'https://api.cerebras.ai/v1', needsKey: true, serverless: false,
+  },
+  {
+    id: 'nvidia', name: 'NVIDIA NIM', kind: 'openai-compatible',
+    defaultBaseUrl: 'https://integrate.api.nvidia.com/v1', needsKey: true, serverless: false,
   },
   {
     id: 'github-models', name: 'GitHub Models', kind: 'openai-compatible',
@@ -173,6 +200,12 @@ export function fakeProviderEnabled(env: ProviderEnv = process.env): boolean {
  */
 export function resolveAdapter(config: ProviderConfig, env: ProviderEnv = process.env): ChatAdapter {
   if (fakeProviderEnabled(env)) return new FakeChatAdapter()
+
+  // A signed-in ChatGPT account. Its endpoint is NOT taken from the config: the
+  // account's tokens go to OpenAI and nowhere else, whatever a settings file says.
+  if (config.id === CHATGPT_PROVIDER_ID) {
+    return new ChatGPTCodexAdapter(config, { env: env as NodeJS.ProcessEnv })
+  }
 
   const resolved: ProviderConfig = config.baseUrl
     ? config

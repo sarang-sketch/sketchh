@@ -413,6 +413,39 @@ describe('termination', () => {
     expect(result.finalText).toContain('maxIterations (2)')
   })
 
+  it('warns, then stops, a model that repeats the identical action', async () => {
+    const h = await harness()
+    const sameRead = JSON.stringify({ action: 'tool', name: 'read_file', args: { path: 'a.ts' } })
+    const adapter = new FakeChatAdapter({ script: [sameRead] })
+
+    const result = await runTask(task(), deps(h, adapter, { maxIterations: 20 }))
+
+    expect(result.ok).toBe(false)
+    // Stopped at the fifth identical action, long before the iteration cap.
+    expect(result.iterations).toBe(5)
+    const terminals = terminal(result.events)
+    expect(terminals).toHaveLength(1)
+    expect(terminals[0]!.payload.reason).toBe('loop_detected')
+    expect(terminals[0]!.payload.repeated).toBe(5)
+    expect(result.finalText).toContain('repeated the same "tool" action 5 times')
+    // The warning reached the model before the stop, so a recoverable model could recover.
+    expect(seenByModel(adapter)).toContain('LOOP WARNING')
+  })
+
+  it('does not treat varied progress as a loop', async () => {
+    const h = await harness()
+    const adapter = new FakeChatAdapter({
+      script: [
+        ...Array.from({ length: 6 }, (_, i) => JSON.stringify({ action: 'think', text: `step ${i}` })),
+        DONE_ACTION,
+      ],
+    })
+    const result = await runTask(task(), deps(h, adapter, { maxIterations: 20 }))
+    expect(result.ok).toBe(true)
+    expect(result.iterations).toBe(7)
+    expect(seenByModel(adapter)).not.toContain('LOOP WARNING')
+  })
+
   it('treats ask as a terminal not-ok run carrying the question', async () => {
     const h = await harness()
     const adapter = new FakeChatAdapter({
@@ -580,14 +613,42 @@ describe('cost accounting inputs', () => {
     }
   })
 
-  it('reports zeros when an adapter cannot count tokens', async () => {
+  it('reports zeros but flags usageKnown:false when an adapter cannot count tokens', async () => {
     const h = await harness()
     const silent: ChatAdapter = { id: 'silent', chat: async () => ({ text: DONE_ACTION }) }
 
     const result = await runTask(task(), deps(h, silent))
 
     const response = result.events.find((e) => e.kind === 'llm_response')!
+    // Usage stays present (consumers sum without guarding), but it is marked unknown so a
+    // surface shows "unknown", never a confident 0.
     expect(response.payload.usage).toEqual({ in: 0, out: 0 })
+    expect(response.payload.usageKnown).toBe(false)
+  })
+
+  it('keeps usageKnown absent (reads as known) when the adapter reports usage', async () => {
+    const h = await harness()
+    const result = await runTask(task({ verify: [PASSING] }), deps(h, new FakeChatAdapter()))
+    for (const e of result.events.filter((x) => x.kind === 'llm_response')) {
+      expect(e.payload.usageKnown).toBeUndefined() // additive: absent means known
+    }
+  })
+
+  it('flags the fake adapter\'s estimated numbers with usageEstimated:true', async () => {
+    const h = await harness()
+    const result = await runTask(task({ verify: [PASSING] }), deps(h, new FakeChatAdapter()))
+    const responses = result.events.filter((e) => e.kind === 'llm_response')
+    expect(responses.length).toBeGreaterThan(0)
+    for (const e of responses) expect(e.payload.usageEstimated).toBe(true)
+  })
+
+  it('records attempts on llm_response when a call was retried (invariant: retries counted)', async () => {
+    const h = await harness()
+    // An adapter that reports it took 2 wire attempts for this one logical call.
+    const retried: ChatAdapter = { id: 'retried', model: 'gpt-4o', chat: async () => ({ text: DONE_ACTION, usage: { in: 1, out: 1 }, attempts: 2 }) }
+    const result = await runTask(task(), deps(h, retried))
+    const response = result.events.find((e) => e.kind === 'llm_response')!
+    expect(response.payload.attempts).toBe(2)
   })
 })
 
@@ -662,5 +723,214 @@ describe('retrieved context', () => {
     expect(breadcrumb.payload.retrievedContextChars).toBe(body.length)
     // The bodies belong to the assembly event's path list, not to this one.
     expect(JSON.stringify(breadcrumb.payload)).not.toContain('RETRY_BUDGET_MS')
+  })
+})
+
+describe('completion honesty: "done" cannot report success over edits that did not land (B-003)', () => {
+  // A search string that is not in the file: prepareEdit fails with "search string
+  // not found", the edit never touches disk. This is the exact shape of B-003 — the
+  // model proposes a change, it does not apply, and the model then says "done".
+  const FAILING_EDIT = (path: string) =>
+    JSON.stringify({ action: 'edit', edits: [{ path, search: 'NO_SUCH_TEXT_IN_FILE', replace: 'whatever' }] })
+
+  it('every edit failed and no verify configured → run is NOT a success', async () => {
+    const h = await harness()
+    await writeFile(join(h.root, 'app.txt'), 'original content\n', 'utf8')
+    const adapter = new FakeChatAdapter({
+      script: [PLAN_ACTION, FAILING_EDIT('app.txt'), JSON.stringify({ action: 'done', text: 'All done, I changed app.txt.' })],
+    })
+
+    const result = await runTask(task(), deps(h, adapter))
+
+    // The headline invariant: the model said "done" but nothing landed, so ok is false.
+    expect(result.ok).toBe(false)
+    // The file is untouched — proof the edit truly did not apply.
+    expect(await readFile(join(h.root, 'app.txt'), 'utf8')).toBe('original content\n')
+    // The terminal event is run_failed with the edits_failed reason, not run_completed.
+    const term = terminal(result.events)
+    expect(term.map((e) => e.kind)).toEqual(['run_failed'])
+    expect(term[0]!.payload.reason).toBe('edits_failed')
+    expect(term[0]!.payload.editsApplied).toBe(0)
+    expect(term[0]!.payload.editsFailed).toBe(1)
+    // The user-facing text states the truth in plain words; the model's "done" text
+    // does NOT stand as the final word.
+    expect(result.finalText).toContain('No changes were applied')
+    expect(result.finalText).toContain('app.txt')
+    expect(result.finalText).not.toBe('All done, I changed app.txt.')
+  })
+
+  it('some edits failed → run ends with an explicit partial outcome that lists the failed edit', async () => {
+    const h = await harness()
+    await writeFile(join(h.root, 'present.txt'), 'present content\n', 'utf8')
+    const adapter = new FakeChatAdapter({
+      script: [
+        PLAN_ACTION,
+        // One succeeds (whole-file create), one fails (search not found).
+        JSON.stringify({
+          action: 'edit',
+          edits: [
+            { path: 'made.txt', search: '', replace: 'created by the run\n' },
+            { path: 'present.txt', search: 'NO_SUCH_TEXT', replace: 'x' },
+          ],
+        }),
+        JSON.stringify({ action: 'done', text: 'Finished the change.' }),
+      ],
+    })
+
+    const result = await runTask(task(), deps(h, adapter))
+
+    expect(result.ok).toBe(false)
+    // The good edit really landed; the bad one did not.
+    expect(await readFile(join(h.root, 'made.txt'), 'utf8')).toBe('created by the run\n')
+    expect(await readFile(join(h.root, 'present.txt'), 'utf8')).toBe('present content\n')
+    const term = terminal(result.events)
+    expect(term[0]!.payload.reason).toBe('edits_partial')
+    expect(term[0]!.payload.editsApplied).toBe(1)
+    expect(term[0]!.payload.editsFailed).toBe(1)
+    // The model's summary is kept, with the partial outcome appended below it.
+    expect(result.finalText).toContain('Finished the change.')
+    expect(result.finalText).toContain('PARTIAL')
+    expect(result.finalText).toContain('present.txt')
+    expect(result.finalText).not.toContain('made.txt')
+  })
+
+  it('an edit that failed once but was fixed in a later turn counts as applied', async () => {
+    const h = await harness()
+    await writeFile(join(h.root, 'fix.txt'), 'line one\n', 'utf8')
+    const adapter = new FakeChatAdapter({
+      script: [
+        PLAN_ACTION,
+        // First attempt: wrong search, fails.
+        JSON.stringify({ action: 'edit', edits: [{ path: 'fix.txt', search: 'WRONG', replace: 'line two\n' }] }),
+        // Second attempt: whole-file write, succeeds, same path.
+        JSON.stringify({ action: 'edit', edits: [{ path: 'fix.txt', search: '', replace: 'line two\n' }] }),
+        JSON.stringify({ action: 'done', text: 'Fixed it on the second try.' }),
+      ],
+    })
+
+    const result = await runTask(task(), deps(h, adapter))
+
+    expect(result.ok).toBe(true)
+    expect(await readFile(join(h.root, 'fix.txt'), 'utf8')).toBe('line two\n')
+    const term = terminal(result.events)
+    expect(term[0]!.kind).toBe('run_completed')
+    expect(term[0]!.payload.reason).toBe('done')
+    expect(term[0]!.payload.editsFailed).toBe(0)
+    expect(result.finalText).toBe('Fixed it on the second try.')
+  })
+
+  it('a clean run with an applied edit and passing verify is still a success', async () => {
+    const h = await harness()
+    const adapter = new FakeChatAdapter({
+      script: [
+        PLAN_ACTION,
+        editAction('made.txt', 'content\n'),
+        JSON.stringify({ action: 'verify' }),
+        JSON.stringify({ action: 'done', text: 'Done.' }),
+      ],
+    })
+
+    const result = await runTask(task({ verify: [PASSING] }), deps(h, adapter))
+
+    expect(result.ok).toBe(true)
+    const term = terminal(result.events)
+    expect(term[0]!.kind).toBe('run_completed')
+    expect(term[0]!.payload.reason).toBe('done')
+    expect(term[0]!.payload.editsApplied).toBe(1)
+    expect(term[0]!.payload.editsFailed).toBe(0)
+  })
+
+  it('a failed edit makes the run not-ok even when verify passes (edits outrank a green verify)', async () => {
+    const h = await harness()
+    await writeFile(join(h.root, 'app.txt'), 'original\n', 'utf8')
+    const adapter = new FakeChatAdapter({
+      script: [
+        PLAN_ACTION,
+        FAILING_EDIT('app.txt'),
+        JSON.stringify({ action: 'verify' }),
+        JSON.stringify({ action: 'done', text: 'done' }),
+      ],
+    })
+
+    const result = await runTask(task({ verify: [PASSING] }), deps(h, adapter))
+
+    // Verify passed, but the edit did not land, so the run is not a success.
+    expect(result.verify.every((v) => v.ok)).toBe(true)
+    expect(result.ok).toBe(false)
+    expect(terminal(result.events)[0]!.payload.reason).toBe('edits_failed')
+  })
+
+  it('review mode: a proposed (not-yet-applied) edit is not a failure, but a prepare failure is', async () => {
+    const h = await harness()
+    await writeFile(join(h.root, 'ok.txt'), 'hello\n', 'utf8')
+    await writeFile(join(h.root, 'bad.txt'), 'world\n', 'utf8')
+    const adapter = new FakeChatAdapter({
+      script: [
+        PLAN_ACTION,
+        JSON.stringify({
+          action: 'edit',
+          edits: [
+            { path: 'ok.txt', search: 'hello', replace: 'HELLO' }, // prepares fine -> proposal
+            { path: 'bad.txt', search: 'NOPE', replace: 'x' }, // fails to prepare -> failure
+          ],
+        }),
+        JSON.stringify({ action: 'done', text: 'Proposed the changes.' }),
+      ],
+    })
+
+    const result = await runTask(task(), deps(h, adapter, { reviewEdits: true }))
+
+    // Nothing is written in review mode.
+    expect(await readFile(join(h.root, 'ok.txt'), 'utf8')).toBe('hello\n')
+    // The proposable edit is pending (not counted as applied or failed); the
+    // unpreparable one is a real failure, so the run is a partial, not a success.
+    expect(result.ok).toBe(false)
+    const term = terminal(result.events)
+    expect(term[0]!.payload.editsApplied).toBe(0)
+    expect(term[0]!.payload.editsFailed).toBe(1)
+    expect(result.finalText).toContain('bad.txt')
+    expect(result.finalText).not.toContain('ok.txt')
+  })
+})
+
+// ── the model the provider NAMED as having answered (model identity) ──────────
+//
+// The loop records the ANSWERED model on `llm_response.responseModel` when the adapter
+// reports one that DIFFERS from the requested model (a router resolved an alias), and
+// records nothing extra when the adapter is silent or the two agree. `model` on the
+// event stays the requested model, so pricing and a surface can show both.
+
+describe('answered-model recording on llm_response', () => {
+  /** A one-shot adapter that returns a fixed answered model on its value. */
+  function adapterAnswering(requested: string, answered: string | undefined): ChatAdapter {
+    return {
+      id: 'router',
+      model: requested,
+      chat: async () => ({ text: DONE_ACTION, usage: { in: 1, out: 1 }, ...(answered !== undefined ? { model: answered } : {}) }),
+    }
+  }
+
+  it('records responseModel when the answered model differs from the requested one', async () => {
+    const h = await harness()
+    const result = await runTask(task(), deps(h, adapterAnswering('openrouter/auto', 'deepseek/deepseek-chat-v3')))
+    const response = result.events.find((e) => e.kind === 'llm_response')!
+    expect(response.payload.model).toBe('openrouter/auto') // the REQUESTED model
+    expect(response.payload.responseModel).toBe('deepseek/deepseek-chat-v3') // the one that ANSWERED
+  })
+
+  it('omits responseModel when the answered model equals the requested one', async () => {
+    const h = await harness()
+    const result = await runTask(task(), deps(h, adapterAnswering('gpt-4o', 'gpt-4o')))
+    const response = result.events.find((e) => e.kind === 'llm_response')!
+    expect(response.payload.model).toBe('gpt-4o')
+    expect(response.payload.responseModel).toBeUndefined()
+  })
+
+  it('omits responseModel when the adapter names no answered model', async () => {
+    const h = await harness()
+    const result = await runTask(task(), deps(h, adapterAnswering('gpt-4o', undefined)))
+    const response = result.events.find((e) => e.kind === 'llm_response')!
+    expect(response.payload.model).toBe('gpt-4o')
+    expect(response.payload.responseModel).toBeUndefined()
   })
 })

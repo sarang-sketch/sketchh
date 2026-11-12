@@ -16,13 +16,16 @@
 // Validates: Requirements 14.4, 14.6, 27.1, 27.3, 27.4
 
 import { afterAll, afterEach, describe, expect, it } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { StrictMode } from 'react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { FileExplorer } from './FileExplorer'
+import { announceDiskChanged } from '../editor/diskSync'
+import { READING } from '../explorer/fileTree'
 import { FileIoProvider } from '../editor/FileIoProvider'
 import type { FileIo, FsEntry } from '../editor/fileIo'
 import { canonicalPath, isWithinRoot, toAbsolutePath } from '../editor/paths'
@@ -55,7 +58,7 @@ function nodeIo(overrides: Partial<FileIo> = {}): RecordingIo {
       listed.push(canonicalPath(path))
       const target = toAbsolutePath(root, path)
       if (!isWithinRoot(root, target)) {
-        throw new Error(`directory '${path}' is outside the open project root ${root}`)
+        throw new Error(`This directory is outside the folder you have open in Sketch, so it cannot be reached from here:\n  directory: ${path}\n  open folder: ${root}`)
       }
       const entries: FsEntry[] = readdirSync(target, { withFileTypes: true })
         .filter((e) => !e.name.startsWith('.') && !SKIPPED.includes(e.name))
@@ -71,7 +74,7 @@ function nodeIo(overrides: Partial<FileIo> = {}): RecordingIo {
     async readFile(root, path) {
       const target = toAbsolutePath(root, path)
       if (!isWithinRoot(root, target)) {
-        throw new Error(`file '${path}' is outside the open project root ${root}`)
+        throw new Error(`This file is outside the folder you have open in Sketch, so it cannot be reached from here:\n  file: ${path}\n  open folder: ${root}`)
       }
       return readFileSync(target, 'utf8')
     },
@@ -147,6 +150,85 @@ describe('FileExplorer — the fixture is gone', () => {
 // ── 2. real entries, lazily ─────────────────────────────────────────────────
 
 describe('FileExplorer against a real directory', () => {
+  it('lists the folder under React StrictMode, as the app runs in development', async () => {
+    // StrictMode mounts, unmounts and mounts again with refs kept; a "still mounted"
+    // flag that is only ever cleared then drops every listing and shows "Reading…".
+    const dir = makeDir()
+    writeFileSync(join(dir, 'strict.ts'), 'x\n', 'utf8')
+    const recording = nodeIo()
+    render(
+      <StrictMode>
+        <AppStateProvider initial={{ projectRoot: dir }}>
+          <FileIoProvider io={recording.io}>
+            <FileExplorer />
+          </FileIoProvider>
+        </AppStateProvider>
+      </StrictMode>,
+    )
+    expect(await screen.findByText('strict.ts')).toBeDefined()
+    expect(screen.queryByText(READING)).toBeNull()
+  })
+
+  it('shows what a terminal command created or deleted, without a refresh click or a flicker', async () => {
+    const dir = makeDir()
+    writeFileSync(join(dir, 'keep.ts'), 'keep\n', 'utf8')
+    writeFileSync(join(dir, 'old.ts'), 'old\n', 'utf8')
+    const recording = nodeIo()
+    mount(dir, recording.io)
+    expect(await screen.findByText('old.ts')).toBeDefined()
+
+    writeFileSync(join(dir, 'generated.ts'), 'new\n', 'utf8')
+    rmSync(join(dir, 'old.ts'))
+    act(() => announceDiskChanged('terminal'))
+    // The rows already on screen stay while the folder is re-read: no "Reading…" gap.
+    expect(screen.getByText('keep.ts')).toBeDefined()
+    expect(screen.queryByText(READING)).toBeNull()
+
+    expect(await screen.findByText('generated.ts')).toBeDefined()
+    await waitFor(() => expect(screen.queryByText('old.ts')).toBeNull())
+    expect(screen.getByText('keep.ts')).toBeDefined()
+  })
+
+  it('does not lose a change announced while the folder is still being re-read', async () => {
+    const dir = makeDir()
+    writeFileSync(join(dir, 'keep.ts'), 'keep\n', 'utf8')
+    const recording = nodeIo()
+    // A re-read that is slow to come back: it lists the folder as it was when it
+    // started, then waits until the test lets it finish.
+    let hold: Promise<void> | null = null
+    let release = () => {}
+    const reads: string[] = []
+    const io: FileIo = {
+      ...recording.io,
+      async readDir(root, path) {
+        const listing = await recording.io.readDir(root, path)
+        reads.push(path)
+        if (hold !== null) await hold
+        return listing
+      },
+    }
+    mount(dir, io)
+    expect(await screen.findByText('keep.ts')).toBeDefined()
+
+    hold = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const before = reads.length
+    act(() => announceDiskChanged('terminal'))
+    await waitFor(() => expect(reads.length).toBeGreaterThan(before))
+
+    // While that read is out, a command creates a file and says so.
+    writeFileSync(join(dir, 'late.ts'), 'late\n', 'utf8')
+    act(() => announceDiskChanged('terminal'))
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 300))
+    })
+
+    hold = null
+    await act(async () => release())
+    expect(await screen.findByText('late.ts')).toBeDefined()
+  })
+
   it('lists what is on disk, folders first, and names the real project', async () => {
     const dir = makeDir()
     mkdirSync(join(dir, 'src'))

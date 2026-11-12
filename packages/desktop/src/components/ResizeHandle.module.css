@@ -1,0 +1,41 @@
+.handle {
+  position: absolute;
+  z-index: 20;
+  background: transparent;
+  transition: background-color 0.12s ease;
+  touch-action: none;
+}
+
+.handle:hover,
+.handle:focus-visible,
+.handle:active {
+  background: rgba(234, 88, 12, 0.45);
+  outline: none;
+}
+
+.vertical {
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+}
+
+.horizontal {
+  left: 0;
+  right: 0;
+  height: 6px;
+  cursor: row-resize;
+}
+
+/* While dragging, the whole window keeps the resize cursor and nothing gets selected. */
+:global(body).draggingCol,
+:global(body).draggingCol * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
+:global(body).draggingRow,
+:global(body).draggingRow * {
+  cursor: row-resize !important;
+  user-select: none !important;
+}

@@ -113,7 +113,7 @@ export function describeKeyState(state: KeyState | undefined): string {
     case 'absent':
       return `No key is stored in ${state.store}. A key typed here is used for the next request only unless you save it.`
     case 'stored':
-      return `A key is stored in ${state.store}. It is never read back into this window — type it again to test the connection.`
+      return `A key is stored in ${state.store}. Runs and connection tests use it; type a new one here to replace it.`
     case 'saving':
       return 'Saving the key to the operating system credential store…'
     case 'removing':

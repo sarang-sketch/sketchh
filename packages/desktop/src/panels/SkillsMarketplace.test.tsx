@@ -20,7 +20,7 @@
 // Validates: Requirements 11.1, 11.2, 11.4, 11.6, 14.6, 27.1, 27.3
 
 import { afterAll, afterEach, describe, expect, it } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import {
   existsSync,
   mkdirSync,
@@ -36,6 +36,7 @@ import { fileURLToPath } from 'node:url'
 import { METHODS, capabilities as caps, registry as reg, type MethodContext } from '@sketch/core'
 
 import { SkillsMarketplace } from './SkillsMarketplace'
+import { ConfirmProvider } from '../components/ConfirmDialog'
 import { SketchClientProvider } from '../lib/ClientProvider'
 import {
   createEventBus,
@@ -43,6 +44,7 @@ import {
   type PingResult,
   type SketchClient,
   type SkillInstallResult,
+  type SkillUninstallResult,
   type SkillPromoteResult,
   type SkillsCatalogResult,
   type SkillTrainResult,
@@ -147,8 +149,16 @@ class EngineClient implements SketchClient {
   private readonly bus = createEventBus()
   private readonly ctx = methodContext()
   readonly installs: string[] = []
+  readonly uninstalls: string[] = []
   readonly trainWrites: boolean[] = []
+  readonly trainModes: Array<'rewrite' | 'edits' | undefined> = []
   readonly promotions: string[] = []
+  /** A throwaway home directory for the embedded-registry fallback. */
+  readonly home: string = (() => {
+    const dir = mkdtempSync(join(tmpdir(), 'sketch-skills-ui-home-'))
+    tmpDirs.push(dir)
+    return dir
+  })()
 
   constructor(
     private readonly registryDir: string | null,
@@ -208,7 +218,10 @@ cancel(): Promise<never> {
     return METHODS['skills-catalog']!(
       {
         root: params.root,
-        ...(this.registryDir === null ? {} : { registryDir: this.registryDir }),
+        // With no registry configured the engine falls back to the curated registry it
+        // embeds, materialized under `<home>/.sketch/registry` — a temp home here, so a
+        // test run never writes into the developer's real home directory.
+        ...(this.registryDir === null ? { home: this.home } : { registryDir: this.registryDir }),
       },
       this.ctx,
     ) as Promise<SkillsCatalogResult>
@@ -220,21 +233,37 @@ cancel(): Promise<never> {
       {
         root: params.root,
         name: params.name,
-        ...(this.registryDir === null ? {} : { registryDir: this.registryDir }),
+        ...(this.registryDir === null ? { home: this.home } : { registryDir: this.registryDir }),
       },
       this.ctx,
     ) as Promise<SkillInstallResult>
+  }
+
+  skillUninstall(params: { root: string; name: string }): Promise<SkillUninstallResult> {
+    this.uninstalls.push(params.name)
+    return METHODS['skill-uninstall']!(
+      { root: params.root, name: params.name },
+      this.ctx,
+    ) as Promise<SkillUninstallResult>
   }
 
   skillTrain(params: {
     root: string
     name: string
     write?: boolean
+    mode?: 'rewrite' | 'edits'
   }): Promise<SkillTrainResult> {
     this.trainWrites.push(params.write === true)
+    this.trainModes.push(params.mode)
     if (this.trainingResult !== undefined) return Promise.resolve(this.trainingResult)
     return METHODS['skill-train']!(
-      { root: params.root, name: params.name, provider: null, ...(params.write === true ? { write: true } : {}) },
+      {
+        root: params.root,
+        name: params.name,
+        provider: null,
+        ...(params.write === true ? { write: true } : {}),
+        ...(params.mode !== undefined ? { mode: params.mode } : {}),
+      },
       { ...this.ctx, env: { SKETCH_FAKE_PROVIDER: '1' } },
     ) as Promise<SkillTrainResult>
   }
@@ -250,6 +279,7 @@ function withoutSkills(client: EngineClient): SketchClient {
   const stripped = Object.create(client) as SketchClient
   stripped.skillsCatalog = undefined
   stripped.skillInstall = undefined
+  stripped.skillUninstall = undefined
   stripped.skillTrain = undefined
   stripped.skillPromote = undefined
   return stripped
@@ -259,7 +289,9 @@ function mount(root: string | null, client: SketchClient) {
   return render(
     <SketchClientProvider client={client}>
       <AppStateProvider initial={{ projectRoot: root }}>
-        <SkillsMarketplace />
+        <ConfirmProvider>
+          <SkillsMarketplace />
+        </ConfirmProvider>
       </AppStateProvider>
     </SketchClientProvider>,
   )
@@ -345,10 +377,27 @@ describe('honest empty states (Requirements 27.3, 27.5)', () => {
     expect(document.body.textContent).toContain('content hashes')
   })
 
-  it('says no registry is configured rather than showing an empty list', async () => {
-    // The engine has no path-relative default (a bundled sidecar has no package
-    // layout), so with nothing configured it reports that — naming the parameter.
+  it('falls back to the curated registry built into the engine when none is configured', async () => {
+    // A shipped app is one bundled engine file with no registry/ beside it. It used to
+    // report "No registry configured" and could install nothing; it now uses the
+    // curated registry the engine embeds, verified exactly like any other.
     mount(makeProject(), new EngineClient(null))
+    expect(await screen.findByText('commit-context')).toBeDefined()
+    expect(screen.queryByText('No registry configured')).toBeNull()
+  })
+
+  it('says no registry is configured when the engine reports none, rather than showing an empty list', async () => {
+    const client = new EngineClient(null)
+    const reportsNone: SketchClient = Object.assign(Object.create(Object.getPrototypeOf(client)), client, {
+      skillsCatalog: async (params: { root: string }): Promise<SkillsCatalogResult> => ({
+        ...(await client.skillsCatalog(params)),
+        entries: [],
+        registryDir: null,
+        diagnostic:
+          'no skill registry is configured: pass params.registryDir, or set SKETCH_REGISTRY_DIR. The curated registry ships inside @sketch/core under registry/',
+      }),
+    })
+    mount(makeProject(), reportsNone)
     expect(await screen.findByText('No registry configured')).toBeDefined()
     expect(document.body.textContent).toContain('registryDir')
   })
@@ -546,5 +595,149 @@ describe('training from the panel (Requirement 9.6)', () => {
     })
     expect(client.promotions).toEqual(['commit-context'])
     expect(readFileSync(activePath, 'utf8')).toContain('REVIEWED-CANDIDATE')
+  })
+
+  it('trains with SkillOpt small edits by default, and with a full rewrite when chosen', async () => {
+    const client = new EngineClient(await makeRegistry())
+    await opened(makeProject(), client)
+
+    fireEvent.click(screen.getAllByText('Install…')[0]!)
+    fireEvent.click(await screen.findByText('Verify and install'))
+    await waitFor(() => expect(screen.getByText(/Installed commit-context/)).toBeDefined(), {
+      timeout: 5000,
+    })
+    fireEvent.click(screen.getByRole('tab', { name: /Installed/ }))
+
+    const method = (await screen.findByLabelText('Training method')) as HTMLSelectElement
+    expect(method.value).toBe('edits')
+    expect(document.body.textContent).toContain('Up to 4 small edits per round')
+
+    fireEvent.click(screen.getByText('Train on my project'))
+    await waitFor(() => expect(document.body.textContent).toContain('at least 2 captured eval'), {
+      timeout: 5000,
+    })
+
+    fireEvent.change(method, { target: { value: 'rewrite' } })
+    expect(document.body.textContent).toContain('A whole new version of the skill per round')
+    fireEvent.click(screen.getByText('Train on my project'))
+    await waitFor(() => expect(client.trainModes).toEqual(['edits', 'rewrite']), { timeout: 5000 })
+  })
+
+  it('lists the edits the held-out check rejected', async () => {
+    const client = new EngineClient(await makeRegistry(), {
+      ok: true,
+      name: 'commit-context',
+      improved: false,
+      accepted: 0,
+      baselineValScore: 0.5,
+      valScore: 0.5,
+      cases: 4,
+      split: { train: 2, val: 2 },
+      epochs: [],
+      budget: { calls: 1, tokens: 20, refusal: null },
+      body: '# Commit context',
+      mode: 'edits',
+      rejectedEdits: ['add "Always include the whole repository in the prompt."'],
+    })
+    await opened(makeProject(), client)
+
+    fireEvent.click(screen.getAllByText('Install…')[0]!)
+    fireEvent.click(await screen.findByText('Verify and install'))
+    await waitFor(() => expect(screen.getByText(/Installed commit-context/)).toBeDefined(), {
+      timeout: 5000,
+    })
+    fireEvent.click(screen.getByRole('tab', { name: /Installed/ }))
+    fireEvent.click(await screen.findByText('Train on my project'))
+
+    const list = await screen.findByLabelText('Rejected edits for commit-context')
+    expect(list.textContent).toContain('Always include the whole repository in the prompt.')
+    expect(document.body.textContent).toContain('1 edit(s) did not raise the held-out score')
+    expect(document.body.textContent).toContain('Method: Small edits (SkillOpt).')
+    expect(screen.queryByText('Use trained version')).toBeNull()
+  })
+})
+
+// ── 7. uninstall is offered, confirmed, and removes the skill (B-002) ────────
+
+describe('uninstall an installed skill (B-002)', () => {
+  /** Install commit-context, switch to the Installed tab. */
+  async function installed(project: string, client: EngineClient): Promise<void> {
+    await opened(project, client)
+    fireEvent.click(screen.getAllByText('Install…')[0]!)
+    fireEvent.click(await screen.findByText('Verify and install'))
+    await waitFor(() => expect(screen.getByText(/Installed commit-context/)).toBeDefined(), {
+      timeout: 5000,
+    })
+    fireEvent.click(screen.getByRole('tab', { name: /Installed/ }))
+    await screen.findByText('Uninstall')
+  }
+
+  it('offers an Uninstall control on every installed card', async () => {
+    const project = makeProject()
+    await installed(project, new EngineClient(await makeRegistry()))
+    const card = document.querySelector('[data-installed="commit-context"]')!
+    expect(card.textContent).toContain('Uninstall')
+  })
+
+  it('requires a destructive confirmation and removes nothing when cancelled', async () => {
+    const project = makeProject()
+    const client = new EngineClient(await makeRegistry())
+    await installed(project, client)
+
+    fireEvent.click(screen.getByText('Uninstall'))
+    // The confirm dialog names the skill and is a destructive (alertdialog) prompt.
+    const dialog = await screen.findByRole('alertdialog', { name: /Uninstall "commit-context"/ })
+    expect(dialog.textContent).toContain('.sketch/skills/commit-context')
+    fireEvent.click(screen.getByText('Cancel'))
+
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+    expect(client.uninstalls).toEqual([])
+    // Still on disk.
+    expect(existsSync(join(project, '.sketch', 'skills', 'commit-context', 'SKILL.md'))).toBe(true)
+  })
+
+  it('removes the skill directory and grant, and the catalog shows it gone, on confirm', async () => {
+    const project = makeProject()
+    const client = new EngineClient(await makeRegistry())
+    await installed(project, client)
+
+    const grantPath = reg.installedSkillGrantPath(project, 'commit-context')
+    expect(existsSync(grantPath)).toBe(true)
+
+    fireEvent.click(screen.getByText('Uninstall'))
+    const confirmDialog = await screen.findByRole('alertdialog', { name: /Uninstall "commit-context"/ })
+    // The danger button inside the dialog (the card button also reads "Uninstall").
+    const { getByText: getInDialog } = within(confirmDialog)
+    fireEvent.click(getInDialog('Uninstall'))
+
+    await waitFor(() => expect(document.body.textContent).toContain('Uninstalled commit-context'), {
+      timeout: 5000,
+    })
+    expect(client.uninstalls).toEqual(['commit-context'])
+    // The directory and the grant are gone.
+    expect(existsSync(join(project, '.sketch', 'skills', 'commit-context'))).toBe(false)
+    expect(existsSync(grantPath)).toBe(false)
+    // The Installed tab now shows the empty state.
+    expect(await screen.findByText('No skills installed')).toBeDefined()
+  })
+
+  it('shows no Uninstall control when the transport cannot uninstall', async () => {
+    const project = makeProject()
+    const base = new EngineClient(await makeRegistry())
+    // A transport that lists/installs but has no uninstall seam.
+    const noUninstall = Object.assign(Object.create(Object.getPrototypeOf(base)), base, {
+      skillUninstall: undefined,
+    }) as SketchClient
+    await opened(project, noUninstall)
+    fireEvent.click(screen.getAllByText('Install…')[0]!)
+    fireEvent.click(await screen.findByText('Verify and install'))
+    await waitFor(() => expect(screen.getByText(/Installed commit-context/)).toBeDefined(), {
+      timeout: 5000,
+    })
+    fireEvent.click(screen.getByRole('tab', { name: /Installed/ }))
+    await waitFor(() =>
+      expect(document.querySelector('[data-installed="commit-context"]')).not.toBeNull(),
+    )
+    expect(screen.queryByText('Uninstall')).toBeNull()
   })
 })

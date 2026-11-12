@@ -1,4 +1,4 @@
-// The `Map<path, model>` of Requirement 15.1, and the only bridge between Monaco's
+  // The `Map<path, model>` of Requirement 15.1, and the only bridge between Monaco's
 // text buffers and the one state owner.
 //
 // ---------------------------------------------------------------------------

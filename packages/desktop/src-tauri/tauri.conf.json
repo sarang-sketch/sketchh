@@ -18,7 +18,8 @@
         "minWidth": 900,
         "minHeight": 600,
         "decorations": false,
-        "transparent": false
+        "transparent": false,
+        "dragDropEnabled": false
       }
     ],
     "security": {
@@ -32,11 +33,7 @@
   },
   "plugins": {
     "shell": {
-      "open": true,
-      "scope": []
-    },
-    "fs": {
-      "scope": ["$APPDIR/*", "$DESKTOP/*", "$DOCUMENT/*", "$DOWNLOAD/*"]
+      "open": true
     }
   }
 }

@@ -6,6 +6,7 @@
 mod command_policy;
 mod os_credentials;
 mod secret_store;
+mod terminal_ipc;
 
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -32,17 +33,6 @@ struct FsEntry {
     name: String,
     path: String,
     is_dir: bool,
-}
-
-// No two-word field today, so this rename is a no-op — it is here so that adding
-// one (`ahead_by`, `detached_head`) cannot reintroduce the `is_dir` bug.
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct GitStatus {
-    branch: String,
-    staged: Vec<String>,
-    modified: Vec<String>,
-    untracked: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -139,97 +129,20 @@ async fn open_project_dialog<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Res
     Ok(folder.map(|p| p.to_string()))
 }
 
-// ── Git Commands ────────────────────────────────────────────────────────────
+// ── Git: the engine owns it, not this bridge (B-010) ─────────────────────────
 //
-// Both commands take a `project_root` and BOTH now resolve it through
-// `command_policy` before anything is spawned. They previously did not: the string
-// went straight to `current_dir`, so the webview could run `git` in any directory
-// the OS user can reach, and `git_diff` additionally forwarded a caller-supplied
-// `file` into git's own argument vector — where a value starting with `-` is an
-// option and `--output=<path>` is a write primitive. See
-// `command_policy::resolve_pathspec_within` for the whole shape of that problem
-// (Requirement 13.8).
-//
-// PARSING LIVES IN THE ENGINE, NOT HERE. The porcelain parser below splits on fixed
-// offsets and does not understand renames (`R  old -> new`), quoted or non-ASCII
-// paths, or a `##` line for a detached HEAD. The authoritative parser is
-// packages/core/src/tools/git.ts, which handles those cases and is what the Git
-// panel reads through the `SketchClient` seam. This command is kept for the native
-// bridge wrapper that names it, deliberately without a second parser to keep in
-// step; its shortcomings are the reason the panel does not depend on it.
-
-#[tauri::command]
-fn git_status(project_root: String) -> Result<GitStatus, String> {
-    // Canonical, existing, a directory, and refused outright when no project is
-    // open — the same root every fs command resolves against.
-    let repo = command_policy::resolve_root(&project_root)?;
-
-    let output = std::process::Command::new("git")
-        .args(["status", "--porcelain", "-b"])
-        .current_dir(&repo)
-        .output()
-        .map_err(|e| format!("Git not available: {}", e))?;
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let mut branch = String::from("unknown");
-    let mut staged = Vec::new();
-    let mut modified = Vec::new();
-    let mut untracked = Vec::new();
-
-    for line in stdout.lines() {
-        if line.starts_with("## ") {
-            branch = line[3..].split("...").next().unwrap_or("unknown").to_string();
-        } else if line.len() >= 3 {
-            let x = line.chars().nth(0).unwrap_or(' ');
-            let y = line.chars().nth(1).unwrap_or(' ');
-            let file = line[3..].to_string();
-            if x == '?' {
-                untracked.push(file);
-            } else {
-                if x != ' ' { staged.push(file.clone()); }
-                if y != ' ' { modified.push(file); }
-            }
-        }
-    }
-
-    Ok(GitStatus { branch, staged, modified, untracked })
-}
-
-#[tauri::command]
-fn git_diff(project_root: String, file: Option<String>) -> Result<String, String> {
-    let repo = command_policy::resolve_root(&project_root)?;
-
-    let mut args = vec!["diff".to_string()];
-    if let Some(f) = file {
-        // A contained path, not an opaque argument. `--` then terminates option
-        // parsing, so even a value this resolver admitted cannot become a flag.
-        let path = command_policy::resolve_pathspec_within(&project_root, &f)?;
-        args.push("--".to_string());
-        args.push(path.to_string_lossy().to_string());
-    }
-
-    let output = std::process::Command::new("git")
-        .args(&args)
-        .current_dir(&repo)
-        .output()
-        .map_err(|e| format!("Git not available: {}", e))?;
-
-    if !output.status.success() {
-        // Named, with the reason, rather than an empty diff that reads as "no
-        // changes" (Requirement 27.5).
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        return Err(format!(
-            "git diff failed{}",
-            if stderr.is_empty() {
-                String::new()
-            } else {
-                format!(": {}", stderr)
-            }
-        ));
-    }
-
-    Ok(String::from_utf8_lossy(&output.stdout).to_string())
-}
+// There are no `git_status` / `git_diff` native commands here any more. Git for the
+// IDE goes through the engine over the `SketchClient` RPC seam
+// (`packages/core/src/tools/git.ts`), which is the ONE git parser in the project —
+// it understands renames (`R  old -> new`), C-quoted and non-ASCII paths, detached
+// HEAD, "no commits yet", and a non-zero exit code, none of which the old fixed-offset
+// Rust porcelain parser did. The Git panel, the status bar, the diff view and the
+// editor's change markers all read the engine; nothing in the webview ever called the
+// Rust pair (verified: `ipc/bridge.ts` only DEFINED the wrappers, no caller imported
+// them). Keeping a second, weaker parser that nothing used was a standing "two sources
+// of truth" hazard (BUG_AUDIT B-010) and a webview-reachable path that spawned `git`,
+// so both commands, their bridge wrappers, and the `GitStatus` wire struct are gone.
+// `command_policy.rs` is unchanged.
 
 // ── Shell Commands ──────────────────────────────────────────────────────────
 
@@ -385,24 +298,47 @@ fn allowed_programs() -> Vec<String> {
 // ── Main ────────────────────────────────────────────────────────────────────
 
 fn main() {
-    tauri::Builder::default()
+    use tauri::Manager;
+    use tauri_plugin_window_state::StateFlags;
+
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
+        // The window opens where it was closed: same size, same place, same monitor,
+        // maximized if it was. Decorations and visibility are left to tauri.conf.json —
+        // this window draws its own title bar and must never come back with the OS one.
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                .with_state_flags(StateFlags::SIZE | StateFlags::POSITION | StateFlags::MAXIMIZED | StateFlags::FULLSCREEN)
+                .build(),
+        )
+        .manage(terminal_ipc::TerminalState::default())
         .invoke_handler(tauri::generate_handler![
             read_dir,
             read_file,
             write_file,
             open_project_dialog,
-            git_status,
-            git_diff,
             run_command,
             allowed_programs,
             list_providers,
             set_api_key,
             resolve_api_key,
             remove_api_key,
+            terminal_ipc::terminal_profiles,
+            terminal_ipc::terminal_open,
+            terminal_ipc::terminal_write,
+            terminal_ipc::terminal_resize,
+            terminal_ipc::terminal_close,
         ])
-        .run(tauri::generate_context!())
-        .expect("error running Sketch");
+        .build(tauri::generate_context!())
+        .expect("error building Sketch");
+
+    app.run(|handle, event| {
+        // Quitting ends every shell the terminal started, and what those shells run: a
+        // dev server must not keep its port after the IDE that started it has gone.
+        if let tauri::RunEvent::Exit = event {
+            handle.state::<terminal_ipc::TerminalState>().manager.close_all();
+        }
+    });
 }

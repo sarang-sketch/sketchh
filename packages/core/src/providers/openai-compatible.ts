@@ -46,7 +46,7 @@ export class GrokAdapter extends OpenAIAdapter {
 export class KimiAdapter extends OpenAIAdapter {
   readonly id = 'kimi'
   readonly name = 'Kimi (Moonshot)'
-  protected defaultBaseUrl() { return 'https://api.moonshot.cn/v1' }
+  protected defaultBaseUrl() { return 'https://api.moonshot.ai/v1' }
 }
 
 // Ollama — local, no API key required. Cost is a real zero, from the price table.

@@ -39,6 +39,45 @@ control. Point it at `http://localhost:11434/v1` (Ollama) or `http://localhost:1
 (LM Studio) and no request leaves the machine at all. That path is a first-class supported
 configuration, not a curiosity.
 
+**Editor features that call the same model.** Two editor features send code to the provider you
+picked for chat, through the same adapters as above, and only these two:
+
+| Feature | When | What is sent | Source |
+|---|---|---|---|
+| Autocomplete (status-bar toggle, **off by default**) | each pause in typing while it is on, at most 30 calls a minute | the file's path and language, up to 6,000 characters before the caret and 2,000 after | `packages/core/src/assist/completion.ts` |
+| Inline edit (Ctrl+K) | only when you press Generate (or Fix on a problem) | the file's path and language, the selected lines (at most 60,000 characters), up to 8,000 characters before them and 3,000 after, and your instruction | `packages/core/src/assist/inlineEdit.ts` |
+
+Neither writes anything to the project's event log, and an inline edit changes nothing until you
+accept its diff. The gutter's change markers (what changed since the last commit) and the
+side-by-side diff view run `git show` (HEAD and the index) on this machine and send nothing
+anywhere.
+
+### 1a. "Sign in with ChatGPT" — YES, NETWORK EGRESS, to OpenAI only, and only after you sign in
+
+Signing in with a ChatGPT account uses the same sign-in OpenAI's Codex CLI uses (also shipped by
+OpenCode and Cline). Every request goes to OpenAI; the endpoint is fixed in code and a settings file
+cannot change it.
+
+| What | Where in the source | Destination |
+|---|---|---|
+| Sign-in page, opened in **your own browser** | `packages/core/src/settings/chatgptAuth.ts` | `https://auth.openai.com/oauth/authorize` |
+| The browser's return trip, on this machine only | same file — a listener on `127.0.0.1`/`::1`, ports 1455 or 1457 | `http://localhost:1455/auth/callback` |
+| Sign-in completion, token renewal, sign-out revoke | same file | `POST https://auth.openai.com/oauth/token`, `/oauth/revoke` |
+| Optional code sign-in (no local port) | same file | `https://auth.openai.com/api/accounts/deviceauth/*` |
+| Model requests and the model list | `packages/core/src/providers/chatgpt.ts` | `POST https://chatgpt.com/backend-api/codex/responses`, `GET …/codex/models` |
+
+**What is sent:** the same messages as §1, plus your ChatGPT access token in `Authorization` and your
+account id in `ChatGPT-Account-Id`. Usage counts against your ChatGPT plan, under OpenAI's terms.
+
+**Where the sign-in is kept:** `~/.sketch/auth/chatgpt.json`, written atomically with owner-only
+permissions — the same arrangement Codex uses (`~/.codex/auth.json`). It is kept by the engine
+rather than the OS credential store because OpenAI replaces the refresh token on every renewal, and
+the code that renews must be the code that keeps it. Tokens never reach the app window, a log, an
+event file or `providers.json`. **Sign out** (Settings → Models) revokes the token at OpenAI and
+deletes the file. Each Sketch window runs its own engine, so a renewal, a new sign-in and a sign-out
+each briefly hold `chatgpt.json.lock` beside it (a process id, nothing else): two windows never
+spend the same refresh token, and a sign-out cannot be undone by a renewal finishing elsewhere.
+
 ## 2. The provider connection test — YES, NETWORK EGRESS, and only when you click it
 
 Provider Settings has a per-provider "Test" button. It performs exactly one request:
@@ -92,12 +131,36 @@ production builds is open work.
 
 ## 4. Programs you run in the terminal panel — YES, they can go anywhere they like
 
-The terminal allowlist is `git`, `npm`, `node`, `cargo`, `python`
-(`src-tauri/src/command_policy.rs`). Several of those reach the network by design: `git push`,
-`git fetch`, `npm install`, `npm test` on a suite that hits an API. Sketch spawns them with no
-shell, in a directory contained in your open project, and only after you confirm the command — but
-once `npm install` is running, what it contacts is npm's business, not ours. The allowlist is not a
-network boundary and does not claim to be.
+In the desktop app a terminal tab is a real shell in a pseudo-terminal — the shell you pick from
+the **⌄** menu next to **+** (PowerShell, Command Prompt, Git Bash, a WSL distribution, MSYS2,
+Cygwin, Nushell; zsh, bash, fish elsewhere) — started by the app's own process
+(`packages/desktop/src-tauri/terminal`), in a folder inside your open project, and only after you
+allow terminals in that folder (once per folder, or until you restart; Settings → Editor lists the
+folders and can forget them). The program is always one the app found installed on this computer;
+the window can choose among them but never name another. Outside the desktop app, and for Run panel
+scripts, commands run one process per line from the engine (`packages/core/src/tools/terminal.ts`)
+with the same folder rule. Like any terminal, whatever you run can reach the network: `git push`,
+`npm install`, `curl`, a test suite that calls an API. What those programs contact is their business,
+not Sketch's, and the terminal is not a network boundary and does not claim to be. Closing a tab, or
+quitting Sketch, ends its shell and what that shell started.
+
+When you enable commands for an agent run, the agent may also start a dev server or watcher **in
+the background** (`run_command` with `background: true`). It is the same approval as any other
+command, it runs on this computer like one, and every such process is stopped when the run ends.
+
+**Watching the folder.** While a folder is open, the engine watches it for changes
+(`packages/core/src/tools/watcher.ts`) so tabs, the Explorer and Source Control update when another
+program changes a file. It reports file NAMES to the window, on this computer only; it reads no
+file contents and sends nothing anywhere.
+
+**Reveal in File Explorer / Finder** and **Open in External Terminal** start your system's own file
+manager or terminal app on a folder inside the project. Nothing leaves the computer.
+
+Source Control's **Pull**, **Push** and **Fetch** buttons run `git` against the repository's own
+remote, only when you press them. **Write the commit message with AI** sends the staged diff (or,
+with nothing staged, the working-tree diff), truncated to 14,000 characters, plus the last eight
+commit subjects, to the model provider you connected — the same egress as §1, made only when you
+press that button. Nothing is committed by it.
 
 ## 5. Loopback only — leaves the process, not the machine
 
@@ -170,6 +233,9 @@ better at "find the code that does this", and this document will not pretend oth
   file contents.
 - `.sketch/index/embeddings/` — cached provider vectors, keyed by content hash plus model plus
   provider. Hashes and numbers only; see §7. The local path writes nothing here.
+- `.sketch/snapshots/<id>/` — the original text of each file an agent run or a Replace in Files
+  changed, kept so **Undo** can put it back without Git. Your own files' contents, in your own
+  project folder; nothing is sent anywhere. Find in Files itself reads files and writes nothing.
 - `~/.sketch/providers.json` — provider ids, endpoints, and model names. **Key-free by test.**
 - API keys — in the OS credential store only: Windows Credential Manager, macOS Keychain, or the
   Secret Service on Linux, reached through Rust (`src-tauri/src/os_credentials.rs`). There is no

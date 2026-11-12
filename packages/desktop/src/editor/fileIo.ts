@@ -14,7 +14,8 @@
 // Validates: Requirements 15.4, 15.6, 27.3
 
 import { openProject, readDir, readFileContent, writeFileContent, type FsEntry } from '../ipc/bridge'
-import { basename } from './paths'
+import { isNoProjectRootRefusal, isOutsideProjectRefusal } from '../ipc/policyMessages'
+import { basename, canonicalPath } from './paths'
 
 /** One directory entry, as the backend reports it. Re-exported so no panel imports the bridge. */
 export type { FsEntry }
@@ -72,6 +73,51 @@ function messageOf(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
 }
 
+function saysNotFound(lower: string): boolean {
+  return (
+    lower.includes('no such file') ||
+    lower.includes('cannot find the file') ||
+    lower.includes('cannot find the path') ||
+    lower.includes('os error 2') ||
+    lower.includes('os error 3') ||
+    lower.includes('enoent')
+  )
+}
+
+/** True when a read failed because the file is not there (deleted, renamed, moved). */
+export function isMissingFileError(err: unknown): boolean {
+  return saysNotFound(messageOf(err).toLowerCase())
+}
+
+// ── saves in flight ─────────────────────────────────────────────────────────
+//
+// A disk check (editor/diskSync.ts) reads open files to see whether something else
+// changed them. A read that lands while the editor's own save is half-written would
+// see a truncated file and report it as "changed on disk". So a save registers the
+// path for its whole duration — formatting, writing and recording the result — and a
+// check skips any path being saved. The save itself then establishes the new baseline.
+
+const savesInFlight = new Map<string, number>()
+
+/** Mark `path` as being saved. Call the returned function exactly once, in a `finally`. */
+export function beginEditorSave(path: string): () => void {
+  const key = canonicalPath(path)
+  savesInFlight.set(key, (savesInFlight.get(key) ?? 0) + 1)
+  let ended = false
+  return () => {
+    if (ended) return
+    ended = true
+    const left = (savesInFlight.get(key) ?? 1) - 1
+    if (left <= 0) savesInFlight.delete(key)
+    else savesInFlight.set(key, left)
+  }
+}
+
+/** True while the editor is saving `path`. */
+export function isEditorSaveInFlight(path: string): boolean {
+  return savesInFlight.has(canonicalPath(path))
+}
+
 /**
  * Turn a bridge rejection into a sentence about this file.
  *
@@ -92,10 +138,13 @@ export function describeFileFailure(
     return `Cannot list ${name}: that path is a file, not a directory.`
   }
 
-  if (lower.includes('outside the open project root') || lower.includes('escapes the project root')) {
-    return `Cannot ${operation} ${name}: it is outside the open project, and the file layer refuses paths beyond the project root.`
+  // Containment refusal. The exact Rust wording lives in ipc/policyMessages.ts (it
+  // changed in W2 and is matched there in both the current and the legacy form), so
+  // this branch cannot silently stop matching when the backend message is reworded.
+  if (isOutsideProjectRefusal(raw)) {
+    return `Cannot ${operation} ${name}: it is outside the folder open in Sketch. To work with it, open the folder that contains it (File → Open Folder).`
   }
-  if (lower.includes('no project root is open')) {
+  if (isNoProjectRootRefusal(raw)) {
     return `Cannot ${operation} ${name}: no project folder is open. Open a folder first.`
   }
   if (lower.includes('not a file')) {
@@ -104,12 +153,7 @@ export function describeFileFailure(
   if (lower.includes('cannot write to a directory')) {
     return `Cannot save ${name}: that path is a directory.`
   }
-  if (
-    lower.includes('no such file') ||
-    lower.includes('cannot find the file') ||
-    lower.includes('cannot find the path') ||
-    lower.includes('os error 2')
-  ) {
+  if (saysNotFound(lower)) {
     return `Cannot ${operation} ${name}: it no longer exists on disk. It may have been deleted or renamed.`
   }
   if (lower.includes('utf-8')) {

@@ -107,8 +107,8 @@
 }
 
 .commitBtn {
-  background-color: var(--accent);
-  color: #fff;
+  background-color: var(--accent-fill);
+  color: var(--text-on-accent);
   border: none;
   border-radius: var(--radius);
   padding: 6px 12px;
@@ -123,7 +123,7 @@
 }
 
 .commitBtn:hover:not(:disabled) {
-  background-color: var(--accent-hover);
+  background-color: var(--accent-fill-hover);
 }
 
 .commitBtn:disabled {
@@ -309,3 +309,92 @@
   color: var(--text-primary);
   white-space: pre;
 }
+
+
+/* ── Branch picker and remote actions ── */
+button.branchInfo {
+  min-width: 0;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  color: inherit;
+  text-align: left;
+}
+button.branchInfo:hover:not(:disabled) { background: var(--bg-hover); }
+.headerActions { display: flex; align-items: center; gap: 2px; }
+.headerActions .iconBtn { position: relative; }
+.count {
+  position: absolute;
+  top: -3px;
+  right: -4px;
+  min-width: 14px;
+  padding: 0 3px;
+  border-radius: 7px;
+  background: var(--accent-fill);
+  color: var(--text-on-accent);
+  font-size: 9px;
+  line-height: 14px;
+  text-align: center;
+}
+.newBranch { padding: 6px 12px 0; }
+.newBranchInput {
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 12px;
+}
+.syncNote {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 6px 12px 0;
+  color: var(--success);
+  font-size: 11px;
+}
+
+/* ── Commit box with the AI draft button ── */
+.commitBox { position: relative; }
+.commitBox .commitInput { padding-right: 30px; }
+.draftBtn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  color: var(--accent);
+}
+.draftBtn:hover:not(:disabled) { background: var(--accent-subtle); }
+.draftBtn:disabled { opacity: 0.4; }
+.spin { animation: spin 1s linear infinite; }
+
+/* ── Rows and sections ── */
+.rowActions { display: flex; align-items: center; gap: 1px; opacity: 0; }
+.fileRow:hover .rowActions,
+.fileRowSelected .rowActions,
+.rowActions:focus-within { opacity: 1; }
+.sectionToggle { display: flex; flex: 1; align-items: center; gap: 4px; color: inherit; font: inherit; text-align: left; }
+.sectionActions { display: flex; align-items: center; gap: 2px; }
+.commitRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 12px 3px 24px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.commitRow:hover { background: var(--bg-hover); }
+.commitIcon { flex: 0 0 auto; color: var(--text-muted); }
+.commitSubject { flex: 1; min-width: 0; overflow: hidden; color: var(--text-primary); text-overflow: ellipsis; white-space: nowrap; }
+.commitWhen { flex: 0 0 auto; color: var(--text-muted); font-size: 10px; }
+
+/* ── Coloured diff ── */
+.diffAdd { background: rgba(34, 197, 94, 0.12); color: #86efac; }
+.diffDel { background: rgba(239, 68, 68, 0.12); color: #fca5a5; }
+.diffHunk { color: #93c5fd; }
+.diffMeta { color: var(--text-muted); }

@@ -37,12 +37,19 @@ import type {
   ArchitectureResult,
   SkillsCatalogResult,
   SkillInstallResult,
+  SkillUninstallResult,
   SkillTrainResult,
   SkillPromoteResult,
   VerifyContractResult,
   McpCatalogResult,
+  PrivacyStatus,
+  LocalModelsResult,
+  LocalModelPull,
+  UserMcpServersResult,
+  UserMcpTestResult,
   StrategyCatalogResult,
   CostReport,
+  UsageSummary,
   MemoryListResult,
   MemorySearchResult,
   MemoryRememberResult,
@@ -50,8 +57,30 @@ import type {
   BenchmarkReportResult,
   ProviderCatalogResult,
   ProviderTestRequest,
+  ProviderModelsResult,
+  OAuthStartResult,
+  OAuthWaitResult,
+  ChatGPTLoginOutcome,
+  ChatGPTLoginStart,
+  ChatGPTModelsResult,
+  ChatGPTStatus,
+  UndoRunResult,
+  FindInFilesParams,
+  FindInFilesResult,
+  ReplaceInFilesParams,
+  ReplaceInFilesResult,
+  CompletionResult,
+  InlineEditResult,
+  ProjectFilesResult,
+  CommandsListResult,
+  TerminalStartResult,
+  TerminalReadResult,
+  FsDeleteResult,
+  FsWatchBatch,
+  GitBranchesResult,
+  GitCommitSummary,
 } from './client'
-import { createEventBus } from './client'
+import { completionRequestId, createEventBus } from './client'
 import type {
   Task,
   RunResult,
@@ -59,6 +88,7 @@ import type {
   EvalResult,
   GitStatusResult,
   ProjectSearchResult,
+  ProviderSettingsEntry,
   ProviderSettingsFile,
   ProviderTestResult,
   SketchEvent,
@@ -436,6 +466,16 @@ export class StdioSketchClient implements SketchClient {
         ? { contextBudgetTokens: options.contextBudgetTokens }
         : {}),
       ...(options.budget !== undefined ? { budget: options.budget } : {}),
+      ...(options.projectTools !== undefined ? { projectTools: options.projectTools } : {}),
+      ...(options.autoIndex !== undefined ? { autoIndex: options.autoIndex } : {}),
+      ...(options.maxIterations !== undefined ? { maxIterations: options.maxIterations } : {}),
+      ...(options.verifyPolicy === true ? { verifyPolicy: true } : {}),
+      ...(options.history !== undefined && options.history.length > 0 ? { history: options.history } : {}),
+      ...(options.readOnly === true ? { readOnly: true } : {}),
+      ...(options.commands !== undefined ? { commands: options.commands } : {}),
+      ...(options.autonomous === true ? { autonomous: true } : {}),
+      ...(options.autoSkills === true ? { autoSkills: true } : {}),
+      ...(options.userMcpServers !== undefined && options.userMcpServers.length > 0 ? { userMcpServers: options.userMcpServers } : {}),
     })
   }
 
@@ -610,6 +650,13 @@ export class StdioSketchClient implements SketchClient {
     })
   }
 
+  async skillUninstall(params: { root: string; name: string }): Promise<SkillUninstallResult> {
+    return this.call<SkillUninstallResult>('skill-uninstall', {
+      root: params.root,
+      name: params.name,
+    })
+  }
+
   async skillTrain(params: {
     root: string
     name: string
@@ -618,6 +665,8 @@ export class StdioSketchClient implements SketchClient {
     write?: boolean
     maxCalls?: number
     maxTokens?: number
+    mode?: 'rewrite' | 'edits'
+    maxEdits?: number
   }): Promise<SkillTrainResult> {
     return this.call<SkillTrainResult>('skill-train', {
       root: params.root,
@@ -627,6 +676,8 @@ export class StdioSketchClient implements SketchClient {
       ...(params.write === true ? { write: true } : {}),
       ...(params.maxCalls !== undefined ? { maxCalls: params.maxCalls } : {}),
       ...(params.maxTokens !== undefined ? { maxTokens: params.maxTokens } : {}),
+      ...(params.mode !== undefined ? { mode: params.mode } : {}),
+      ...(params.maxEdits !== undefined ? { maxEdits: params.maxEdits } : {}),
     })
   }
 
@@ -663,11 +714,67 @@ export class StdioSketchClient implements SketchClient {
     return this.call<McpCatalogResult>('mcp-catalog', {})
   }
 
+  async privacyStatus(options: { root?: string } = {}): Promise<PrivacyStatus> {
+    return this.call<PrivacyStatus>('privacy-status', { ...(options.root !== undefined ? { root: options.root } : {}) })
+  }
+
+  async privacySet(offline: boolean, options: { root?: string } = {}): Promise<PrivacyStatus> {
+    return this.call<PrivacyStatus>('privacy-set', { offline, ...(options.root !== undefined ? { root: options.root } : {}) })
+  }
+
+  async localModels(options: { baseUrl?: string } = {}): Promise<LocalModelsResult> {
+    return this.call<LocalModelsResult>('local-models', { ...options })
+  }
+
+  async mcpServers(options: { root?: string } = {}): Promise<UserMcpServersResult> {
+    return this.call<UserMcpServersResult>('mcp-servers', { ...options })
+  }
+
+  async mcpServerSave(params: { scope: 'global' | 'project'; name: string; command: string; args?: string[]; env?: Record<string, string>; root?: string }): Promise<UserMcpServersResult & { saved: string }> {
+    return this.call<UserMcpServersResult & { saved: string }>('mcp-server-save', { ...params })
+  }
+
+  async mcpServerRemove(params: { scope: 'global' | 'project'; name: string; root?: string }): Promise<UserMcpServersResult & { removed: boolean }> {
+    return this.call<UserMcpServersResult & { removed: boolean }>('mcp-server-remove', { ...params })
+  }
+
+  async mcpServerTrust(params: { name: string; trusted: boolean; root?: string }): Promise<UserMcpServersResult> {
+    return this.call<UserMcpServersResult>('mcp-server-trust', { ...params })
+  }
+
+  async mcpServerTest(params: { name: string; root?: string }): Promise<UserMcpTestResult> {
+    return this.call<UserMcpTestResult>('mcp-server-test', { ...params })
+  }
+
+  async localModelPull(params: { model: string; baseUrl?: string; confirmed: true }): Promise<LocalModelPull> {
+    return this.call<LocalModelPull>('local-model-pull', { ...params })
+  }
+
+  async localModelPullStatus(id: string): Promise<LocalModelPull> {
+    return this.call<LocalModelPull>('local-model-pull-status', { id })
+  }
+
+  async localModelPullCancel(id: string): Promise<{ id: string; cancelled: boolean }> {
+    return this.call<{ id: string; cancelled: boolean }>('local-model-pull-cancel', { id })
+  }
+
+  async localModelDelete(params: { model: string; baseUrl?: string; confirmed: true }): Promise<{ ok: boolean; model: string }> {
+    return this.call<{ ok: boolean; model: string }>('local-model-delete', { ...params })
+  }
+
+  async localModelLoad(params: { model: string; baseUrl?: string; unload?: boolean }): Promise<{ ok: boolean; model: string; loaded: boolean }> {
+    return this.call<{ ok: boolean; model: string; loaded: boolean }>('local-model-load', { ...params })
+  }
+
   async cost(params: { root: string; runId?: string }): Promise<CostReport> {
     return this.call<CostReport>('cost', {
       root: params.root,
       ...(params.runId !== undefined ? { runId: params.runId } : {}),
     })
+  }
+
+  async costUsage(params: { home?: string } = {}): Promise<UsageSummary> {
+    return this.call<UsageSummary>('cost-usage', { ...(params.home !== undefined ? { home: params.home } : {}) })
   }
 
   async benchmarkReport(params: { root: string }): Promise<BenchmarkReportResult> {
@@ -731,6 +838,210 @@ export class StdioSketchClient implements SketchClient {
       reason: params.reason,
       ...(params.replacementText !== undefined ? { replacementText: params.replacementText } : {}),
     })
+  }
+
+  // ── connecting a model ────────────────────────────────────────────────────
+
+  async providerModels(params: {
+    provider: { id: string; kind: ProviderSettingsFile['providers'][number]['kind']; baseUrl: string; apiKey?: string }
+    timeoutMs?: number
+  }): Promise<ProviderModelsResult> {
+    return this.call<ProviderModelsResult>('provider-models', {
+      provider: params.provider,
+      ...(params.timeoutMs !== undefined ? { timeoutMs: params.timeoutMs } : {}),
+    })
+  }
+
+  async oauthStart(params: { timeoutMs?: number } = {}): Promise<OAuthStartResult> {
+    return this.call<OAuthStartResult>('oauth-start', { ...params })
+  }
+
+  async oauthWait(params: { id: string }): Promise<OAuthWaitResult> {
+    return this.call<OAuthWaitResult>('oauth-wait', { id: params.id })
+  }
+
+  async oauthCancel(params: { id: string }): Promise<{ id: string; cancelled: boolean }> {
+    return this.call<{ id: string; cancelled: boolean }>('oauth-cancel', { id: params.id })
+  }
+
+  async chatgptStatus(): Promise<ChatGPTStatus> {
+    return this.call<ChatGPTStatus>('chatgpt-status', {})
+  }
+
+  async chatgptLoginStart(params: { mode: 'browser' | 'device' }): Promise<ChatGPTLoginStart> {
+    return this.call<ChatGPTLoginStart>('chatgpt-login-start', { mode: params.mode })
+  }
+
+  async chatgptLoginWait(params: { id: string }): Promise<ChatGPTLoginOutcome> {
+    return this.call<ChatGPTLoginOutcome>('chatgpt-login-wait', { id: params.id })
+  }
+
+  async chatgptLoginCancel(params: { id: string }): Promise<{ id: string; cancelled: boolean }> {
+    return this.call<{ id: string; cancelled: boolean }>('chatgpt-login-cancel', { id: params.id })
+  }
+
+  async chatgptLogout(): Promise<{ signedOut: boolean; revoked: boolean }> {
+    return this.call<{ signedOut: boolean; revoked: boolean }>('chatgpt-logout', {})
+  }
+
+  async chatgptModels(): Promise<ChatGPTModelsResult> {
+    return this.call<ChatGPTModelsResult>('chatgpt-models', {})
+  }
+
+  async undoRun(params: { root: string; runId: string }): Promise<UndoRunResult> {
+    return this.call<UndoRunResult>('undo-run', { root: params.root, runId: params.runId })
+  }
+
+  async findInFiles(params: FindInFilesParams): Promise<FindInFilesResult> {
+    return this.call<FindInFilesResult>('find-in-files', { ...params })
+  }
+
+  async replaceInFiles(params: ReplaceInFilesParams): Promise<ReplaceInFilesResult> {
+    return this.call<ReplaceInFilesResult>('replace-in-files', { ...params })
+  }
+
+  async gitClone(params: { url: string; parent: string; name?: string }): Promise<{ path: string; name: string }> {
+    return this.call<{ path: string; name: string }>('git-clone', { ...params })
+  }
+
+  async complete(
+    params: Parameters<NonNullable<SketchClient['complete']>>[0],
+    options: { signal?: AbortSignal } = {},
+  ): Promise<CompletionResult> {
+    const requestId = completionRequestId()
+    const { apiKey, provider, ...rest } = params
+    const onAbort = () => {
+      void this.cancel(requestId).catch(() => {})
+    }
+    if (options.signal?.aborted) return { text: '', cancelled: true }
+    options.signal?.addEventListener('abort', onAbort, { once: true })
+    try {
+      return await this.call<CompletionResult>('complete', {
+        ...rest,
+        requestId,
+        provider: { ...provider, ...(apiKey !== undefined ? { apiKey } : {}) },
+      })
+    } finally {
+      options.signal?.removeEventListener('abort', onAbort)
+    }
+  }
+
+  async inlineEdit(
+    params: Parameters<NonNullable<SketchClient['inlineEdit']>>[0],
+    options: { signal?: AbortSignal } = {},
+  ): Promise<InlineEditResult> {
+    const requestId = completionRequestId()
+    const { apiKey, provider, ...rest } = params
+    const onAbort = () => {
+      void this.cancel(requestId).catch(() => {})
+    }
+    if (options.signal?.aborted) return { text: '', cancelled: true }
+    options.signal?.addEventListener('abort', onAbort, { once: true })
+    try {
+      return await this.call<InlineEditResult>('inline-edit', {
+        ...rest,
+        requestId,
+        provider: { ...provider, ...(apiKey !== undefined ? { apiKey } : {}) },
+      })
+    } finally {
+      options.signal?.removeEventListener('abort', onAbort)
+    }
+  }
+
+  async projectFiles(params: { root: string }): Promise<ProjectFilesResult> {
+    return this.call<ProjectFilesResult>('project-files', { root: params.root })
+  }
+
+  async commandsList(params: { root?: string } = {}): Promise<CommandsListResult> {
+    return this.call<CommandsListResult>('commands-list', params.root !== undefined ? { root: params.root } : {})
+  }
+
+  async gitDiscard(params: { root: string; paths: string[] }): Promise<GitStatusResult> {
+    return this.call<GitStatusResult>('git-discard', { root: params.root, paths: params.paths })
+  }
+
+  async gitBranches(params: { root: string }): Promise<GitBranchesResult> {
+    return this.call<GitBranchesResult>('git-branches', { root: params.root })
+  }
+
+  async gitSwitch(params: { root: string; branch: string; create?: boolean }): Promise<GitStatusResult> {
+    return this.call<GitStatusResult>('git-switch', { ...params })
+  }
+
+  async gitPush(params: { root: string }): Promise<{ output: string; status: GitStatusResult }> {
+    return this.call<{ output: string; status: GitStatusResult }>('git-push', { root: params.root })
+  }
+
+  async gitPull(params: { root: string }): Promise<{ output: string; status: GitStatusResult }> {
+    return this.call<{ output: string; status: GitStatusResult }>('git-pull', { root: params.root })
+  }
+
+  async gitFetch(params: { root: string }): Promise<GitStatusResult> {
+    return this.call<GitStatusResult>('git-fetch', { root: params.root })
+  }
+
+  async gitLog(params: { root: string; limit?: number }): Promise<{ commits: GitCommitSummary[] }> {
+    return this.call<{ commits: GitCommitSummary[] }>('git-log', { ...params })
+  }
+
+  async gitShow(params: { root: string; path: string; ref?: 'HEAD' | 'index' }): Promise<{ content: string | null }> {
+    return this.call<{ content: string | null }>('git-show', {
+      root: params.root,
+      path: params.path,
+      ...(params.ref !== undefined ? { ref: params.ref } : {}),
+    })
+  }
+
+  async gitCommitMessage(params: {
+    root: string
+    provider: ProviderSettingsEntry
+    apiKey?: string
+  }): Promise<{ message: string; source: 'staged' | 'unstaged'; model?: string }> {
+    return this.call<{ message: string; source: 'staged' | 'unstaged'; model?: string }>('git-commit-message', { ...params })
+  }
+
+  async termStart(params: { root: string; cwd?: string; line: string; confirmed: true }): Promise<TerminalStartResult> {
+    return this.call<TerminalStartResult>('term-start', { ...params })
+  }
+
+  async termRead(params: { id: string; since?: number }): Promise<TerminalReadResult> {
+    return this.call<TerminalReadResult>('term-read', { ...params })
+  }
+
+  async termWrite(params: { id: string; data?: string; end?: boolean }): Promise<{ ok: boolean }> {
+    return this.call<{ ok: boolean }>('term-write', { ...params })
+  }
+
+  async termKill(params: { id: string }): Promise<{ stopped: boolean }> {
+    return this.call<{ stopped: boolean }>('term-kill', { ...params })
+  }
+
+  async fsWatch(params: { root: string; since?: number; timeoutMs?: number }, signal?: AbortSignal): Promise<FsWatchBatch> {
+    return this.call<FsWatchBatch>('fs-watch', { ...params }, signal)
+  }
+
+  async osReveal(params: { root: string; path: string }): Promise<{ label: string }> {
+    return this.call<{ label: string }>('os-reveal', { ...params })
+  }
+
+  async osOpenTerminal(params: { root: string; path?: string }): Promise<{ label: string }> {
+    return this.call<{ label: string }>('os-open-terminal', { ...params })
+  }
+
+  async fsCreateFile(params: { root: string; path: string; content?: string }): Promise<{ path: string }> {
+    return this.call<{ path: string }>('fs-create-file', { ...params })
+  }
+
+  async fsCreateFolder(params: { root: string; path: string }): Promise<{ path: string }> {
+    return this.call<{ path: string }>('fs-create-folder', { ...params })
+  }
+
+  async fsRename(params: { root: string; from: string; to: string }): Promise<{ from: string; to: string }> {
+    return this.call<{ from: string; to: string }>('fs-rename', { root: params.root, source: params.from, target: params.to })
+  }
+
+  async fsDelete(params: { root: string; path: string; trash?: boolean }): Promise<FsDeleteResult> {
+    return this.call<FsDeleteResult>('fs-delete', { ...params })
   }
 
   subscribe(handler: EventHandler): Unsubscribe {

@@ -205,6 +205,28 @@ export function parseAnsi(text: string): AnsiSpan[] {
 }
 
 /**
+ * What a terminal would show for output that rewrites its own line.
+ *
+ * Progress bars and spinners print `10%\r20%\r30%`: each `\r` returns to the start of
+ * the line and the next text overwrites it. `parseAnsi` drops a lone `\r`, which turned
+ * that into the smear `10%20%30%`. This keeps only what follows the last `\r` on each
+ * line — the state a real terminal ends up displaying. Trailing `\r`s are ignored first,
+ * so a line that is mid-update shows its latest text instead of going blank.
+ */
+export function collapseCarriageReturns(text: string): string {
+  if (!text.includes('\r')) return text
+  return text
+    .replace(/\r+\n/g, '\n')
+    .split('\n')
+    .map((line) => {
+      const trimmed = line.replace(/\r+$/, '')
+      const at = trimmed.lastIndexOf('\r')
+      return at === -1 ? trimmed : trimmed.slice(at + 1)
+    })
+    .join('\n')
+}
+
+/**
  * The same spans, split at newlines, one array per output line.
  *
  * The panel renders one element per line, so the split happens here where it can

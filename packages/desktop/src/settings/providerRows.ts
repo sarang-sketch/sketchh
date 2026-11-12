@@ -136,6 +136,8 @@ export function describeTest(state: ProviderTestState | undefined): TestSummary 
 const FAILURE_LABELS: Record<string, string> = {
   unreachable: 'Unreachable',
   unauthorized: 'Key rejected',
+  forbidden: 'Not permitted',
+  'rate-limited': 'Rate limited',
   'model-not-found': 'Model not found',
   'malformed-response': 'Malformed response',
   'invalid-endpoint': 'Bad endpoint',

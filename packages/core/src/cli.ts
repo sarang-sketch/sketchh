@@ -17,11 +17,37 @@
 
 import { main } from './rpc/index.js'
 
+// A stray promise rejection anywhere in a handler must not end the engine
+// mid-session. On the Node versions that run the sidecar an unhandled rejection
+// terminates the process by default, so one forgotten `await` would take the whole
+// engine down with only a stack trace on stderr. These handlers keep the process
+// serving and write ONE diagnostic line to stderr — never to stdout, which the
+// protocol owns. The fatal-startup path below is unchanged: an error thrown by
+// `main()` itself still exits non-zero.
+const describe = (err: unknown): string =>
+  err instanceof Error ? err.stack ?? err.message : String(err)
+
+process.on('unhandledRejection', (reason) => {
+  process.stderr.write(`sketch: unhandled rejection: ${describe(reason)}\n`)
+})
+process.on('uncaughtException', (err) => {
+  process.stderr.write(`sketch: uncaught exception: ${describe(err)}\n`)
+})
+
+// Test-only, inert unless SKETCH_TEST_UNHANDLED=1 is set: schedule exactly one
+// rejected promise after start-up so a spawned-process test can prove the handler
+// above keeps the engine alive and still answering. Read ONLY here, nowhere else.
+if (process.env['SKETCH_TEST_UNHANDLED'] === '1') {
+  setTimeout(() => {
+    void Promise.reject(new Error('test-only injected unhandled rejection'))
+  }, 50)
+}
+
 try {
   await main()
   // No process.exit: letting the event loop drain flushes pending stdout writes.
   process.exitCode = 0
 } catch (err) {
-  process.stderr.write(`sketch: fatal: ${err instanceof Error ? err.stack ?? err.message : String(err)}\n`)
+  process.stderr.write(`sketch: fatal: ${describe(err)}\n`)
   process.exitCode = 1
 }

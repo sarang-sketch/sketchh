@@ -9,11 +9,17 @@
 // Validates: Requirements 2.1, 2.2, 2.6
 
 import type { ChatAdapter, Message, ProviderConfig, Usage } from '../types.js'
+import { providerFetch, readableErrorDetail, statusHint } from './http.js'
 import { providerError } from './redact.js'
-import { collectSecrets, trimBaseUrl } from './wire.js'
+import { collectSecrets, generationControls, trimBaseUrl, type ChatCallOptions } from './wire.js'
 
 const ANTHROPIC_VERSION = '2023-06-01'
-const DEFAULT_MAX_TOKENS = 4096
+/**
+ * Output ceiling per call. A whole-file edit is the largest thing a turn produces,
+ * and 4096 tokens truncated ordinary source files mid-JSON — a truncated action is
+ * unparseable and costs the run a turn. Every current Claude model accepts 8192.
+ */
+const DEFAULT_MAX_TOKENS = 8192
 
 interface AnthropicMessage {
   role: 'user' | 'assistant'
@@ -21,6 +27,8 @@ interface AnthropicMessage {
 }
 
 interface AnthropicMessagesResponse {
+  /** The model Anthropic says answered. Carried through so a receipt can show it. */
+  model?: unknown
   content?: Array<{ type?: string; text?: string } | null> | null
   usage?: { input_tokens?: number; output_tokens?: number } | null
 }
@@ -49,9 +57,20 @@ export function toAnthropicBody(
     .map((m) => m.content)
     .join('\n\n')
 
-  const turns: AnthropicMessage[] = messages
-    .filter((m) => m.role !== 'system')
-    .map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content }))
+  const turns: AnthropicMessage[] = []
+  for (const m of messages) {
+    if (m.role === 'system') continue
+    const role: AnthropicMessage['role'] = m.role === 'assistant' ? 'assistant' : 'user'
+    const previous = turns[turns.length - 1]
+    // The agent loop routinely feeds back two user turns in a row (an edit outcome
+    // and a verify report). Messages must alternate, so consecutive same-role turns
+    // are joined into one rather than left for the API to reject or reinterpret.
+    if (previous !== undefined && previous.role === role) {
+      previous.content = `${previous.content}\n\n${m.content}`
+      continue
+    }
+    turns.push({ role, content: m.content })
+  }
 
   const body: AnthropicRequestBody = { model, max_tokens: maxTokens, messages: turns }
   if (system) body.system = system
@@ -61,17 +80,19 @@ export function toAnthropicBody(
 /** Anthropic → canonical. Concatenates every text block, ignoring other kinds. */
 export function fromAnthropicResponse(
   data: AnthropicMessagesResponse,
-): { text: string; usage?: Usage } {
+): { text: string; usage?: Usage; model?: string } {
   const text = (data.content ?? [])
     .filter((b): b is { type?: string; text?: string } => !!b && b.type === 'text')
     .map((b) => b.text ?? '')
     .join('')
 
-  if (!data.usage) return { text }
-  return {
-    text,
-    usage: { in: data.usage.input_tokens ?? 0, out: data.usage.output_tokens ?? 0 },
-  }
+  // The model Anthropic says answered, per call on the value (never the requested id).
+  const model = typeof data.model === 'string' && data.model.trim() !== '' ? data.model.trim() : undefined
+
+  const out: { text: string; usage?: Usage; model?: string } = { text }
+  if (data.usage) out.usage = { in: data.usage.input_tokens ?? 0, out: data.usage.output_tokens ?? 0 }
+  if (model !== undefined) out.model = model
+  return out
 }
 
 /** Chat over `POST {baseUrl}/v1/messages` with `x-api-key`. */
@@ -92,19 +113,30 @@ export class AnthropicMessagesAdapter implements ChatAdapter {
 
   async chat(
     messages: Message[],
-    options?: { signal?: AbortSignal },
-  ): Promise<{ text: string; usage?: Usage }> {
+    options?: ChatCallOptions,
+  ): Promise<{ text: string; usage?: Usage; model?: string; attempts?: number }> {
     const url = `${trimBaseUrl(this.config.baseUrl)}/v1/messages`
-    const body = JSON.stringify(toAnthropicBody(this.config.model, messages))
+    const controls = generationControls(options)
+    const request = toAnthropicBody(this.config.model, messages, controls.maxTokens ?? DEFAULT_MAX_TOKENS)
+    const body = JSON.stringify({
+      ...request,
+      ...(controls.temperature !== undefined ? { temperature: Math.min(1, controls.temperature) } : {}),
+      ...(controls.stop !== undefined ? { stop_sequences: controls.stop } : {}),
+    })
 
+    let attempts = 1
     let res: Response
     try {
-      res = await fetch(url, {
-        method: 'POST',
-        headers: this.headers(),
-        body,
-        signal: options?.signal,
-      })
+      res = await providerFetch(
+        url,
+        { method: 'POST', headers: this.headers(), body },
+        {
+          ...(options?.signal !== undefined ? { signal: options.signal } : {}),
+          onRetry: () => {
+            attempts += 1
+          },
+        },
+      )
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') throw err
       throw providerError({
@@ -115,11 +147,12 @@ export class AnthropicMessagesAdapter implements ChatAdapter {
     }
 
     if (!res.ok) {
-      const detail = await res.text().catch(() => '')
+      const detail = readableErrorDetail(await res.text().catch(() => ''))
+      const hint = statusHint(res.status)
       throw providerError({
         providerId: this.id,
         status: res.status,
-        detail,
+        detail: hint === '' ? detail : `${hint} ${detail}`,
         secrets: this.secrets,
       })
     }
@@ -136,7 +169,8 @@ export class AnthropicMessagesAdapter implements ChatAdapter {
       })
     }
 
-    return fromAnthropicResponse(data)
+    const out = fromAnthropicResponse(data)
+    return attempts > 1 ? { ...out, attempts } : out
   }
 
   private headers(): Record<string, string> {

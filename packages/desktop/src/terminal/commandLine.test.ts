@@ -148,16 +148,20 @@ describe('programGate — a mirror of the backend list', () => {
 })
 
 describe('classifyRunFailure — a refusal is not a breakage', () => {
-  it('calls the policy sentences denials', () => {
+  it('calls the policy sentences denials — current AND legacy wording', () => {
     for (const message of [
       "'rm' is not on the terminal allowlist",
       'the command is refused',
-      'this call was not confirmed',
+      'command not confirmed: the terminal tool requires an explicit user confirmation',
+      // CURRENT Rust wording (W2): a reword that broke this is the regression this fixes.
+      "cwd '../..' escapes the open folder C:/project",
+      'This file is outside the folder you have open in Sketch, so it cannot be reached from here:',
+      'no project root is open',
+      'argument 0 contains a NUL byte',
+      "not a directory: 'README.md'",
+      // LEGACY wording (pre-W2), still recognised via ipc/policyMessages.ts.
       "cwd '../..' escapes the project root",
       'path is outside the open project root C:/project',
-      'no project root is open',
-      'the argument contains a NUL byte',
-      "cwd 'README.md' is not a directory",
     ]) {
       expect(classifyRunFailure(message), message).toBe('denied')
     }

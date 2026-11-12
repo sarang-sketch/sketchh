@@ -9,12 +9,14 @@ export {
   CAPABILITIES,
   CAPABILITY_DESCRIPTIONS,
   DEFAULT_CAPABILITIES,
+  READ_ONLY_CAPABILITIES,
   SENSITIVE_CAPABILITIES,
   capabilitiesForSkill,
   describeCapabilities,
   grants,
   isCapability,
   parseCapabilities,
+  readOnlyGrant,
 } from './vocabulary.js'
 export type { Capability, CapabilitySet, ParseCapabilitiesResult } from './vocabulary.js'
 

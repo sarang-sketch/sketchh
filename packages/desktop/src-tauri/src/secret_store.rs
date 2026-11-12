@@ -69,10 +69,9 @@ pub enum SecretError {
     /// The value is larger than any API key plausibly is.
     TooLarge { id: String, bytes: usize },
     /// The OS credential store refused. `detail` is the OS's own words about the
-    /// FAILURE, never about the value.
+    /// FAILURE, never about the value. (A platform with no store at all refuses
+    /// through its backend, so it arrives here too, naming why.)
     Backend { id: String, operation: String, detail: String },
-    /// No credential store is available on this platform/build.
-    Unsupported(String),
 }
 
 impl std::fmt::Display for SecretError {
@@ -97,11 +96,6 @@ impl std::fmt::Display for SecretError {
                 f,
                 "the operating system credential store could not {} the key for '{}': {}",
                 operation, id, detail
-            ),
-            SecretError::Unsupported(detail) => write!(
-                f,
-                "no operating system credential store is available: {}. A key can still be supplied per request, but it will not be remembered.",
-                detail
             ),
         }
     }
@@ -273,16 +267,31 @@ pub fn resolve_secret<B: CredentialBackend + ?Sized>(
     Ok(found.filter(|value| !value.trim().is_empty()))
 }
 
-/// An in-process backend for tests and for a build with no OS store available.
+/// A stored key's bytes as text, for the platform backends.
+///
+/// Sketch stores UTF-8, so bytes that are not are a record some other program wrote, or
+/// a damaged one. It is refused by name: decoded lossily it became a key with
+/// replacement characters in it, which the provider then rejected as a confusing
+/// authentication error, far from the cause. The message never quotes the bytes.
+pub fn secret_from_bytes(bytes: &[u8]) -> Result<String, String> {
+    std::str::from_utf8(bytes)
+        .map(str::to_string)
+        .map_err(|_| "the stored key is not readable text; remove it and save it again".to_string())
+}
+
+/// An in-process backend for tests.
 ///
 /// It is NOT wired into any command: a memory store that silently forgets a key the
 /// user believed was saved is worse than a named refusal, which is what
-/// `os_credentials::backend()` returns on an unsupported platform.
+/// `os_credentials::backend()` returns on an unsupported platform. Compiled for tests
+/// only, so a shipped build cannot reach it.
+#[cfg(test)]
 #[derive(Default)]
 pub struct MemoryBackend {
     rows: std::sync::Mutex<Vec<(String, String, String)>>,
 }
 
+#[cfg(test)]
 impl MemoryBackend {
     pub fn new() -> Self {
         Self::default()
@@ -298,6 +307,7 @@ impl MemoryBackend {
     }
 }
 
+#[cfg(test)]
 impl CredentialBackend for MemoryBackend {
     fn get(&self, service: &str, account: &str) -> Result<Option<String>, String> {
         let rows = self.rows.lock().unwrap();
@@ -330,11 +340,15 @@ impl CredentialBackend for MemoryBackend {
     }
 }
 
-/// A backend that refuses everything, naming why. What an unsupported platform gets.
+/// A backend that refuses everything, naming why. What an unsupported platform gets
+/// (`os_credentials::backend()`); Windows, macOS and Linux each have a real store.
+/// Compiled there, and for the tests that check a refusal never carries a key.
+#[cfg(any(test, not(any(target_os = "windows", target_os = "macos", unix))))]
 pub struct UnsupportedBackend {
     pub detail: String,
 }
 
+#[cfg(any(test, not(any(target_os = "windows", target_os = "macos", unix))))]
 impl CredentialBackend for UnsupportedBackend {
     fn get(&self, _service: &str, _account: &str) -> Result<Option<String>, String> {
         Err(self.detail.clone())
@@ -466,7 +480,6 @@ mod tests {
                 detail: "os error 1312".to_string(),
             }
             .to_string(),
-            SecretError::Unsupported("built without a backend".to_string()).to_string(),
         ];
         for message in messages {
             assert!(!message.contains(KEY), "{}", message);
@@ -482,6 +495,17 @@ mod tests {
         assert!(!message.contains(KEY), "{}", message);
         assert!(message.contains("openai"), "{}", message);
         assert!(message.contains("no credential store on this build"), "{}", message);
+    }
+
+    #[test]
+    fn a_stored_key_that_is_not_text_is_refused_rather_than_garbled() {
+        assert_eq!(secret_from_bytes(KEY.as_bytes()).unwrap(), KEY);
+        assert_eq!(secret_from_bytes(b"").unwrap(), "");
+        // "sk-" followed by bytes that are not UTF-8: once decoded lossily into a key
+        // with replacement characters, now a refusal that names what to do.
+        let err = secret_from_bytes(&[0x73, 0x6b, 0x2d, 0xff, 0xfe]).unwrap_err();
+        assert!(err.contains("not readable text"), "{}", err);
+        assert!(!err.contains('\u{fffd}'), "{}", err);
     }
 
     #[test]

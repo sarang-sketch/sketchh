@@ -34,6 +34,8 @@ export type ProviderTestCode =
   | 'invalid-endpoint'
   | 'unreachable'
   | 'unauthorized'
+  | 'forbidden'
+  | 'rate-limited'
   | 'model-not-found'
   | 'malformed-response'
   | 'endpoint-error'
@@ -51,6 +53,8 @@ export interface ProviderTestResult {
   status?: number
   /** Model ids the endpoint advertised, capped. Present on a model mismatch. */
   models?: string[]
+  /** Seconds to wait before retrying, parsed from `Retry-After` on a 429. */
+  retryAfterSeconds?: number
   durationMs: number
 }
 
@@ -147,6 +151,19 @@ interface Attempt {
   status: number
   body: string
   json: unknown
+  /** `Retry-After` header value, when the response carried one. */
+  retryAfter: string | null
+}
+
+/** `Retry-After` in seconds: an integer delta, or an HTTP date, or null. */
+function retryAfterSeconds(header: string | null, now: number): number | null {
+  if (header === null) return null
+  const text = header.trim()
+  if (text === '') return null
+  if (/^\d+$/.test(text)) return Math.max(0, Number(text))
+  const when = Date.parse(text)
+  if (Number.isNaN(when)) return null
+  return Math.max(0, Math.round((when - now) / 1000))
 }
 
 type AttemptOutcome = Attempt | { kind: 'aborted' } | { kind: 'timeout' } | { kind: 'network'; detail: string }
@@ -180,7 +197,7 @@ async function attempt(
     } catch {
       json = null
     }
-    return { kind: 'response', status: res.status, body, json }
+    return { kind: 'response', status: res.status, body, json, retryAfter: res.headers?.get?.('retry-after') ?? null }
   } catch (err) {
     if (timedOut) return { kind: 'timeout' }
     if (options.signal?.aborted) return { kind: 'aborted' }
@@ -278,7 +295,7 @@ export async function testProviderConnection(
     })
   }
 
-  if (outcome.status === 401 || outcome.status === 403) {
+  if (outcome.status === 401) {
     return finish({
       ok: false,
       code: 'unauthorized',
@@ -286,8 +303,42 @@ export async function testProviderConnection(
       status: outcome.status,
       message:
         target.apiKey === undefined || target.apiKey === ''
-          ? `${target.id}: ${hostOf(url)} answered HTTP ${outcome.status} and requires a key, but none was supplied`
-          : `${target.id}: ${hostOf(url)} rejected the supplied key with HTTP ${outcome.status}`,
+          ? `${target.id}: ${hostOf(url)} answered HTTP 401 and requires a key, but none was supplied`
+          : `${target.id}: ${hostOf(url)} rejected the supplied key with HTTP 401. Check the API key in Settings → Models.`,
+    })
+  }
+
+  // 403 is a DIFFERENT fix from 401: the key is recognised but this account or key
+  // is not permitted to do this — a missing scope, a region the plan does not cover,
+  // an org that has to grant access. Saying "rejected the key" would send the user
+  // to replace a key that is fine.
+  if (outcome.status === 403) {
+    return finish({
+      ok: false,
+      code: 'forbidden',
+      url,
+      status: outcome.status,
+      message:
+        `${target.id}: ${hostOf(url)} answered HTTP 403 — the key was accepted but is not permitted to use this ` +
+        `endpoint or model. Check the key's permissions, your plan, or your organisation access.`,
+    })
+  }
+
+  // 429 is transient and ACTIONABLE: it tells the user to wait, and for how long when
+  // the provider sent Retry-After. It is not a broken key and not a broken endpoint.
+  if (outcome.status === 429) {
+    const seconds = retryAfterSeconds(outcome.retryAfter, clock())
+    return finish({
+      ok: false,
+      code: 'rate-limited',
+      url,
+      status: outcome.status,
+      ...(seconds !== null ? { retryAfterSeconds: seconds } : {}),
+      message:
+        `${target.id}: ${hostOf(url)} is rate-limiting requests (HTTP 429)` +
+        (seconds !== null
+          ? `. Wait about ${seconds} second${seconds === 1 ? '' : 's'} and try again.`
+          : '. Wait a moment, or check your plan and quota, and try again.'),
     })
   }
 

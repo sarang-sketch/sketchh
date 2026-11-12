@@ -2,10 +2,9 @@
   display: flex;
   flex-direction: column;
   height: 100%;
-  width: 260px;
-  background-color: #171717;
-  border-right: 1px solid #262626;
-  padding: 12px;
+  width: 100%;
+  background-color: var(--bg-secondary);
+  padding: 14px 12px 10px;
   user-select: none;
   font-family: var(--font-sans);
 }
@@ -17,8 +16,8 @@
 .modePillContainer {
   position: relative;
   display: flex;
-  background-color: #262626;
-  border-radius: 8px;
+  background-color: var(--bg-elevated);
+  border-radius: var(--radius-md);
   padding: 2px;
   width: 100%;
 }
@@ -30,9 +29,9 @@
   width: calc(50% - 2px);
   height: calc(100% - 4px);
   background-color: #3b3b3b;
-  border-radius: 6px;
+  border-radius: var(--radius);
   transition: transform 0.2s cubic-bezier(0.2, 0, 0, 1);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--shadow-sm);
 }
 
 .modePillBtn {
@@ -42,77 +41,85 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: var(--space-3);
   background: transparent;
   border: none;
-  color: #a3a3a3;
-  font-size: 12px;
-  font-weight: 500;
-  padding: 6px 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  padding: var(--space-3) 0;
   cursor: pointer;
   transition: color 0.15s ease;
 }
 
 .modePillBtn.activeMode {
-  color: #ffffff;
+  color: var(--text-primary);
 }
 
 .newTaskSection {
-  margin-bottom: 16px;
+  margin-bottom: 18px;
 }
 
 .newTaskBtn {
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 8px;
-  background-color: #262626;
-  border: 1px solid #333333;
-  color: #e5e5e5;
-  font-size: 13px;
-  font-weight: 500;
-  padding: 8px 12px;
-  border-radius: 8px;
+  gap: var(--space-4);
+  background-color: var(--accent-subtle);
+  border: 1px solid color-mix(in srgb, var(--accent) 26%, transparent);
+  color: var(--accent);
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-medium);
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   transition: background-color 0.15s ease;
 }
 
 .newTaskBtn:hover {
-  background-color: #303030;
+  background-color: color-mix(in srgb, var(--accent) 17%, transparent);
 }
 
 .menuNav {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
 
 .menuItem {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-5);
   background: transparent;
   border: none;
-  color: #a3a3a3;
-  font-size: 13px;
-  font-weight: 400;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-normal);
   padding: 8px 10px;
-  border-radius: 6px;
+  min-height: var(--row-height, 36px);
+  border-radius: var(--radius);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .menuItem:hover {
-  background-color: #222222;
-  color: #f5f5f5;
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 .menuItem.activeMenuItem {
-  background-color: #262626;
-  color: #ffffff;
-  font-weight: 500;
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+  font-weight: var(--font-weight-medium);
 }
+
+.workspaceButton { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 8px 5px 19px; color: var(--text-secondary); }
+.workspaceIcon { display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--bg-surface); }
+.workspaceText { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 5px; }
+.workspaceText strong { font-size: var(--text-sm); font-weight: 550; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.workspaceText small { font-size: 10px; color: var(--text-muted); }
+.workspaceButton:hover .workspaceIcon { border-color: var(--accent); color: var(--accent); }
 
 .recentsSection {
   flex: 1;
@@ -125,22 +132,22 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  color: #737373;
-  font-size: 12px;
-  font-weight: 500;
-  padding: 0 4px 8px 4px;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  padding: 0 var(--space-2) var(--space-4) var(--space-2);
 }
 
 .filterBtn {
   background: transparent;
   border: none;
-  color: #737373;
+  color: var(--text-muted);
   cursor: pointer;
   padding: 2px;
 }
 
 .filterBtn:hover {
-  color: #a3a3a3;
+  color: var(--text-secondary);
 }
 
 .recentsList {
@@ -151,73 +158,190 @@
 }
 
 .recentItem {
-  padding: 6px 10px;
-  border-radius: 6px;
-  color: #a3a3a3;
-  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-3) var(--space-3) var(--space-5);
+  border-radius: var(--radius);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
   cursor: pointer;
   white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
-  transition: all 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .recentItem:hover {
-  background-color: #222222;
-  color: #f5f5f5;
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 .recentItem.activeRecent {
-  background-color: #262626;
-  color: #ffffff;
+  background-color: var(--bg-elevated);
+  color: var(--text-primary);
 }
 
 .recentTitle {
-  display: block;
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.recentMeta {
+  font-size: 10.5px;
+  color: var(--text-disabled);
+  flex-shrink: 0;
+}
+
+.activeRecent .recentMeta {
+  color: var(--accent);
+}
+
+.recentDelete {
+  display: none;
+  color: var(--text-muted);
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+
+.recentItem:hover .recentDelete {
+  display: flex;
+}
+
+.recentItem:hover .recentMeta {
+  display: none;
+}
+
+.recentDelete:hover:not(:disabled) {
+  color: #fca5a5;
+  background: #2a1414;
+}
+
+.recentRename {
+  display: none;
+  color: var(--text-muted);
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+
+.recentItem:hover .recentRename {
+  display: flex;
+}
+
+.recentRename:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.recentRename:focus-visible,
+.recentDelete:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.recentRenameInput {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg-elevated);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  padding: 2px var(--space-2);
+}
+
+.recentRenameInput:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.recentsEmpty {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 6px 10px;
+  line-height: 1.5;
+}
+
+.filterInput {
+  margin: 0 2px var(--space-4);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+}
+
+.filterInput:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.connectBtn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--radius-md);
+  background: rgba(234, 88, 12, 0.12);
+  border: 1px solid #7c2d12;
+  color: #fdba74;
+  font-size: 12.5px;
+  font-weight: var(--font-weight-semibold);
+}
+
+.connectBtn:hover {
+  background: rgba(234, 88, 12, 0.2);
 }
 
 .bottomFooter {
   margin-top: auto;
-  padding-top: 12px;
-  border-top: 1px solid #262626;
+  padding-top: var(--space-6);
+  border-top: 1px solid var(--border);
 }
 
 .userBadge {
+  width: 100%;
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 6px 8px;
   border-radius: 6px;
   cursor: pointer;
+  text-align: left;
   transition: background-color 0.15s ease;
 }
 
 .userBadge:hover {
-  background-color: #222222;
+  background-color: var(--bg-hover);
 }
 
 .orangeDot {
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #f97316, #ea580c);
-  color: #ffffff;
-  font-weight: 700;
-  font-size: 11px;
+  background: linear-gradient(135deg, var(--accent-strong), var(--accent-active));
+  color: var(--text-on-accent);
+  font-weight: var(--font-weight-bold);
+  font-size: var(--text-xs);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .userNameText {
-  color: #d4d4d4;
-  font-size: 12px;
-  font-weight: 500;
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
   flex: 1;
 }
 
 .chevronIcon {
-  color: #737373;
+  color: var(--text-muted);
 }

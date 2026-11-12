@@ -55,4 +55,36 @@ describe('SketchClientProvider', () => {
   it('refuses to hand out a client outside the provider', () => {
     expect(() => render(<Probe />)).toThrow(/SketchClientProvider/)
   })
+
+  // W10 invariant 4: the one event-stream subscription this provider owns must be
+  // released on unmount, with no handler left behind after the component is gone.
+  it('unsubscribes from the event stream on unmount (no leaked subscription)', () => {
+    let liveSubscriptions = 0
+    const base = new MockSketchClient({ stepDelayMs: 0 })
+    const tracking = {
+      ...base,
+      transport: base.transport,
+      subscribe(handler: Parameters<MockSketchClient['subscribe']>[0]) {
+        liveSubscriptions += 1
+        const off = base.subscribe(handler)
+        return () => {
+          liveSubscriptions -= 1
+          off()
+        }
+      },
+      ping: () => base.ping(),
+    } as unknown as MockSketchClient
+
+    const view = render(
+      <SketchClientProvider client={tracking}>
+        <Probe />
+      </SketchClientProvider>,
+    )
+    // Exactly one live subscription while mounted (StrictMode-safe: not doubled).
+    expect(liveSubscriptions).toBe(1)
+
+    view.unmount()
+    // Released on unmount — nothing left listening to a dead component.
+    expect(liveSubscriptions).toBe(0)
+  })
 })

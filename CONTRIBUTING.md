@@ -73,6 +73,26 @@ sensitive extension work must retain content pinning, explicit capability grants
 secret redaction, and the existing verification gates. If a category is marked closed, add and test
 a production registration/loading contract before changing its status.
 
+## Colours and the light theme
+
+Write colours the way the stylesheets already do — a theme variable from
+`packages/desktop/src/styles/global.css` (`var(--text-secondary)`) or a plain literal
+(`#262626`) — and both themes work. The light theme is derived when the app is built:
+`packages/desktop/src/styles/themeColors.ts` runs as a PostCSS step over the app's own stylesheets
+and rewrites each literal to `var(--sk-…, <the literal>)`, so the dark theme renders exactly what
+you wrote, and adds a `:root[data-theme='light']` rule with each colour's light value, chosen by
+what the property is for (text, surface, line, shadow). Saturated fills such as the orange buttons,
+translucent tints and the label on an accent fill stay as written.
+
+- A colour that must be the same in both themes (a switch knob) says so on its own line:
+  `background: #f5f5f5; /* theme: fixed */`.
+- New theme variables need a hand-picked light value in the `:root[data-theme='light']` block of
+  `global.css`.
+- `src/styles/themeColors.test.ts` checks every real stylesheet: dark unchanged, every themed colour
+  defined, and the light theme no harder to read than the dark one wherever a rule sets both text and
+  background. Monaco's themes live in `src/editor/extensionRegistry.ts`, the terminal's palette in
+  `src/terminal/ShellSessions.tsx`.
+
 ## Before you open a pull request
 
 ```bash
@@ -117,6 +137,12 @@ commit message, a pull request, or a document.
 - `cargo test` cannot link on some Windows setups here (missing GNU `dlltool`). Run the Rust policy
   tests with `rustc --test src/command_policy.rs -o <tmp>/policy` and execute the binary;
   `command_policy.rs` is deliberately std-only so this works. Do not claim `cargo test` passes.
+- The terminal crate (`src-tauri/terminal`, real shells in a pseudo-terminal) has no Tauri
+  dependency, so its tests build quickly: `cargo test -p sketch-terminal` from `src-tauri`. They
+  start the real shells on the machine (PowerShell, Command Prompt, Git Bash… whatever is
+  installed). On Windows without the MSVC Build Tools, use the GNU toolchain for checks:
+  `cargo +stable-x86_64-pc-windows-gnu test -p sketch-terminal` and
+  `cargo +stable-x86_64-pc-windows-gnu check` (the app). Release builds in CI use MSVC.
 - The symlink containment test **skips** on Windows without Developer Mode. It prints `SKIPPED …`
   and returns. A skip is not a pass.
 - `packages/core/test/cli.test.ts` uses `describe.skip` when `dist/cli.js` is absent, so 20 tests

@@ -2,17 +2,19 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 36px;
+  height: calc(var(--control-lg) + 4px);
+  flex: 0 0 auto;
   user-select: none;
   font-family: var(--font-sans);
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-primary);
-  border-bottom: 1px solid #262626;
+  border-bottom: 1px solid var(--border);
   padding: 0 10px;
+  gap: 12px;
 }
 
 .ideTitleBar, .agentTitleBar {
-  background-color: #121212;
+  background-color: var(--bg-primary);
 }
 
 .left, .right, .center, .leftCowork, .rightCowork {
@@ -21,17 +23,18 @@
 }
 
 .left {
-  gap: 10px;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
 .sketchLogo {
   width: 20px;
   height: 20px;
-  border-radius: 4px;
-  background: linear-gradient(135deg, #f97316, #ea580c);
-  color: #ffffff;
-  font-weight: 800;
-  font-size: 12px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(135deg, var(--accent-strong), var(--accent-active));
+  color: var(--text-on-accent);
+  font-weight: var(--font-weight-bold);
+  font-size: var(--text-sm);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -42,11 +45,15 @@
 .headerModePill {
   position: relative;
   display: flex;
-  background-color: #262626;
-  border-radius: 6px;
+  align-items: center;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 7px;
   padding: 2px;
-  margin: 0 6px;
-  width: 150px;
+  margin: 0 var(--space-3);
+  width: 164px;
+  height: 30px;
+  flex-shrink: 0;
 }
 
 .headerModeBg {
@@ -55,14 +62,15 @@
   left: 2px;
   width: calc(50% - 2px);
   height: calc(100% - 4px);
-  background-color: #3b3b3b;
-  border-radius: 4px;
+  background-color: var(--bg-elevated);
+  border-radius: 5px;
+  box-shadow: inset 0 0 0 1px var(--border-strong);
   transition: transform 0.2s cubic-bezier(0.2, 0, 0, 1);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
 .headerModeBtn {
   flex: 1;
+  align-self: stretch;
   position: relative;
   z-index: 2;
   display: flex;
@@ -71,91 +79,190 @@
   gap: 5px;
   background: transparent;
   border: none;
-  color: #a3a3a3;
-  font-size: 11px;
-  font-weight: 500;
-  padding: 3px 0;
+  border-radius: 5px;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  padding: 0;
   cursor: pointer;
   transition: color 0.15s ease;
 }
 
+.headerModeBtn:hover {
+  color: var(--text-primary);
+}
+
+.headerModeBtn:focus-visible {
+  outline: var(--focus-ring-width) solid var(--accent);
+  outline-offset: -2px;
+}
+
 .headerModeBtn.activeHeaderMode {
-  color: #ffffff;
+  color: var(--text-primary);
 }
 
 .menuNav {
   display: flex;
-  gap: 14px;
-  color: #94a3b8;
-  font-size: 12px;
+  gap: 2px;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
 }
 
-.menuNav span {
-  cursor: pointer;
-  transition: color 0.15s ease;
+.menuWrap {
+  position: relative;
 }
 
-.menuNav span:hover {
-  color: #f1f5f9;
+.menuTrigger {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  padding: 3px var(--space-4);
+  border-radius: var(--radius-sm);
+}
+
+.menuTrigger:hover,
+.menuTriggerOpen {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 220px;
+  z-index: var(--z-dropdown);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  padding: var(--space-2);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+}
+
+.menuItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-8);
+  text-align: left;
+  padding: var(--space-3) var(--space-5);
+  border-radius: 5px;
+  color: var(--text-primary);
+  font-size: 12.5px;
+}
+
+.menuItem:hover:not(:disabled) {
+  background: var(--accent-fill);
+  color: var(--text-on-accent);
+}
+
+.menuItem:disabled {
+  color: var(--text-disabled);
+  cursor: default;
+}
+
+.menuHint {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.menuItem:hover:not(:disabled) .menuHint {
+  color: var(--text-on-accent);
+}
+
+.menuSep {
+  height: 1px;
+  background: var(--border);
+  margin: var(--space-2) 2px;
+}
+
+.whatsNewPanel {
+  left: auto;
+  right: 0;
+  width: 340px;
+  padding: 12px 14px;
+  gap: 8px;
+}
+
+.whatsNewTitle {
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+}
+
+.whatsNewList {
+  padding-left: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.5;
 }
 
 .ideTitle {
-  font-weight: 500;
-  color: #94a3b8;
-  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  max-width: 100%;
+  font-weight: var(--font-weight-medium);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
   letter-spacing: 0.3px;
 }
 
+.ideTitleName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* One dot for "there are unsaved buffers somewhere in this project". The tab
+   strip says which; this says not to close the window without looking. */
+.dirtyDot {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-subtle);
+}
+
 .leftCowork {
-  gap: 6px;
+  gap: var(--space-3);
 }
 
 .navIconBtn {
   background: transparent;
   border: none;
-  color: #8b949e;
-  padding: 4px 6px;
-  border-radius: 4px;
+  color: var(--text-secondary);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
   cursor: pointer;
   display: flex;
   align-items: center;
-  transition: all 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .navIconBtn:hover {
-  background-color: #21262d;
-  color: #e6edf3;
-}
-
-.navArrows {
-  display: flex;
-  gap: 2px;
-  margin-left: 4px;
-}
-
-.arrowBtn {
-  color: #6e7681;
-  font-size: 16px;
-  padding: 0 4px;
-  cursor: pointer;
-}
-
-.arrowBtn:hover {
-  color: #c9d1d9;
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 .coworkTitle {
-  font-weight: 500;
-  color: #8b949e;
-  font-size: 12px;
+  font-weight: var(--font-weight-medium);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
 }
 
 .right {
-  gap: 6px;
+  gap: var(--space-3);
 }
 
 .rightCowork {
-  gap: 12px;
+  gap: 5px;
 }
 
 .whatsNewBtn {
@@ -164,66 +271,112 @@
   gap: 5px;
   background: transparent;
   border: none;
-  color: #c9d1d9;
-  font-size: 12px;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
   cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 4px;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-sm);
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .whatsNewBtn:hover {
-  background-color: #21262d;
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 .topIconBtn {
-  background: transparent;
-  border: none;
-  color: #94a3b8;
-  padding: 4px;
-  border-radius: 4px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  transition: all 0.15s ease;
-}
-
-.topIconBtn:hover {
-  background-color: rgba(255, 255, 255, 0.08);
-  color: #f8fafc;
-}
-
-.avatarMini {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background-color: #1e293b;
-  border: 1px solid #334155;
-  color: #94a3b8;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-left: 4px;
+  width: 26px;
+  height: 24px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 5px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
+.topIconBtn:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.topIconBtn:focus-visible,
+.navIconBtn:focus-visible {
+  outline: var(--focus-ring-width) solid var(--accent);
+  outline-offset: -1px;
+}
+
+/* The min/max/close controls. They were #64748b on #121212 — about 3.1:1, below the
+ * 3:1-to-4.5:1 the audit flagged as too faint. --text-secondary (#a3a3a3) clears AA
+ * for these small glyphs, and each lights to full --text-primary on hover. */
 .windowControls {
   display: flex;
-  gap: 10px;
-  margin-left: 8px;
-  color: #64748b;
-  font-size: 12px;
+  align-items: center;
+  gap: 2px;
+  margin-left: var(--space-4);
+  padding-left: var(--space-4);
+  border-left: 1px solid var(--border);
+  color: var(--text-secondary);
 }
 
 .winBtn, .winBtnClose {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
   cursor: pointer;
-  padding: 2px 4px;
-  transition: color 0.15s ease;
+  transition: color 0.15s ease, background-color 0.15s ease;
 }
 
 .winBtn:hover {
-  color: #f1f5f9;
+  color: var(--text-primary);
+  background-color: var(--bg-hover);
+}
+
+.winBtn:focus-visible,
+.winBtnClose:focus-visible {
+  outline: var(--focus-ring-width) solid var(--accent);
+  outline-offset: -1px;
 }
 
 .winBtnClose:hover {
-  color: #ef4444;
+  color: #ffffff; /* theme: fixed */
+  background-color: var(--error);
 }
 
+
+/* Long menus (the compact one on a narrow window) scroll instead of running off screen. */
+.menu {
+  max-height: calc(100vh - 60px);
+  overflow-y: auto;
+}
+.center { min-width: 0; flex: 1; max-width: 440px; overflow: hidden; }
+.commandBar { width: 100%; min-width: 100px; height: 28px; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 0 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-secondary); font-size: var(--text-xs); color: var(--text-muted); }
+.commandBar:hover { border-color: var(--border-strong); color: var(--text-primary); }
+.commandBar span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.commandBar kbd { margin-left: auto; flex-shrink: 0; font-family: inherit; font-size: 10px; color: var(--text-muted); border: 1px solid var(--border); padding: 1px 4px; border-radius: 3px; }
+.brandName { color: var(--text-primary); font-size: 15px; font-weight: 600; letter-spacing: -.6px; padding-left: 2px; }
+.focusExit { background: var(--accent-subtle); color: var(--accent); padding: 5px 9px; border-radius: 5px; font-size: var(--text-xs); white-space: nowrap; }
+.ideTitleName, .coworkTitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 760px) {
+  .brandName, .whatsNewBtn { display: none; }
+  .headerModePill { width: 142px; margin: 0 2px; }
+  .titleBar { gap: 6px; padding: 0 6px; }
+  .windowControls { margin-left: 2px; padding-left: 2px; }
+}
+@media (max-width: 620px) { .center { display: none; } .right, .rightCowork { gap: 2px; } .winBtn, .winBtnClose { width: 24px; } }
+@media (max-width: 430px) { .headerModePill { width: 114px; } .left > svg, .leftCowork > svg { display: none; } .right > .topIconBtn:not(:last-of-type) { display: none; } .focusExit { max-width: 62px; } }

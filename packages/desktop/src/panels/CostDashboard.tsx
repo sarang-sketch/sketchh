@@ -36,8 +36,17 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { AlertCircle, Refresh, Zap } from '../components/Icons'
 import { useSketchClient } from '../lib/ClientProvider'
 import { useAppState } from '../state/AppState'
-import type { CostEntry, CostReport } from '../lib/client'
+import type { CostEntry, CostReport, UsageSummary } from '../lib/client'
 import styles from './CostDashboard.module.css'
+
+/** Human label per non-run cause. */
+const CAUSE_LABELS: Record<string, string> = {
+  completion: 'Inline completions',
+  'inline-edit': 'Inline edits',
+  'commit-message': 'Commit messages',
+  'connection-test': 'Connection tests',
+  'model-list': 'Model listing',
+}
 
 export function CostDashboard() {
   const { projectRoot } = useAppState()
@@ -46,6 +55,7 @@ export function CostDashboard() {
   const [report, setReport] = useState<CostReport | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [usage, setUsage] = useState<UsageSummary | null>(null)
   const generation = useRef(0)
 
   const canRead = client.cost !== undefined
@@ -69,6 +79,18 @@ export function CostDashboard() {
         setError(`The cost log could not be read: ${message(err)}`)
       } finally {
         if (generation.current === ticket) setLoading(false)
+      }
+      // Non-run calls (completions, inline edits, …) live in ~/.sketch/usage, not the
+      // project log, so they are fetched separately. A failure here is not fatal to the
+      // main cost view.
+      const usageCall = client.costUsage
+      if (usageCall !== undefined) {
+        try {
+          const answer = await usageCall.call(client, {})
+          if (generation.current === ticket) setUsage(answer)
+        } catch {
+          if (generation.current === ticket) setUsage(null)
+        }
       }
     },
     [client],
@@ -196,9 +218,49 @@ export function CostDashboard() {
             Every figure here is summed from {report.root}/.sketch/events/. There is no separate
             counter to disagree with it, and each row above names the log line it came from.
           </p>
+
+          <NotTiedToAMessage usage={usage} />
         </>
       )}
     </Frame>
+  )
+}
+
+/**
+ * Model calls NOT tied to a message — completions, inline edits, commit messages,
+ * connection tests, model listing — grouped by cause, read from ~/.sketch/usage. These
+ * never enter a project's event log. Unknown tokens are shown as unknown, never as 0.
+ */
+function NotTiedToAMessage({ usage }: { usage: UsageSummary | null }) {
+  if (usage === null || usage.total.calls === 0) return null
+  return (
+    <>
+      <h3 className={styles.sectionTitle}>Model calls not tied to a message</h3>
+      <ul className={styles.runs} aria-label="Model calls not tied to a message">
+        {usage.byCause.map((c) => {
+          const tokens = c.tokensIn + c.tokensOut
+          return (
+            <li key={c.cause} className={styles.run}>
+              <code className={styles.runId}>{CAUSE_LABELS[c.cause] ?? c.cause}</code>
+              <span className={styles.runMoney}>
+                {c.calls} call{c.calls === 1 ? '' : 's'}
+              </span>
+              <span className={styles.runMeta}>
+                {tokens > 0 ? `${c.tokensIn} in / ${c.tokensOut} out` : 'no tokens'}
+                {c.usageUnknown > 0 ? ` · tokens unknown for ${c.usageUnknown}` : ''}
+                {c.usageEstimated > 0 ? ` · ${c.usageEstimated} estimated` : ''}
+                {c.failed > 0 ? ` · ${c.failed} failed` : ''}
+              </span>
+            </li>
+          )
+        })}
+      </ul>
+      <p className={styles.footNote}>
+        These are summed from the engine's ~/.sketch/usage log, which records a cause, provider
+        and token count per call and never a key, a prompt, or a reply. They are kept out of the
+        project event log so a completion on every typing pause does not bury your runs.
+      </p>
+    </>
   )
 }
 
@@ -207,6 +269,10 @@ function Total({ report }: { report: CostReport }) {
   const { total } = report
   const nothingRan = total.calls === 0 && total.cacheHits === 0
   const allUnknown = total.calls > 0 && total.unpriced === total.calls
+  // Present on the ledger total; the client type does not yet declare them, so read
+  // narrowly. These are the invariant-3 honesty counts.
+  const usageUnknown = (total as { usageUnknown?: number }).usageUnknown ?? 0
+  const usageEstimatedCalls = (total as { usageEstimatedCalls?: number }).usageEstimatedCalls ?? 0
 
   return (
     <div className={styles.total} role="status">
@@ -236,6 +302,21 @@ function Total({ report }: { report: CostReport }) {
           </span>
         </p>
       )}
+      {usageUnknown > 0 && (
+        <p className={styles.warning}>
+          <AlertCircle size={12} />
+          <span>
+            Tokens are unknown for {usageUnknown} of {total.calls} call(s) — the provider reported
+            none — so they are shown as unknown here, never as 0, and their cost is unknown.
+          </span>
+        </p>
+      )}
+      {usageEstimatedCalls > 0 && (
+        <p className={styles.note}>
+          {usageEstimatedCalls} call(s) used the offline test provider, whose token numbers are
+          estimates (~characters/4), not a provider's own count.
+        </p>
+      )}
       {total.cacheHits > 0 && (
         <p className={styles.note}>
           {total.cacheHits} request(s) were answered from the cache and made no network call
@@ -248,6 +329,10 @@ function Total({ report }: { report: CostReport }) {
 
 /** One call, with the log line it came from. */
 function Row({ entry }: { entry: CostEntry }) {
+  // The model the provider NAMED when a router answered with a different one than
+  // requested. Present on the ledger entry; the client type does not yet declare it,
+  // so it is read narrowly and shown only when it differs.
+  const requestedModel = (entry as { requestedModel?: string | null }).requestedModel ?? null
   return (
     <li className={styles.entry}>
       <span className={entry.usd === null ? styles.unknownMoney : styles.entryMoney}>
@@ -255,6 +340,11 @@ function Row({ entry }: { entry: CostEntry }) {
       </span>
       <span className={styles.entryModel}>
         {entry.model ?? <span className={styles.unnamed}>model not recorded</span>}
+        {requestedModel !== null && requestedModel !== entry.model && (
+          <span className={styles.localMark} title={`Requested ${requestedModel}; a router answered with ${entry.model}`}>
+            {' '}← {requestedModel}
+          </span>
+        )}
         {entry.local && <span className={styles.localMark}> local</span>}
       </span>
       <span className={styles.entryMeta}>

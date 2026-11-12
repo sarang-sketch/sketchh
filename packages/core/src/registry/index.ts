@@ -52,12 +52,14 @@ export {
   promoteInstalledSkill,
   readInstalledSkillGrant,
   trainingArtifactPath,
+  uninstallSkill,
   writeInstalledSkillGrant,
 } from './grants.js'
 export type {
   InstalledGrantResult,
   InstalledSkillGrant,
   PromoteSkillResult,
+  UninstallSkillResult,
 } from './grants.js'
 
 export { pinRegistry, writePinnedRegistry } from './pin.js'

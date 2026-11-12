@@ -322,6 +322,87 @@ describe('StdioSketchClient — framing', () => {
   })
 })
 
+describe('StdioSketchClient — process lifecycle (W10 invariant 3)', () => {
+  /** A spawner that counts how many times it was actually asked to start a process. */
+  class CountingSidecar extends FakeSidecar {
+    spawnCount = 0
+    override readonly spawn: SidecarSpawner = async (handlers) => {
+      this.spawnCount += 1
+      this.handlers = handlers
+      return {
+        write: async (data: string) => {
+          this.written.push(data)
+        },
+        kill: async () => {
+          this.killed = true
+        },
+      }
+    }
+  }
+
+  it('does not double-spawn when two first calls race (single-flight ensureStarted)', async () => {
+    const fake = new CountingSidecar()
+    const client = new StdioSketchClient({ spawn: fake.spawn, onDiagnostic: () => {} })
+
+    // Two calls before any response: both must share the one in-flight spawn.
+    const a = client.ping()
+    const b = client.ping()
+    const reqs = await (async () => {
+      for (let i = 0; i < 50; i++) {
+        if (fake.requests().length >= 2) return fake.requests()
+        await new Promise((r) => setTimeout(r, 1))
+      }
+      return fake.requests()
+    })()
+
+    expect(fake.spawnCount).toBe(1) // one process, not two
+    expect(reqs.length).toBe(2) // both requests were written to that one process
+    for (const req of reqs) {
+      fake.stdout(`${JSON.stringify({ id: req.id, ok: true, result: { version: '1' } })}\n`)
+    }
+    await Promise.all([a, b])
+  })
+
+  it('shows a clear engine-stopped error mid-request, then the next call restarts the engine', async () => {
+    const fake = new CountingSidecar()
+    const client = new StdioSketchClient({ spawn: fake.spawn, onDiagnostic: () => {} })
+
+    // A request is in flight when the child dies.
+    const first = client.run({ id: 'r1', prompt: 'work', verify: [] })
+    await nextRequest(fake)
+    expect(fake.spawnCount).toBe(1)
+    fake.handlers.exit({ code: null, message: 'killed' })
+
+    // The in-flight request rejects with a clear "engine stopped" message — not a hang,
+    // not a leak.
+    await expect(first).rejects.toThrow(/sidecar stopped/)
+
+    // Drop the dead request's frame so the next poll only sees the restart request.
+    fake.written.length = 0
+
+    // The NEXT call restarts the engine (ensureStarted spawns again) and succeeds.
+    const second = client.ping()
+    const req = await nextRequest(fake)
+    expect(fake.spawnCount).toBe(2) // a fresh process for the new call
+    fake.stdout(`${JSON.stringify({ id: req.id, ok: true, result: { version: '2' } })}\n`)
+    await expect(second).resolves.toMatchObject({ ok: true, version: '2' })
+  })
+
+  it('close() terminates the child and fails anything still in flight', async () => {
+    const fake = new CountingSidecar()
+    const client = new StdioSketchClient({ spawn: fake.spawn, onDiagnostic: () => {} })
+
+    const pending = client.run({ id: 'r2', prompt: 'long', verify: [] })
+    await nextRequest(fake)
+    await client.close()
+
+    expect(fake.killed).toBe(true)
+    await expect(pending).rejects.toThrow(/closed/)
+    // close() is idempotent.
+    await expect(client.close()).resolves.toBeUndefined()
+  })
+})
+
 describe('StdioSketchClient — honest failure', () => {
   const unavailable: SidecarSpawner = async () => {
     throw new Error('sidecar binary not found')

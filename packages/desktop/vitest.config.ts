@@ -7,6 +7,8 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   test: {
+    // Bound concurrent jsdom instances and transforms on high-core desktops.
+    maxWorkers: 4,
     environment: 'jsdom',
     include: ['src/**/*.test.{ts,tsx}'],
     // jsdom pairs Node's `fetch` with jsdom's `AbortController`, and Node's fetch
@@ -17,5 +19,9 @@ export default defineConfig({
     // CSS modules resolve to a proxy, so class names are irrelevant in tests —
     // assertions go through roles and text, which is what a user actually sees.
     css: false,
+    // Offline Mode is saved in the user's home (`~/.sketch/privacy.json`). Pinning it
+    // off keeps a developer's own setting out of the engine methods these tests drive;
+    // the Privacy tests inject their own environment and a temporary home.
+    env: { SKETCH_OFFLINE: '0' },
   },
 })

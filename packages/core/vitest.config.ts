@@ -1,13 +1,15 @@
-// Test config for the engine. It exists for ONE reason: to install the no-egress
-// tripwire (`test/setup/noEgress.ts`) for every core test file, so that "nothing
-// has ever run against a real provider" is enforced by the runner rather than by
-// convention. Everything else is vitest's default on purpose — file discovery,
-// pool and isolation are unchanged from the configuration-free setup this replaced,
-// so the suite that ran before this file runs identically after it.
+// Install the no-egress tripwire for every engine test and bound worker pressure.
+// Test discovery, isolation, and the normal per-test timeout remain unchanged.
 import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
   test: {
+    // Unbounded workers contend on filesystem fixtures on Windows/high-core hosts.
+    maxWorkers: 4,
     setupFiles: ['./test/setup/noEgress.ts'],
+    // Offline Mode is saved in the user's home (`~/.sketch/privacy.json`). Pinning it
+    // off here keeps a developer's own setting out of the suite; the Offline Mode
+    // tests pass an explicit environment and a temporary home instead.
+    env: { SKETCH_OFFLINE: '0' },
   },
 })

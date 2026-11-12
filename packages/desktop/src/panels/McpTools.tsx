@@ -35,6 +35,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { AlertCircle, Check, Server, Shield } from '../components/Icons'
 import { useSketchClient } from '../lib/ClientProvider'
 import type { McpCatalogResult } from '../lib/client'
+import { UserMcpServers } from './UserMcpServers'
 import styles from './McpTools.module.css'
 
 /**
@@ -105,6 +106,7 @@ export function McpTools() {
 
   return (
     <Frame>
+      <UserMcpServers />
       {error !== null && (
         <div className={styles.error} role="alert">
           <AlertCircle size={13} />

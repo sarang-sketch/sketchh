@@ -4,6 +4,7 @@ import { describe, it, expect } from 'vitest'
 import {
   basename,
   canonicalPath,
+  conversationRootRelation,
   isAbsolutePath,
   isWithinRoot,
   languageForPath,
@@ -92,5 +93,30 @@ describe('languageForPath', () => {
   it('falls back to plaintext rather than guessing a wrong grammar', () => {
     expect(languageForPath('a/LICENSE')).toBe('plaintext')
     expect(languageForPath('a/data.unknownext')).toBe('plaintext')
+  })
+})
+
+describe('conversationRootRelation', () => {
+  const WS = 'C:/Users/me/project'
+
+  it('is "none" when the conversation has no root or no folder is open', () => {
+    expect(conversationRootRelation(WS, null)).toBe('none')
+    expect(conversationRootRelation(WS, undefined)).toBe('none')
+    expect(conversationRootRelation(WS, '')).toBe('none')
+    expect(conversationRootRelation(null, 'C:/anything')).toBe('none')
+  })
+
+  it('is "inside" for the workspace root itself and for a nested project', () => {
+    expect(conversationRootRelation(WS, 'C:/Users/me/project')).toBe('inside')
+    expect(conversationRootRelation(WS, 'C:/Users/me/project/web-app')).toBe('inside')
+    // Case / slash insensitive, like isWithinRoot.
+    expect(conversationRootRelation(WS, 'c:\\Users\\me\\project\\web-app')).toBe('inside')
+  })
+
+  it('is "outside" for another folder or a PARENT of the open one', () => {
+    expect(conversationRootRelation(WS, 'C:/Users/me/other-repo')).toBe('outside')
+    expect(conversationRootRelation(WS, 'C:/Users/me')).toBe('outside') // a parent
+    // A sibling whose name is a prefix of the workspace is NOT inside (component-wise).
+    expect(conversationRootRelation(WS, 'C:/Users/me/project-2')).toBe('outside')
   })
 })

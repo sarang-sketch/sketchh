@@ -1,0 +1,116 @@
+/* A real shell: the emulator fills the panel; everything else floats over its edge. */
+.shell {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  background-color: var(--bg-primary);
+}
+
+.screen {
+  flex: 1;
+  min-height: 0;
+  padding: 6px 4px 2px 10px;
+  overflow: hidden;
+}
+
+/* xterm.js sizes itself to this box; it must not add its own scrollbars outside it. */
+.screen :global(.xterm) {
+  height: 100%;
+}
+
+.screen :global(.xterm-viewport) {
+  scrollbar-width: thin;
+  scrollbar-color: var(--bg-hover) transparent;
+}
+
+.message {
+  padding: 12px;
+  color: var(--text-muted);
+  font: 12px var(--font-mono);
+}
+
+.consent {
+  margin: 12px;
+  padding: 12px;
+  border: 1px solid var(--warning);
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.consentTitle strong {
+  color: var(--accent);
+}
+
+.consentNote {
+  margin: 4px 0 10px;
+  color: var(--warning);
+  font-size: 11px;
+}
+
+.consentActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.primary,
+.secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.primary {
+  border-color: var(--accent-fill);
+  background: var(--accent-fill);
+  color: var(--text-on-accent);
+}
+
+.secondary {
+  background: transparent;
+  color: var(--text-primary);
+}
+
+.secondary:hover,
+.primary:hover {
+  filter: brightness(1.1);
+}
+
+.banner {
+  position: absolute;
+  right: 12px;
+  bottom: 10px;
+  left: 12px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 7px 10px;
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  color: var(--error);
+  font-size: 11px;
+}
+
+.toast {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-size: 11px;
+}
+

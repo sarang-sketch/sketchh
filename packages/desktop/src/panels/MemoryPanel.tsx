@@ -34,6 +34,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AlertCircle, Check, Refresh, Search, X } from '../components/Icons'
 import { useSketchClient } from '../lib/ClientProvider'
+import { isComposing } from '../lib/keys'
 import { useAppState } from '../state/AppState'
 import type {
   MemoryEntryRow,
@@ -199,7 +200,7 @@ export function MemoryPanel() {
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           onKeyDown={(event) => {
-            if (event.key === 'Enter') void runSearch()
+            if (event.key === 'Enter' && !isComposing(event)) void runSearch()
           }}
         />
       </div>

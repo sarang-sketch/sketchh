@@ -44,6 +44,27 @@ export const FolderOpen = createIcon(
 );
 export const ChevronRight = createIcon(<polyline points="9 18 15 12 9 6" />);
 export const ChevronDown = createIcon(<polyline points="6 9 12 15 18 9" />);
+// Comparisons: Open Changes (a plus over a minus), side by side, and fold unchanged lines.
+export const Diff = createIcon(<><path d="M12 3v14" /><path d="M5 10h14" /><path d="M5 21h14" /></>);
+export const Columns = createIcon(<><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M12 3v18" /></>);
+export const FoldVertical = createIcon(
+  <><path d="M12 22v-6" /><path d="M12 8V2" /><path d="M4 12H2" /><path d="M10 12H8" /><path d="M16 12h-2" /><path d="M22 12h-2" /><path d="m15 19-3-3-3 3" /><path d="m15 5-3 3-3-3" /></>,
+);
+export const Undo = createIcon(
+  <>
+    <polyline points="9 14 4 9 9 4" />
+    <path d="M20 20v-7a4 4 0 0 0-4-4H4" />
+  </>
+);
+export const Trash = createIcon(
+  <>
+    <polyline points="3 6 5 6 21 6" />
+    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+    <path d="M10 11v6" />
+    <path d="M14 11v6" />
+    <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+  </>
+);
 
 // Search & Git
 export const Search = createIcon(
@@ -102,6 +123,9 @@ export const X = createIcon(
   </>
 );
 export const Minus = createIcon(<line x1="5" y1="12" x2="19" y2="12" />);
+
+/** A window's maximize control: a plain square, not the expand-arrows `Maximize`. */
+export const WindowMaximize = createIcon(<rect x="5" y="5" width="14" height="14" rx="1.5" />);
 
 // Actions
 export const Send = createIcon(
@@ -195,10 +219,13 @@ export const Brain = createIcon(
 );
 export const Sparkles = createIcon(
   <>
-    <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+    {/* One large four-point star and two small ones — the "AI" mark. It used to be a
+        dollar sign (`M12 2v20M17 5H9.5…`), which put "$" beside every agent reply. */}
+    <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z" />
+    <path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15z" />
+    <path d="M5 2l.6 1.4L7 4l-1.4.6L5 6l-.6-1.4L3 4l1.4-.6L5 2z" />
   </>
-); // This is not actual sparkles, let's replace:
-// Wait, I should rewrite Sparkles
+);
 export const Zap = createIcon(
   <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
 );
@@ -448,4 +475,78 @@ export const PanelLeftOpen = createIcon(
 export const File = Files;
 export const ShoppingBag = Store;
 export const Settings2 = Settings;
+
+// Explorer, editor, git and run actions.
+export const FilePlus = createIcon(
+  <>
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+    <polyline points="14 2 14 8 20 8" />
+    <line x1="12" y1="18" x2="12" y2="12" />
+    <line x1="9" y1="15" x2="15" y2="15" />
+  </>
+);
+export const FolderPlus = createIcon(
+  <>
+    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+    <line x1="12" y1="11" x2="12" y2="17" />
+    <line x1="9" y1="14" x2="15" y2="14" />
+  </>
+);
+export const Pencil = createIcon(
+  <>
+    <path d="M12 20h9" />
+    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+  </>
+);
+export const CollapseAll = createIcon(
+  <>
+    <polyline points="4 14 10 14 10 20" />
+    <polyline points="20 10 14 10 14 4" />
+    <line x1="14" y1="10" x2="21" y2="3" />
+    <line x1="3" y1="21" x2="10" y2="14" />
+  </>
+);
+export const Eye = createIcon(
+  <>
+    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+    <circle cx="12" cy="12" r="3" />
+  </>
+);
+export const ArrowUp = createIcon(
+  <>
+    <line x1="12" y1="19" x2="12" y2="5" />
+    <polyline points="5 12 12 5 19 12" />
+  </>
+);
+export const ArrowDown = createIcon(
+  <>
+    <line x1="12" y1="5" x2="12" y2="19" />
+    <polyline points="19 12 12 19 5 12" />
+  </>
+);
+export const MoreHorizontal = createIcon(
+  <>
+    <circle cx="12" cy="12" r="1" />
+    <circle cx="19" cy="12" r="1" />
+    <circle cx="5" cy="12" r="1" />
+  </>
+);
+export const Maximize = createIcon(
+  <>
+    <polyline points="15 3 21 3 21 9" />
+    <polyline points="9 21 3 21 3 15" />
+    <line x1="21" y1="3" x2="14" y2="10" />
+    <line x1="3" y1="21" x2="10" y2="14" />
+  </>
+);
+export const Keyboard = createIcon(
+  <>
+    <rect x="2" y="6" width="20" height="12" rx="2" ry="2" />
+    <line x1="6" y1="10" x2="6" y2="10" />
+    <line x1="10" y1="10" x2="10" y2="10" />
+    <line x1="14" y1="10" x2="14" y2="10" />
+    <line x1="18" y1="10" x2="18" y2="10" />
+    <line x1="7" y1="14" x2="17" y2="14" />
+  </>
+);
 

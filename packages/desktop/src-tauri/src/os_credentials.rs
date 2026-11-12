@@ -159,7 +159,7 @@ impl CredentialBackend for SecretToolBackend {
             // here: an absent key is an answer.
             return Ok(None);
         }
-        let text = String::from_utf8_lossy(&out).to_string();
+        let text = crate::secret_store::secret_from_bytes(&out)?;
         // `secret-tool lookup` does not add a newline, but a value stored by another
         // tool might carry one.
         let trimmed = text.trim_end_matches('\n').to_string();
@@ -275,14 +275,20 @@ mod windows_backend {
             // caller.
             let value = unsafe {
                 let cred = &*raw;
-                let bytes = std::slice::from_raw_parts(
-                    cred.credential_blob,
-                    cred.credential_blob_size as usize,
-                );
-                let text = String::from_utf8_lossy(bytes).to_string();
+                // An empty record may have no blob at all, and a null pointer is not
+                // a slice even at length zero.
+                let text = if cred.credential_blob.is_null() || cred.credential_blob_size == 0 {
+                    Ok(String::new())
+                } else {
+                    let bytes = std::slice::from_raw_parts(
+                        cred.credential_blob,
+                        cred.credential_blob_size as usize,
+                    );
+                    crate::secret_store::secret_from_bytes(bytes)
+                };
                 CredFree(raw as *mut c_void);
                 text
-            };
+            }?;
             Ok(if value.is_empty() { None } else { Some(value) })
         }
 

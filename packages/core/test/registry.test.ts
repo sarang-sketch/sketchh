@@ -26,6 +26,7 @@ import {
   installSkill,
   installedSkillGrantPath,
   installedSkillsDir,
+  uninstallSkill,
   loadManifest,
   MANIFEST_FILENAME,
   MANIFEST_VERSION,
@@ -38,6 +39,7 @@ import {
   type ManifestEntry,
   type RegistryManifest,
 } from '../src/registry/index.js'
+import { loadSkills } from '../src/skills/loader.js'
 import { MemoryEventStore } from '../src/events/index.js'
 
 const tmpDirs: string[] = []
@@ -699,5 +701,100 @@ describe('an open registry requires a review per entry', () => {
     // silently either — dropping it would leave an entry with no review at all,
     // which the gate would then refuse for the wrong stated reason.
     expect(() => parseManifest(JSON.stringify(base))).toThrow(/decision must be/)
+  })
+})
+
+// ── uninstall (B-002) ───────────────────────────────────────────────────────
+//
+// Uses the same real fixture, real filesystem, real loader. The property that
+// matters: an uninstall removes BOTH the skill directory and its persisted grant,
+// is confined to the project's own `.sketch/skills`, refuses a traversing name
+// before it builds a path, and is idempotent with an honest result.
+
+describe('uninstall (B-002)', () => {
+  async function install(): Promise<{ project: string }> {
+    const { registryDir, manifest, files } = await seedRegistry()
+    const project = await makeDir('sketch-uninstall-')
+    const result = await installSkill({
+      manifest,
+      registryDir,
+      name: 'commit-context',
+      projectRoot: project,
+      pinnedFiles: files,
+    })
+    expect(result.ok).toBe(true)
+    // The grant exists after install.
+    await expect(
+      readFile(installedSkillGrantPath(project, 'commit-context'), 'utf8'),
+    ).resolves.toContain('commit-context')
+    return { project }
+  }
+
+  it('removes the skill directory AND its persisted grant, and a run can no longer load it', async () => {
+    const { project } = await install()
+
+    const result = await uninstallSkill(project, 'commit-context')
+    expect(result.ok).toBe(true)
+    expect(result.removedDir).toBe(true)
+    expect(result.removedGrant).toBe(true)
+    expect(result.reason).toBeNull()
+
+    // The directory is gone.
+    await expect(
+      readFile(join(installedSkillsDir(project), 'commit-context', 'SKILL.md'), 'utf8'),
+    ).rejects.toThrow()
+    // The grant file is gone.
+    await expect(
+      readFile(installedSkillGrantPath(project, 'commit-context'), 'utf8'),
+    ).rejects.toThrow()
+    // A run reading the installed-skills dir no longer finds it.
+    const loaded = await loadSkills(installedSkillsDir(project))
+    expect(loaded.skills.some((skill) => skill.name === 'commit-context')).toBe(false)
+  })
+
+  it('is idempotent: a second uninstall is ok with nothing removed', async () => {
+    const { project } = await install()
+
+    const first = await uninstallSkill(project, 'commit-context')
+    expect(first.removedDir).toBe(true)
+
+    const second = await uninstallSkill(project, 'commit-context')
+    expect(second.ok).toBe(true)
+    expect(second.removedDir).toBe(false)
+    expect(second.removedGrant).toBe(false)
+    expect(second.reason).toBeNull()
+  })
+
+  it('refuses a traversing or otherwise unsafe name before touching the disk', async () => {
+    const project = await makeDir('sketch-uninstall-safe-')
+    for (const unsafe of ['../escape', 'nested/skill', 'nested\\skill', '.', '..', ' padded', '']) {
+      const result = await uninstallSkill(project, unsafe)
+      expect(result.ok, unsafe).toBe(false)
+      expect(result.removedDir, unsafe).toBe(false)
+      expect(result.removedGrant, unsafe).toBe(false)
+      expect(result.reason, unsafe).toMatch(/unsafe skill name/)
+    }
+  })
+
+  it('leaves a sibling skill and its grant untouched', async () => {
+    // Confinement in the positive direction: removing one installed skill does not
+    // remove another that happens to share the parent directory.
+    const { registryDir, manifest, files } = await seedRegistry()
+    const project = await makeDir('sketch-uninstall-sibling-')
+    await installSkill({ manifest, registryDir, name: 'commit-context', projectRoot: project, pinnedFiles: files })
+
+    // Hand-create a second installed skill directory + grant to stand in for a
+    // sibling (seedRegistry only pins one). Its grant file is what we assert survives.
+    const otherDir = join(installedSkillsDir(project), 'other-skill')
+    await write(otherDir, 'SKILL.md', '---\nname: other-skill\ndescription: x\n---\nbody\n')
+    const otherGrant = installedSkillGrantPath(project, 'other-skill')
+    await mkdir(dirname(otherGrant), { recursive: true })
+    await writeFile(otherGrant, '{"version":1,"name":"other-skill"}\n', 'utf8')
+
+    const result = await uninstallSkill(project, 'commit-context')
+    expect(result.ok).toBe(true)
+    // The sibling's files and grant are still there.
+    await expect(readFile(join(otherDir, 'SKILL.md'), 'utf8')).resolves.toContain('other-skill')
+    await expect(readFile(otherGrant, 'utf8')).resolves.toContain('other-skill')
   })
 })

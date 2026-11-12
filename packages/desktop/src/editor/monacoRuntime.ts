@@ -48,6 +48,12 @@
 
 import * as monaco from 'monaco-editor/esm/vs/editor/edcore.main'
 import EditorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
+// The language services' workers. Each is its own chunk, fetched the first time a file
+// of that language opens — and never, if language features are switched off.
+import TsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker'
+import JsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker'
+import CssWorker from 'monaco-editor/esm/vs/language/css/css.worker?worker'
+import HtmlWorker from 'monaco-editor/esm/vs/language/html/html.worker?worker'
 
 // Grammars only — each of these is a Monarch tokenizer, not a language service.
 import 'monaco-editor/esm/vs/basic-languages/typescript/typescript.contribution'
@@ -83,10 +89,28 @@ export { SKETCH_THEME } from './extensionRegistry'
  * not `blob:` URLs, which the app's CSP would refuse.
  */
 ;(self as unknown as { MonacoEnvironment?: unknown }).MonacoEnvironment = {
-  getWorker(): Worker {
-    return new EditorWorker()
+  getWorker(_workerId: string, label: string): Worker {
+    switch (label) {
+      case 'typescript':
+      case 'javascript':
+        return new TsWorker()
+      case 'json':
+        return new JsonWorker()
+      case 'css':
+      case 'scss':
+      case 'less':
+        return new CssWorker()
+      case 'html':
+      case 'handlebars':
+      case 'razor':
+        return new HtmlWorker()
+      default:
+        return new EditorWorker()
+    }
   },
 }
+
+let languageServices: Promise<typeof import('./monacoLanguages')> | null = null
 
 /**
  * The real Monaco, behind the narrow api the editor talks to (./monacoApi.ts).
@@ -107,10 +131,60 @@ export { SKETCH_THEME } from './extensionRegistry'
 export const monacoApi: MonacoApi = {
   editor: {
     defineTheme: (name, definition) => monaco.editor.defineTheme(name, definition),
+    setTheme: (name) => monaco.editor.setTheme(name),
     getModel: (path) => monaco.editor.getModel(monaco.Uri.file(path)),
     createModel: (value, language, path) =>
       monaco.editor.createModel(value, language, monaco.Uri.file(path)),
+    // No uri: Monaco gives it an `inmemory://` one, which no file can ever have.
+    createScratchModel: (value, language) => monaco.editor.createModel(value, language),
     create: (container, options) => monaco.editor.create(container, options),
+    // An adapter rather than the widget itself: Monaco's `setModel` also accepts a
+    // view model, so its signature cannot stand in for the narrower one in the seam.
+    // The models handed to it are always real Monaco models — `createModel` and
+    // `createScratchModel` above are the only places this app gets one from.
+    createDiffEditor: (container, options) => {
+      const diff = monaco.editor.createDiffEditor(container, options)
+      return {
+        setModel: (model) =>
+          diff.setModel(
+            model === null
+              ? null
+              : {
+                  original: model.original as unknown as monaco.editor.ITextModel,
+                  modified: model.modified as unknown as monaco.editor.ITextModel,
+                },
+          ),
+        updateOptions: (next) => diff.updateOptions(next),
+        goToDiff: (target) => diff.goToDiff(target),
+        getLineChanges: () => diff.getLineChanges(),
+        onDidUpdateDiff: (listener) => diff.onDidUpdateDiff(() => listener()),
+        focusModified: () => diff.getModifiedEditor().focus(),
+        layout: () => diff.layout(),
+        dispose: () => diff.dispose(),
+      }
+    },
+    onDidChangeMarkers: (listener) =>
+      monaco.editor.onDidChangeMarkers((uris) => listener(uris.map((uri) => uri.fsPath || uri.path))),
+    getMarkers: (path) =>
+      monaco.editor.getModelMarkers({ resource: monaco.Uri.file(path) }).map((marker) => ({
+        severity: marker.severity,
+        message: marker.message,
+        startLineNumber: marker.startLineNumber,
+        startColumn: marker.startColumn,
+        endLineNumber: marker.endLineNumber,
+        endColumn: marker.endColumn,
+        ...(marker.source !== undefined ? { source: marker.source } : {}),
+        ...(marker.code !== undefined ? { code: typeof marker.code === 'string' ? marker.code : { value: marker.code.value } } : {}),
+      })),
+  },
+  languageServices: {
+    async setEnabled(enabled) {
+      // Never loaded until someone wants them; once loaded, switched by configuration.
+      if (!enabled && languageServices === null) return
+      languageServices ??= import('./monacoLanguages')
+      const mod = await languageServices
+      mod.setLanguageServices(enabled)
+    },
   },
   languages: {
     register: (definition) => monaco.languages.register(definition),
@@ -120,6 +194,64 @@ export const monacoApi: MonacoApi = {
           root: rules.map((rule) => [new RegExp(rule.regex), rule.token]),
         },
       }),
+    // Ghost text through Monaco's own inline-suggest widget. Monaco asks on every
+    // pause and cancels the token when the user types on; awaiting the debounce and
+    // re-checking the token is what turns "a request per keystroke" into "a request
+    // per pause". The token's cancellation is forwarded as an AbortSignal so the
+    // engine call is abandoned too.
+    registerInlineCompletions: (provide, options = {}) =>
+      monaco.languages.registerInlineCompletionsProvider('*', {
+        async provideInlineCompletions(model, position, _context, token) {
+          const controller = new AbortController()
+          const subscription = token.onCancellationRequested(() => controller.abort())
+          try {
+            await new Promise((resolve) => setTimeout(resolve, options.debounceMs ?? 350))
+            if (token.isCancellationRequested) return { items: [] }
+            const content = model.getValue()
+            const cursorOffset = model.getOffsetAt(position)
+            const text = await provide({
+              path: model.uri.fsPath || model.uri.path,
+              language: model.getLanguageId(),
+              content,
+              cursorOffset,
+              signal: controller.signal,
+            })
+            if (text === null || text === '' || token.isCancellationRequested) return { items: [] }
+            return {
+              items: [
+                {
+                  insertText: text,
+                  range: new monaco.Range(position.lineNumber, position.column, position.lineNumber, position.column),
+                },
+              ],
+            }
+          } catch {
+            return { items: [] }
+          } finally {
+            subscription.dispose()
+          }
+        },
+        freeInlineCompletions() {},
+      }),
+  },
+  addEditorAction: (editor, action) =>
+    (editor as unknown as monaco.editor.IStandaloneCodeEditor).addAction({
+      id: action.id,
+      label: action.label,
+      ...(action.keybindings !== undefined ? { keybindings: action.keybindings } : {}),
+      ...(action.contextMenuGroupId !== undefined ? { contextMenuGroupId: action.contextMenuGroupId } : {}),
+      ...(action.contextMenuOrder !== undefined ? { contextMenuOrder: action.contextMenuOrder } : {}),
+      run: () => action.run(),
+    }),
+  keys: {
+    ctrlCmd: monaco.KeyMod.CtrlCmd,
+    shift: monaco.KeyMod.Shift,
+    alt: monaco.KeyMod.Alt,
+    keyL: monaco.KeyCode.KeyL,
+    keyK: monaco.KeyCode.KeyK,
+    keyI: monaco.KeyCode.KeyI,
+    backslash: monaco.KeyCode.Backslash,
+    f5: monaco.KeyCode.F5,
   },
 }
 

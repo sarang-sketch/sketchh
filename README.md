@@ -14,7 +14,7 @@ your machine is the model call you configured.
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D20-green.svg)](https://nodejs.org)
 [![Core runtime deps](https://img.shields.io/badge/core%20runtime%20deps-0-brightgreen.svg)](packages/core/package.json)
-[![Tests](https://img.shields.io/badge/tests-1%2C610%20passing-brightgreen.svg)](#verify-it-yourself)
+[![Tests](https://img.shields.io/badge/tests-offline%20suites-blue.svg)](#verify-it-yourself)
 
 [Features](#features) · [Screenshots](#the-two-surfaces) · [Architecture](#architecture) ·
 [Install](#install) · [Contributing](#contributing) · [Why this can compete](#why-sketch-has-a-real-shot-at-the-top)
@@ -46,21 +46,31 @@ hidden in a footnote.
 
 ### 1. Cowork — the agent surface
 
-The agent-first workspace. Delegate a task, watch it work, review artifacts, replay the timeline.
+The task workspace brings projects, reusable workflows, conversations and tools together around
+one composer. The charcoal-and-ember design follows the reference documented in [asta.md](asta.md).
+
+<details>
+<summary>Previous Cowork interface — screenshot from before the November redesign</summary>
 
 <div align="center">
   <img src="docs/assets/sketch-agent-cowork.png" alt="Sketch Cowork — the agent surface: New task, Projects, Artifacts, Scheduled, Timeline, Agent Console and Customize in the sidebar; the centre asks 'What can I take off your plate?' above a prompt box reporting 'No model configured', a 'Work in a project or folder' button, and a task picker" width="100%" />
 </div>
 
-- **New task** starts a delegated run; **Recents** keeps every prior conversation.
-- **Artifacts** holds what a run produced. **Timeline** and **Agent Console** are projections of the
-  event log, so you can replay exactly what happened rather than trusting a summary.
+</details>
+
+- **New task** opens a fresh draft. **Projects** opens real folders or clones repositories, and
+  conversations stay available in the sidebar.
+- **Workflows** offers ten editable starters and your own saved workflows. **Use workflow** prepares
+  instructions for review; a model run starts only when you send the prompt.
+- **Runs**, **Timeline** and **Console** show actual run records. **Skills**, **Tools & MCP** and
+  **Memory** lead to the existing project tools.
 - The composer reports **`No model configured`** when nothing is configured. It does not silently
   fall back to a default — an unconfigured run is refused, not faked.
-- **Work in a project or folder** scopes the agent to a real directory through the native picker.
+- Your unsent draft and attached files follow you between Cowork and Code. Text drafts stay in
+  this window's memory and are cleared by **New task / New chat**; they do not survive app restart.
 
 <details>
-<summary>Text layout of the same screen</summary>
+<summary>Previous Cowork layout, retained with the earlier screenshot</summary>
 
 ```
 ┌───────────────────────────────────────────────────────────────────────────────┐
@@ -89,8 +99,12 @@ The agent-first workspace. Delegate a task, watch it work, review artifacts, rep
 
 ### 2. Code — the IDE surface
 
-The full engineering surface. AI Team shows which of the 13 roles this project can actually verify,
-and says so when it cannot.
+The editor and terminal form one working column beside a full-height agent. Move and resize the
+panes, attach open files from **Agent → Context**, and open review tools without leaving your code.
+Optional workbenches load on first use; switching surfaces preserves the editor and running session.
+
+<details>
+<summary>Previous Code interface — screenshot from before the November redesign</summary>
 
 <div align="center">
   <img src="docs/assets/sketch-ide-code.png" alt="Sketch IDE — the code surface: the AI TEAM panel showing 5 of 13 roles verifiable with the single, plan-then-code and swarm strategies and a note explaining that swarm is off, a centre pane offering Open Folder and Clone Repository, an allowlisted no-shell terminal, and the Agent sidebar" width="100%" />
@@ -103,12 +117,34 @@ Look closely at that AI Team panel, because it is the whole design philosophy in
 - **`single` is `DEFAULT`**, and every measurement is compared against it.
 - **`swarm` is off**, and the panel says exactly why: no pass@k lift has been measured in this
   project, so the cheaper default stands.
-- The terminal labels itself **"allowlisted, no shell — not a sandbox."** That is the honest
-  description of what the boundary actually is.
+- The screenshot shows an earlier terminal, which ran an allowlist of programs with no shell. The
+  terminal now runs your shell (see **The desktop surface** below) and still says plainly that it
+  is not a sandbox.
 - With no folder open, the terminal says so rather than presenting a fake prompt.
 
+</details>
+
+What the Code surface does on your desktop, in real time:
+
+- **A real terminal.** Each tab is a real shell in a pseudo-terminal (ConPTY on Windows, a pty on
+  macOS and Linux), rendered by xterm.js: arrow-key menus (`npm create vite@latest`), REPLs
+  (`python`, `node`), `vim`, `git add -p`, colours, a virtualenv that stays active. The **⌄** next
+  to **+** lists every shell Sketch found on the computer — PowerShell 7, Windows PowerShell,
+  Command Prompt, Git Bash, each WSL distribution, MSYS2, Cygwin, Nushell; zsh, bash, fish on macOS
+  and Linux. Ctrl+C copies a selection and interrupts otherwise; Ctrl+V pastes; file locations and
+  URLs in the output are links; right-click → **Ask Sketch** sends the output to the agent.
+- **The disk, live.** The engine watches the open folder: a file saved by another editor, a
+  `git checkout` in an external terminal or a build writing files shows up in open tabs, the
+  Explorer and Source Control within a moment. A tab with unsaved edits is never overwritten.
+- **Your operating system.** Explorer → **Reveal in File Explorer / Finder** (Shift+Alt+R) and
+  **Open in External Terminal** (Windows Terminal, Terminal.app, your Linux terminal).
+- **Servers the agent can run.** With commands enabled, the agent can start a dev server in the
+  background, read its output and stop it, instead of hanging on a command that never exits. Every
+  background process stops when the run ends.
+- **The window stays where you put it**: size, position and maximized state come back next launch.
+
 <details>
-<summary>Text layout of the same screen</summary>
+<summary>Previous Code layout, retained with the earlier screenshot</summary>
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────────────┐
@@ -138,6 +174,26 @@ Look closely at that AI Team panel, because it is the whole design philosophy in
 ```
 
 </details>
+
+### Make the workspace yours
+
+Open **Customize layout** in the title bar for **Build**, **Review** and **Write** layouts, panel
+visibility and focus mode. **Appearance & customization** opens the live settings preview:
+
+- Choose dark, light or system appearance; graphite, midnight or warm stone surfaces; a preset or
+  custom accent; compact or comfortable spacing; interface font and text size.
+- Move the project sidebar and Code agent to either side. Place the activity bar on the side, at
+  the top, or hide it. Resize panel dividers to suit your window.
+- Adjust Cowork's conversation width and plain, dotted or grid background. Toggle the status bar,
+  starter tips and reduced motion.
+
+Preferences are saved on this device and included in **Settings → Export settings**. Built-in Monaco
+and terminal colors follow the palette. Editor font and custom editor themes have separate settings.
+Use **Ctrl+L** to focus the composer outside the editor or terminal, **Ctrl+K** for commands in Cowork
+or inline edits in Code, and **Ctrl+Shift+L** to enter or leave focus mode.
+
+Research sources, design decisions and the current verification record are in [asta.md](asta.md).
+The screenshots above document the earlier interface; they are not screenshots of this redesign.
 
 ---
 
@@ -227,6 +283,74 @@ byte-identical. Real git panel with correct porcelain parsing for renames, quote
 HEAD, and no upstream. Real explorer, search, terminal, cost dashboard, memory panel, MCP status,
 skills, benchmarks, and a live architecture view with seven generated diagrams.
 
+What the Code surface does as an everyday IDE:
+
+- **Editor.** IntelliSense, hover, go to definition, rename and formatting for TypeScript,
+  JavaScript, JSON, CSS and HTML (Monaco's own language services, loaded on first use), with a
+  **Problems** panel and live error/warning counts. Tabs reorder by drag, close on middle-click and
+  have Close Others / to the Right / Saved / All. A tab with unsaved edits is never closed — or the
+  window quit from the title bar — without Save / Don't Save / Cancel. Auto save, format on save,
+  word wrap, minimap, sticky scroll, font zoom and indentation live in **Settings → Editor**.
+  Markdown files have a preview. Open tabs come back after a restart.
+- **Explorer.** New file (`a/b.ts` creates the folders), new folder, rename (F2), move by drag, and
+  delete to the operating system's trash — contained to the project by real path in the engine,
+  never overwriting anything.
+- **Terminal.** Your shell (Windows PowerShell, or your `$SHELL`), streamed while it runs, in tabs,
+  with Stop / Ctrl+C, input for programs that ask a question, `cd` that sticks inside the project,
+  and ↑/↓ history. It asks once per folder before running commands. It runs in the engine, so a
+  long command never freezes the window.
+- **Run.** The project's own scripts — package.json (with npm, pnpm, yarn or bun), Makefile targets,
+  Python, Cargo and Go entry points — one click each, in their own terminal tab.
+- **Source control.** Stage/unstage one or all, discard, Commit All, branch switch and create,
+  pull (fast-forward only), push (publishing a new branch), fetch, recent commits, a coloured diff,
+  and a commit message drafted by your model from the staged diff.
+- **Side-by-side diff.** Double-click a change in Source Control (or use its compare button, the
+  **Changes** toggle above the editor, or *Git: Open Changes*) to see it side by side or inline,
+  with previous/next change (Alt+F5), and unchanged lines folded on request. It makes git's own
+  comparisons: your edits against what is staged or committed, and what is staged against the last
+  commit. For your edits the right-hand side is the file's own tab — type there, Ctrl+S saves it,
+  and the arrows beside each change put it back.
+- **Light and dark themes.** *Settings → Editor → Color theme*: Dark, Light, or Match system
+  (follows the operating system, live). The window, the code editor, diffs and the terminal all
+  switch at once, and the window opens in your theme. Text in the light theme meets WCAG AA
+  contrast; see [CONTRIBUTING.md](CONTRIBUTING.md#colours-and-the-light-theme) for how it is made.
+- **Find and Replace in Files.** Finds exactly what you type — or a regular expression — with
+  Match Case, Whole Word and Regex toggles and "files to include / exclude" boxes (`src, *.ts`).
+  Replace previews every change in place, asks before Replace All, saves any open tab with unsaved
+  edits first, and offers **Undo** afterwards. One file, or one line, at a time works too.
+  Ctrl+Shift+F searches, Ctrl+Shift+H replaces. What is highlighted is exactly what is replaced:
+  the same engine matcher produces both.
+- **Always in step with the disk.** Files changed outside the editor — a formatter or `git switch`
+  in the terminal, a pull, a discard, an agent's command, another program — reload in their tabs
+  as soon as the command finishes or the window comes back to the front, and while a long-running
+  command prints (a dev server rebuilding, `tsc --watch`), every few seconds. A tab with unsaved
+  edits is never overwritten: it keeps your text and says the file changed. A deleted file keeps
+  its tab until you save it again or close it. The Explorer, Source Control and Quick Open follow
+  too.
+- **Search** opens each match at its line and column. Ctrl+P, Ctrl+Shift+P, Ctrl+Shift+F, Ctrl+B,
+  Ctrl+J and the other usual shortcuts work; the full list is in Settings. Panels resize, and on a
+  narrow window the side panel and chat (and Cowork's conversation list) float over the main view
+  instead of crushing it.
+- **Edit with AI (Ctrl+K).** Select code (or put the caret on a line), say what should change, and
+  the change comes back as a diff over the editor: Ctrl+Enter accepts it as one undoable edit, Esc
+  rejects it, and editing the instruction asks again. Nothing is written until you accept, and if
+  the code changed while the model was writing, it is not applied. With no selection, new code goes
+  on a line below the caret. **Problems** has a ✨ Fix on every problem that does the same on the
+  problem's lines, generating at once.
+- **Changes since the last commit, in the gutter.** Added, changed and deleted lines are marked as
+  you type, against the file in `HEAD`. Alt+F5 / Shift+Alt+F5 move between them, and **Revert This
+  Change** (right-click, or the Edit menu) puts one back as it was committed.
+- **Clickable terminal output.** A dev server's URL opens in your browser; `src/app.ts:12:5`,
+  `app.ts(12,5)`, stack-trace locations and Python tracebacks open the file at that line.
+- **A desktop window, not a web page.** The title bar moves the window, the taskbar shows the file
+  and folder (`● App.tsx — my-app — Sketch`), Ctrl+O opens a folder, **File → Open Recent** lists
+  the folders you used, and F5 opens Run. Closing the window any way at all — the ✕, Alt+F4, the
+  taskbar or the Dock — asks first when a file has unsaved edits. The web view's own behaviour is
+  switched off in the installed app: F5/Ctrl+R no longer reload it, Ctrl+F no longer opens a
+  browser find bar, the mouse's back button and a file dropped on the window cannot navigate away
+  from it, and right-click shows Sketch's menus (or Cut/Copy/Paste in a text field) instead of the
+  browser's.
+
 ### Privacy that is a test, not a promise
 
 No telemetry. No analytics. No crash reporting. No account. No Sketch server. No update check. No
@@ -238,27 +362,18 @@ outbound path in the source.
 
 ## Codebase at a glance
 
-Measured on the tracked tree, so `dist/`, `target/`, `node_modules/` and generated bundles cannot
-inflate it — none of them are tracked. **Code** means `.ts`, `.tsx`, `.rs`, `.mjs`, `.css`, `.html`,
-`.yml`; **test** means any `*.test.ts(x)` plus everything under `packages/core/test/`. Lines are
-physical lines, blanks and comments included.
+Verified locally on 11 November 2026. The detailed redesign validation record is in
+[asta.md](asta.md); run the commands below to check your own checkout.
 
 | Metric | Count |
 |---|---:|
-| First-party code files | **374** |
-| Source files | **259** |
-| **Lines of source code** | **59,186** |
-| Test files | **115** |
-| Lines of test code | **41,564** |
-| Core engine tests passing | **1,087** (59 suites) |
-| Desktop tests passing | **523** (55 suites) |
-| Rust policy + credential tests | **32** (standalone `rustc --test`) |
+| Core engine tests passing | **1,413** (86 files) |
+| Desktop tests passing | **950** (104 files) |
 | Runtime dependencies in `@sketch/core` | **0** |
+| Known npm dependency vulnerabilities | **0** (`npm audit`, including development dependencies) |
 
-**0.70 lines of test for every line of source**, and the tests are mostly invariant gates rather than
-snapshots.
-
-Reproduce the file and line counts yourself — no tool to install, it reads only what git tracks:
+To count source and test lines separately, this optional command reads only what Git tracks.
+Generated output and untracked work are excluded; comments and blank lines are included:
 
 ```bash
 node -e "const{execSync}=require('node:child_process'),fs=require('node:fs');const all=execSync('git ls-files').toString().split('\n').filter(p=>/\.(ts|tsx|rs|mjs|css|html|yml)$/.test(p));const isTest=p=>/\.test\.tsx?$/.test(p)||p.startsWith('packages/core/test/');const L=a=>a.reduce((n,p)=>n+fs.readFileSync(p,'utf8').split('\n').length-1,0);const t=all.filter(isTest),s=all.filter(p=>!isTest(p));console.log({files:all.length,src:s.length,srcLines:L(s),test:t.length,testLines:L(t)})"
@@ -398,8 +513,10 @@ git clone https://github.com/sarang-sketch/sketch.git
 cd sketch
 npm install
 npm run build        # FIRST: the desktop typecheck consumes core's emitted .d.ts
+npm run check:bundle -w @sketch/desktop  # verify lazy workbench loading boundaries
 npm run typecheck
 npm test
+npm run bench:check  # synthetic, offline engine regression gate
 ```
 
 > **Build before typecheck.** On a cold tree, `packages/core/dist` does not exist yet and the desktop
@@ -464,6 +581,21 @@ and a byte-level scan of the serialized JSON both enforce it. LM Studio (`:1234/
 `llama.cpp` work through the same adapter. Free hosted tiers (Google AI Studio, GitHub Models, Groq,
 Cloudflare Workers AI, OpenRouter) and paid providers (OpenAI, Anthropic, Azure) use the same
 catalog. Keys go to the OS credential store, never to a file.
+
+### Use your ChatGPT account — no API key
+
+Open **Connect a model** (first launch, or Settings → Models) and choose **Sign in with ChatGPT**.
+Your browser opens OpenAI's own sign-in page; approve, and Sketch selects your plan's best model
+(GPT-6.1-Sol and family), tests it with one real reply, and is ready. Free, Go, Plus, Pro, Business
+and Edu plans all work; usage counts against your plan's limits rather than a per-token bill.
+
+- No browser on this machine, or the sign-in ports (1455/1457) are taken? Choose **Sign in with a
+  code instead** and type the code at auth.openai.com/codex/device.
+- Switch models any time from the model picker; it lists every model your account offers.
+- **Sign out** in Settings → Models revokes the sign-in at OpenAI and deletes it from this computer.
+
+This is the sign-in OpenAI's Codex CLI uses, the same one OpenCode and Cline ship. See
+[PRIVACY.md §1a](PRIVACY.md) for exactly what is sent where and how the sign-in is stored.
 
 ### The cost ladder
 
@@ -664,6 +796,7 @@ terms. Say "seam" where it is a seam and "stub" where it is a stub — in code, 
 | Document | What it covers |
 |---|---|
 | [architecture.md](architecture.md) | Layers, seams, state directory, data flow, technology boundaries |
+| [asta.md](asta.md) | Code/Cowork design, product research, customization and verification results |
 | [PRIVACY.md](PRIVACY.md) | Every outbound path in the source, and the tests that enforce it |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Ground rules, verification ritual, environment quirks |
 | [SECURITY.md](SECURITY.md) | Private reporting, what is in scope, what hardening is unfinished |
@@ -676,7 +809,7 @@ terms. Say "seam" where it is a seam and "stub" where it is a stub — in code, 
 ## Repository layout
 
 ```
-packages/core        the engine — zero runtime deps, NodeNext, stdio CLI, 1,087 tests
+packages/core        the engine — zero runtime deps, NodeNext, stdio CLI
   src/loop           the seven-action agent state machine
   src/verify         shell-less runner + nine-stage policy
   src/context        walker, graph, hybrid search, embeddings, assembly
@@ -688,9 +821,11 @@ packages/core        the engine — zero runtime deps, NodeNext, stdio CLI, 1,08
   src/rpc            the method table both transports speak
   registry/          curated, hash-pinned skills
 
-packages/desktop     React 19 + Vite window, Tauri 2 shell, 523 tests
+packages/desktop     React 19 + Vite window, Tauri 2 shell
   src/panels         agent, git, explorer, search, terminal, cost, memory, MCP, skills
   src/editor         Monaco integration over one authoritative file cache
+  src/workflows      built-in workflows and validated personal workflow storage
+  src/styles         appearance preferences, design tokens and local fonts
   src/lib            SketchClient contract, stdio + HTTP transports, factory
   src-tauri/         Rust host: command policy, containment, OS credentials
 ```

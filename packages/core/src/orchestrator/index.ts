@@ -7,5 +7,13 @@
 
 export type { FileEdit } from './types.js'
 export { extractJson } from './json.js'
-export { DiskFileWriter, isWithin } from './file-writer.js'
-export type { FileWriter } from './file-writer.js'
+export {
+  DiskFileWriter,
+  SnapshottingFileWriter,
+  assertRealContainment,
+  isWithin,
+  realTargetPath,
+  restoreSnapshot,
+  snapshotDir,
+} from './file-writer.js'
+export type { FileWriter, RestoreOutcome, SnapshotEntry, SnapshotManifest } from './file-writer.js'

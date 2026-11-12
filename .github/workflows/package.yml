@@ -47,6 +47,16 @@ jobs:
       - run: npm run verify:sidecar -w @sketch/desktop
       - name: Build native Tauri package
         run: npm run ${{ matrix.command }} -w @sketch/desktop
+      # Unit tests cannot see a crash at startup (a bad plugin config panics only when the
+      # real runtime starts), so the built app is launched once and must stay up.
+      - name: Boot smoke test
+        if: runner.os != 'Linux'
+        run: npm run smoke:boot -w @sketch/desktop
+      - name: Boot smoke test (virtual display)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get install -y xvfb
+          xvfb-run -a npm run smoke:boot -w @sketch/desktop
       - name: Enforce package size budget
         run: npm run package:size -w @sketch/desktop -- --platform ${{ matrix.platform }}
       - uses: actions/upload-artifact@v4

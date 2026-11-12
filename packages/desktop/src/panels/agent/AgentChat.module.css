@@ -3,7 +3,7 @@
   flex-direction: column;
   height: 100%;
   width: 100%;
-  background-color: #121212;
+  background-color: var(--bg-primary);
   overflow-y: auto;
   font-family: var(--font-sans);
 }
@@ -29,33 +29,36 @@
   margin-bottom: 6px;
 }
 
-.asteriskIcon {
-  color: #f97316;
-  font-size: 28px;
-  font-weight: bold;
+.heroLogo {
+  background: var(--accent);
+  color: var(--text-on-accent);
+  border-radius: var(--radius);
+  padding: 2px 8px;
+  font-weight: var(--font-weight-bold);
+  font-size: 1.2rem;
 }
 
 .heroTitle {
   font-family: var(--font-serif);
   font-size: 32px;
-  font-weight: 500;
-  color: #f5f5f5;
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
   letter-spacing: -0.5px;
 }
 
 .heroSubtitle {
-  color: #737373;
-  font-size: 13px;
+  color: var(--text-muted);
+  font-size: var(--text-base);
   margin-bottom: 28px;
 }
 
 .promptCard {
   width: 100%;
-  background-color: #262626;
-  border: 1px solid #333333;
+  background-color: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
   border-radius: 16px;
   padding: 16px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--shadow-md);
   margin-bottom: 32px;
   display: flex;
   flex-direction: column;
@@ -65,41 +68,53 @@
   width: 100%;
   background: transparent;
   border: none;
-  color: #f5f5f5;
+  color: var(--text-primary);
   font-size: 15px;
   resize: none;
   outline: none;
   font-family: var(--font-sans);
-  margin-bottom: 16px;
+  margin-bottom: 18px;
+  line-height: 1.65;
 }
 
 .promptInput::placeholder {
-  color: #737373;
+  color: var(--text-muted);
+}
+
+.promptInput:focus-visible {
+  outline: none;
 }
 
 .promptCardBottomRow {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
   padding-bottom: 12px;
-  border-bottom: 1px solid #333333;
+  border-bottom: 1px solid var(--border);
   margin-bottom: 12px;
 }
 
 .attachBtn {
   background: transparent;
   border: none;
-  color: #a3a3a3;
+  color: var(--text-secondary);
   cursor: pointer;
   padding: 4px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
 }
 
 .attachBtn:hover {
-  color: #ffffff;
-  background-color: #333333;
+  color: var(--text-primary);
+  background-color: var(--border-strong);
+}
+
+.attachBtn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 
 .promptRightActions {
@@ -112,27 +127,27 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  background-color: #333333;
-  color: #d4d4d4;
-  font-size: 12px;
-  font-weight: 500;
+  background-color: var(--border-strong);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
   padding: 4px 10px;
   border-radius: 14px;
   cursor: pointer;
 }
 
 .modelPillDropdown:hover {
-  background-color: #404040;
-  color: #ffffff;
+  background-color: #404040; /* raised pill hover — derived for light */
+  color: var(--text-primary);
 }
 
 .sendCircleBtn {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background-color: #404040;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background-color: var(--bg-hover);
   border: none;
-  color: #737373;
+  color: var(--text-muted);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -141,9 +156,17 @@
 }
 
 .sendCircleBtn.sendActive {
-  background-color: #f5f5f5;
-  color: #171717;
+  background-color: var(--accent-fill);
+  color: var(--text-on-accent);
 }
+
+.sendCircleBtn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.conversationHeader { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 20px 30px; border-bottom: 1px solid var(--border-subtle); flex-shrink: 0; font-size: var(--text-sm); color: var(--text-secondary); }
+.conversationHeader > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.conversationStatus { color: var(--text-muted); font-size: var(--text-xs); }
 
 .folderContextRow {
   display: flex;
@@ -154,20 +177,20 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  background-color: #333333;
+  background-color: var(--border-strong);
   border: 1px solid #404040;
-  color: #d4d4d4;
-  font-size: 13px;
-  font-weight: 500;
+  color: var(--text-secondary);
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-medium);
   padding: 8px 14px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   transition: background-color 0.15s ease;
 }
 
 .folderPillBtn:hover {
-  background-color: #404040;
-  color: #ffffff;
+  background-color: #404040; /* raised pill hover — derived for light */
+  color: var(--text-primary);
 }
 
 .suggestionsSection {
@@ -181,22 +204,21 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #737373;
-  font-size: 13px;
-
+  color: var(--text-muted);
+  font-size: var(--text-base);
 }
 
 .suggestionTitleLabel {
-  color: #a3a3a3;
-  font-weight: 500;
+  color: var(--text-secondary);
+  font-weight: var(--font-weight-medium);
 }
 
 .suggestionCardList {
   display: flex;
   flex-direction: column;
   gap: 1px;
-  background-color: #262626;
-  border: 1px solid #333333;
+  background-color: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
   border-radius: 12px;
   overflow: hidden;
 }
@@ -206,13 +228,18 @@
   align-items: center;
   gap: 12px;
   padding: 14px 16px;
-  background-color: #1c1c1c;
+  background-color: var(--bg-surface);
   cursor: pointer;
   transition: background-color 0.15s ease;
 }
 
 .suggestionCardItem:hover {
-  background-color: #262626;
+  background-color: var(--bg-elevated);
+}
+
+.suggestionCardItem:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 
 .cardEmoji {
@@ -220,20 +247,20 @@
 }
 
 .cardText {
-  color: #e5e5e5;
-  font-size: 14px;
-  font-weight: 500;
+  color: var(--text-primary);
+  font-size: var(--text-md);
+  font-weight: var(--font-weight-medium);
 }
 
 .customizeFooterLink {
-  color: #737373;
-  font-size: 12px;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
   margin-top: 12px;
   cursor: pointer;
 }
 
 .customizeFooterLink:hover {
-  color: #a3a3a3;
+  color: var(--text-secondary);
 }
 
 /* Chat Active Area */
@@ -242,7 +269,7 @@
   width: 100%;
   max-width: 800px;
   margin: 0 auto;
-  padding: 24px 20px 100px 20px;
+  padding: 24px 20px 16px 20px;
   display: flex;
   flex-direction: column;
   gap: 20px;
@@ -266,48 +293,48 @@
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background-color: #262626;
-  border: 1px solid #333333;
+  background-color: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #f97316;
+  color: var(--accent);
 }
 
 .messageBubble {
   max-width: 85%;
   padding: 14px 18px;
   border-radius: 14px;
-  font-size: 14px;
+  font-size: var(--text-md);
   line-height: 1.5;
 }
 
 .userBubble {
-  background-color: #262626;
-  border: 1px solid #333333;
-  color: #f5f5f5;
-  border-top-right-radius: 4px;
+  background-color: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  color: var(--text-primary);
+  border-top-right-radius: var(--radius-sm);
 }
 
 .assistantBubble {
-  background-color: #1a1a1a;
-  border: 1px solid #262626;
-  color: #e5e5e5;
-  border-top-left-radius: 4px;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  border-top-left-radius: var(--radius-sm);
 }
 
 .agentName {
-  font-weight: 600;
-  color: #f97316;
-  font-size: 12px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--accent);
+  font-size: var(--text-sm);
   margin-bottom: 6px;
 }
 
 .codeBlock {
   margin-top: 12px;
-  background-color: #0d0d0d;
-  border: 1px solid #262626;
-  border-radius: 8px;
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
   overflow: hidden;
 }
 
@@ -316,11 +343,11 @@
   align-items: center;
   justify-content: space-between;
   padding: 6px 12px;
-  background-color: #171717;
-  border-bottom: 1px solid #262626;
+  background-color: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
   font-family: var(--font-mono);
-  font-size: 11px;
-  color: #737373;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
 }
 
 .copyBtn {
@@ -329,32 +356,399 @@
   gap: 4px;
   background: transparent;
   border: none;
-  color: #a3a3a3;
-  font-size: 11px;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
   cursor: pointer;
 }
 
 .codeContent {
   padding: 12px;
   font-family: var(--font-mono);
-  font-size: 12px;
-  color: #e5e5e5;
+  font-size: var(--text-sm);
+  color: var(--text-primary);
   overflow-x: auto;
 }
 
 .activeChatInputWrapper {
-  position: fixed;
-  bottom: 30px;
-  left: calc(260px + (100% - 260px) / 2);
-  transform: translateX(-50%);
-  width: calc(100% - 300px);
-  max-width: 760px;
+  /* Sticky inside the chat's own scroller, not fixed to the window: it stays in the
+     chat column whatever the sidebar is doing and however narrow the window is. */
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  width: 100%;
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 12px 20px 24px;
+  box-sizing: border-box;
+  background: linear-gradient(to bottom, rgba(18, 18, 18, 0), var(--bg-primary) 28%);
 }
 
 .activeChatCard {
-  background-color: #262626;
-  border: 1px solid #333333;
+  background-color: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
   border-radius: 14px;
   padding: 12px;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--shadow-lg);
+}
+
+
+/* ── added: onboarding, composer controls, notes ─────────────────────────── */
+
+.heroSubtitleLink {
+  color: var(--text-muted);
+  font-size: var(--text-base);
+  margin-bottom: 22px;
+}
+
+.heroSubtitleLink:hover {
+  color: var(--text-secondary);
+}
+
+.blocker {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #1f1a14; /* accent-tint notice wash — derived for light */
+  border: 1px solid #4a2f14;
+  color: #fed7aa;
+  border-radius: var(--radius-lg);
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  font-size: var(--text-base);
+}
+
+.blocker > span {
+  flex: 1;
+}
+
+.blockerBtn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--accent-fill);
+  color: var(--text-on-accent);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
+  border-radius: 7px;
+  padding: 6px 10px;
+  white-space: nowrap;
+}
+
+.blockerBtn:hover {
+  background: var(--accent-fill-hover);
+}
+
+.blockerBtn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.leftActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.modeChip {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  padding: 3px 9px;
+}
+
+.modeChip:hover {
+  color: var(--text-primary);
+  border-color: var(--text-muted);
+}
+
+.modeChipOn {
+  color: var(--accent-hover);
+  border-color: #7c2d12; /* accent-tint border — derived for light */
+  background: rgba(234, 88, 12, 0.08);
+}
+
+.attachWrap {
+  position: relative;
+}
+
+.attachMenu {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  width: 320px;
+  z-index: var(--z-dropdown);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  padding: 10px;
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.attachTitle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+}
+
+.attachClose {
+  color: var(--text-muted);
+  display: flex;
+}
+
+.attachList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.attachOption {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  padding: 5px 6px;
+  border-radius: 5px;
+}
+
+.attachOption:hover {
+  background: var(--bg-elevated);
+}
+
+.attachInputRow {
+  display: flex;
+  gap: 6px;
+}
+
+.attachInput {
+  flex: 1;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: 6px 8px;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+
+.attachInput:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.attachAdd {
+  background: var(--border-strong);
+  color: var(--text-primary);
+  border-radius: var(--radius);
+  padding: 0 10px;
+  font-size: var(--text-sm);
+}
+
+.attachHint {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.attachedRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.attachedChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  padding: 2px 4px 2px 8px;
+}
+
+.attachedChip button {
+  color: var(--text-muted);
+  display: flex;
+  padding: 2px;
+}
+
+.recentFolders {
+  display: flex;
+  gap: 6px;
+  margin-left: 8px;
+  overflow: hidden;
+}
+
+.recentFolderBtn {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  border: 1px dashed #404040;
+  border-radius: var(--radius-md);
+  padding: 6px 10px;
+  white-space: nowrap;
+}
+
+.recentFolderBtn:hover {
+  color: var(--text-primary);
+  border-color: var(--text-muted);
+}
+
+.systemRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  align-self: center;
+  max-width: 90%;
+  font-size: 12.5px;
+  color: #d6b98c; /* muted-notice text — derived for light */
+  background: #1c1915;
+  border: 1px solid #3b2f1f;
+  border-radius: var(--radius-md);
+  padding: 8px 12px;
+}
+
+.systemRow svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.userText {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.notOk {
+  margin-left: 8px;
+  font-weight: var(--font-weight-medium);
+  font-size: var(--text-2xs);
+  color: #fca5a5; /* error-tint text — derived for light */
+  border: 1px solid #7f1d1d;
+  border-radius: var(--radius-sm);
+  padding: 0 5px;
+}
+
+/* A run the user stopped: neutral, NOT the red "did not finish" failure chip. */
+.stopped {
+  margin-left: 8px;
+  font-weight: var(--font-weight-medium);
+  font-size: var(--text-2xs);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 0 5px;
+}
+
+/* Copy / Retry under a finished reply. Quiet until the bubble is hovered or a button
+   takes focus, so they do not compete with the reply text. */
+.messageActions {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.messageBubble:hover .messageActions,
+.messageActions:focus-within {
+  opacity: 1;
+}
+
+.msgActionBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 2px var(--space-2);
+  cursor: pointer;
+}
+
+.msgActionBtn:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.msgActionBtn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .messageActions {
+    transition: none;
+  }
+}
+
+.compactMessages {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 12px;
+}
+
+.compactMessages .messageBubble {
+  max-width: 100%;
+  font-size: var(--text-base);
+  padding: 10px 12px;
+}
+
+.compactMessages .assistantRow > div {
+  max-width: 100%;
+}
+
+/* Scrolled up while a run streams: new output waits behind this instead of pulling the
+   reader down. Inline (sticky) in the compact Code chat; above the composer in Cowork. */
+.jumpLatest,
+.jumpLatestFloating {
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  padding: 4px 12px;
+  cursor: pointer;
+  box-shadow: var(--shadow-md);
+}
+
+.jumpLatest:hover,
+.jumpLatestFloating:hover {
+  background: var(--bg-hover);
+}
+
+.jumpLatest:focus-visible,
+.jumpLatestFloating:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.jumpLatest {
+  position: sticky;
+  bottom: 8px;
+  align-self: center;
+  z-index: 2;
+}
+
+.jumpLatestFloating {
+  position: absolute;
+  top: -22px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
 }

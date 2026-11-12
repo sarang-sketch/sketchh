@@ -1,140 +1,115 @@
-import { useState } from 'react';
-import styles from './IdeChatSidebar.module.css';
-import { 
-  Plus, Refresh, X, Sparkles
-} from '../../components/Icons';
-import { useAppState, useAppDispatch } from '../../state/AppState';
-import { ThinkingIndicator } from '../../components/ThinkingIndicator';
-import { ModelSelector } from '../../components/ModelSelector';
+// Code and Cowork use the same agent session and conversation drafts.
+import { useEffect, useId, useState } from 'react'
+import styles from './IdeChatSidebar.module.css'
+import { Plus, MessageSquare, X, FileCode, Code, AlertTriangle, CheckCircle, Folder, Layers, Brain, Shield, ChevronRight } from '../../components/Icons'
+import { SketchMark } from '../../components/SketchMark'
+import { useAppState, useAppDispatch } from '../../state/AppState'
+import { AgentSessionProvider, useOptionalAgentSession } from '../../lib/AgentSession'
+import { Blocker, Composer, MessageList } from '../agent/AgentChat'
+import { basename, relativeToRoot } from '../../editor/paths'
+import { WORKFLOWS } from '../../workflows/catalog'
+
+const SUGGESTIONS = [
+  { id: 'explore', icon: Code, label: 'Explain this project' },
+  { id: 'bug', icon: AlertTriangle, label: 'Find and fix a bug' },
+  { id: 'tests', icon: CheckCircle, label: 'Write tests' },
+] as const
 
 export default function IdeChatSidebar() {
-  const state = useAppState();
-  const dispatch = useAppDispatch();
-  const [inputText, setInputText] = useState('');
+  const shared = useOptionalAgentSession()
+  return shared === null
+    ? <AgentSessionProvider><IdeChatSidebarView /></AgentSessionProvider>
+    : <IdeChatSidebarView />
+}
 
-  const handleSend = () => {
-    if (!inputText.trim()) return;
-    dispatch({
-      type: 'ADD_MESSAGE',
-      payload: { id: crypto.randomUUID(), role: 'user', content: inputText, timestamp: Date.now() }
-    });
-    setInputText('');
+function IdeChatSidebarView() {
+  const state = useAppState()
+  const dispatch = useAppDispatch()
+  const session = useOptionalAgentSession()
+  const [tab, setTab] = useState<'chat' | 'context'>('chat')
+  const id = useId()
+  const empty = state.chatMessages.length === 0 && session?.activeRunId == null
+  const active = state.activeFile && state.projectRoot ? relativeToRoot(state.projectRoot, state.activeFile) : null
+  useEffect(() => {
+    if (state.mode === 'ide' && (state.composerFocusNonce > 0 || state.composerSeed !== null)) setTab('chat')
+  }, [state.composerFocusNonce, state.composerSeed, state.mode])
 
-    dispatch({ type: 'SET_THINKING', payload: { isThinking: true, stage: 'Querying tools & models...' } });
-
-    setTimeout(() => {
-      dispatch({ type: 'SET_THINKING', payload: { isThinking: false } });
-      dispatch({
-        type: 'ADD_MESSAGE',
-        payload: {
-          id: crypto.randomUUID(),
-          role: 'agent',
-          content: 'Analyzed your request. I am applying the required code changes directly to your editor files and verifying with linter.',
-          timestamp: Date.now()
-        }
-      });
-    }, 1000);
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  };
+  const attach = (path: string) => {
+    dispatch({ type: 'SEED_COMPOSER', payload: { text: '', files: [path], preserveText: true } })
+    dispatch({ type: 'FOCUS_COMPOSER' })
+  }
 
   return (
     <div className={styles.sidebar}>
-      {/* Screenshot 2 Header Match */}
       <div className={styles.header}>
-        <div className={styles.agentTab}>
-          <span>Agent</span>
+        <div className={styles.tabs} role="tablist" aria-label="Agent views" onKeyDown={(event) => {
+          if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+          event.preventDefault()
+          const next = event.key === 'Home' ? 'chat' : event.key === 'End' ? 'context' : tab === 'chat' ? 'context' : 'chat'
+          setTab(next)
+          document.getElementById(id + '-' + next)?.focus()
+        }}>
+          {(['chat', 'context'] as const).map((view) => <button key={view} id={id + '-' + view} role="tab" tabIndex={tab === view ? 0 : -1} aria-selected={tab === view} aria-controls={id + '-' + view + '-panel'} onClick={() => setTab(view)}>{view === 'chat' ? 'Agent' : 'Context'}</button>)}
         </div>
         <div className={styles.headerControls}>
-          <button className={styles.hdrBtn} title="New Agent Chat" onClick={() => dispatch({ type: 'CLEAR_MESSAGES' })}>
-            <Plus size={14} />
-          </button>
-          <button className={styles.hdrBtn} title="Reset History">
-            <Refresh size={14} />
-          </button>
-          <button className={styles.hdrBtn} title="More Options">
-            <span>...</span>
-          </button>
-          <button className={styles.hdrBtn} title="Close Panel" onClick={() => dispatch({ type: 'TOGGLE_RIGHT_PANEL' })}>
-            <X size={14} />
-          </button>
+          <button type="button" className={styles.hdrBtn} title="New chat" aria-label="New chat" disabled={session?.activeRunId != null} onClick={() => { dispatch({ type: 'NEW_CONVERSATION' }); dispatch({ type: 'FOCUS_COMPOSER' }) }}><Plus size={15} /></button>
+          <button type="button" className={styles.hdrBtn} title="All conversations" aria-label="All conversations" onClick={() => { dispatch({ type: 'SET_MODE', payload: 'agent' }); dispatch({ type: 'SET_AGENT_VIEW', payload: 'new_task' }) }}><MessageSquare size={14} /></button>
+          <button type="button" className={styles.hdrBtn} title="Close panel" aria-label="Close panel" onClick={() => dispatch({ type: 'TOGGLE_RIGHT_PANEL' })}><X size={14} /></button>
         </div>
       </div>
 
-      {/* Main Agent Area */}
-      <div className={styles.mainCanvas}>
-        <div className={styles.brandWatermark}>
-          <Sparkles className={styles.sparkleLogo} size={24} />
-          <h2 className={styles.watermarkTitle}>Sketch</h2>
+      <div id={id + '-chat-panel'} role="tabpanel" aria-labelledby={id + '-chat'} hidden={tab !== 'chat'} className={styles.chatPanel}>
+        <div className={styles.mainCanvas}>
+          {empty ? <div className={styles.emptyState}>
+            <SketchMark size={34} />
+            <h2>What are we building?</h2>
+            <p>Ask about your code or describe a change. Work through it here with Sketch.</p>
+            {state.projectRoot !== null && state.appearance.showTips && <div className={styles.suggestions}>
+              {SUGGESTIONS.map(({ id: workflowId, icon: Icon, label }) => <button key={workflowId} onClick={() => {
+                const workflow = WORKFLOWS.find((w) => w.id === workflowId)!
+                dispatch({ type: 'SET_AGENT_PREFS', payload: { mode: workflow.mode } })
+                dispatch({ type: 'SEED_COMPOSER', payload: { text: workflow.prompt } })
+              }}><Icon size={14} /><span>{label}</span><ChevronRight size={12} /></button>)}
+            </div>}
+          </div> : <MessageList compact />}
         </div>
+        <div className={styles.bottomCardContainer}>
+          {active && <button className={styles.activeContext} title="Attach the active file to your message" onClick={() => attach(active)}><FileCode size={12} /><span>{active}</span><Plus size={12} /></button>}
+          <Blocker />
+          <div className={styles.promptBoxCard}><Composer placeholder="Ask, / for commands, @ for files…" rows={3} compact acceptSeeds /></div>
+          {state.appearance.showTips && <div className={styles.composerHint}><span><kbd>Ctrl L</kbd> Focus agent</span><span><kbd>Shift Enter</kbd> New line</span></div>}
+        </div>
+      </div>
 
-        {/* Chat Messages */}
-        <div className={styles.messagesList}>
-          {state.chatMessages.map((msg) => (
-            <div key={msg.id} className={`${styles.messageRow} ${msg.role === 'user' ? styles.userRow : styles.agentRow}`}>
-              <div className={styles.messageBubble}>
-                <span className={styles.roleLabel}>{msg.role === 'user' ? 'You' : 'Sketch Agent'}</span>
-                <p className={styles.msgText}>{msg.content}</p>
+      <div id={id + '-context-panel'} role="tabpanel" aria-labelledby={id + '-context'} hidden={tab !== 'context'} className={styles.contextPanel}>
+        <section>
+          <h2>Project</h2>
+          {state.projectRoot ? <div className={styles.project}><Folder size={18} /><div><strong>{basename(state.projectRoot)}</strong><span>{state.projectRoot}</span></div></div> : <p>Open a project folder to give the agent a workspace.</p>}
+          <p>Attach files to guide the next message. The agent can read other files in this project as it works.</p>
+        </section>
+        <section>
+          <div className={styles.sectionHeading}><h2>Open files</h2><span>{state.openFiles.length}</span></div>
+          {state.openFiles.length === 0 ? <p>Open a file in the editor, then add it here or use @ in your message.</p> : <div className={styles.contextFiles}>
+            {state.openFiles.map((path) => {
+              const relative = state.projectRoot ? relativeToRoot(state.projectRoot, path) : path
+              return <div className={styles.contextFile} key={path} data-active={path === state.activeFile}>
+                <button title={path} onClick={() => dispatch({ type: 'SET_ACTIVE_FILE', payload: path })}><FileCode size={14} /><span>{relative}</span>{state.files[path]?.isDirty && <span className={styles.dirty} aria-label="Unsaved changes">●</span>}</button>
+                <button aria-label={'Attach ' + relative} title="Attach to message" onClick={() => attach(relative)}><Plus size={14} /></button>
               </div>
-            </div>
-          ))}
-
-          {state.isThinking && (
-            <div className={styles.thinkingWrapper}>
-              <ThinkingIndicator stage={state.thinkingStage || "Processing..."} compact={true} />
-            </div>
-          )}
-        </div>
+            })}
+          </div>}
+        </section>
+        <section className={styles.resources}>
+          <h2>Workspace knowledge</h2>
+          <button onClick={() => dispatch({ type: 'SET_ACTIVE_PANEL', payload: 'memory' })}><Brain size={15} /><span>Project memory</span><ChevronRight size={13} /></button>
+          <button onClick={() => dispatch({ type: 'SET_ACTIVE_PANEL', payload: 'skills' })}><Code size={15} /><span>Skills & instructions</span><ChevronRight size={13} /></button>
+          <button onClick={() => dispatch({ type: 'SET_ACTIVE_PANEL', payload: 'mcp' })}><Layers size={15} /><span>Tools & MCP</span><ChevronRight size={13} /></button>
+        </section>
       </div>
-
-      {/* Screenshot 2 Bottom Prompt Box */}
-      <div className={styles.bottomCardContainer}>
-        <div className={styles.promptBoxCard}>
-          <textarea
-            className={styles.promptInput}
-            placeholder="Ask anything, @ to mention, / for actions"
-            rows={2}
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            onKeyDown={handleKeyDown}
-          />
-
-          <div className={styles.promptCardControls}>
-            <button className={styles.plusBtn} title="Attach / Action">
-              <Plus size={15} />
-            </button>
-
-            {/* The real picker: configured providers only, from providers.json.
-                The pill that used to be here read 'Claude Opus 4.6' on every
-                machine, configured or not. */}
-            <ModelSelector />
-
-            {/* The "MCP Tools Active (cloudrun, firebase, notebooks, visualization)"
-                badge that used to sit here is gone. It named four servers this product
-                does not have and claimed they were active, on every machine, always.
-                MCP servers start per run and only for the capabilities that run holds,
-                so nothing is active while a prompt is being typed. The curated catalog
-                and what each server costs live in the MCP Tools panel (Req 27.5). */}
-
-            <button 
-              className={`${styles.sendArrowBtn} ${inputText.trim() ? styles.sendActive : ''}`}
-              onClick={handleSend}
-            >
-              ➔
-            </button>
-          </div>
-        </div>
-
-        {/* Footer Disclaimer */}
-        <div className={styles.disclaimerText}>
-          AI may make mistakes. Double check all generated code.
-        </div>
+      <div className={styles.footer}>
+        <button onClick={() => dispatch({ type: 'SET_ACTIVE_PANEL', payload: 'review' })}><Shield size={13} />Review changes</button>
+        <button onClick={() => { dispatch({ type: 'SET_MODE', payload: 'agent' }); dispatch({ type: 'SET_AGENT_VIEW', payload: 'workflows' }) }}><Layers size={13} />Workflows</button>
       </div>
     </div>
-  );
+  )
 }

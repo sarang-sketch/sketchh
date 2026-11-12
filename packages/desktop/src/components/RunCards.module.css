@@ -1,0 +1,298 @@
+.live {
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 85%;
+  animation: fadeIn 0.2s ease;
+}
+
+.liveHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.spinner {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--accent);
+  animation: spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+.liveStatus {
+  color: var(--text-primary);
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-medium);
+  flex: 1;
+}
+
+.stopBtn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: 3px 8px;
+}
+
+.stopBtn:hover:not(:disabled) {
+  background: #3a1d1d; /* danger wash on hover — derived for light by themeColors */
+  border-color: #7f1d1d;
+  color: #fecaca;
+}
+
+.steps {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.step {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+.stepIcon {
+  margin-top: 2px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  display: flex;
+}
+
+.stepText {
+  overflow-wrap: anywhere;
+}
+
+.stepThink .stepText {
+  font-style: italic;
+  color: var(--text-muted);
+}
+
+.stepBad,
+.stepBad .stepIcon {
+  color: #fca5a5; /* error-tint text — derived for light by themeColors */
+}
+
+.stepsFold {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.foldBtn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.foldBtn:hover {
+  color: var(--text-secondary);
+}
+
+.filesCard {
+  margin-top: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--bg-secondary);
+}
+
+.filesHead {
+  padding: 8px 12px;
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-secondary);
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.files {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+}
+
+.fileItem + .fileItem {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.fileRow {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  text-align: left;
+}
+
+.fileRow:not(:disabled):hover {
+  background: var(--bg-surface);
+}
+
+.fileRow:disabled {
+  cursor: default;
+}
+
+.filePath {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fileAdd {
+  color: var(--success);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.fileDel {
+  color: var(--error);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.fileNew {
+  color: var(--accent-hover);
+  font-size: var(--text-2xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border: 1px solid #7c2d12; /* accent-tint border — derived for light by themeColors */
+  border-radius: var(--radius-sm);
+  padding: 0 4px;
+}
+
+.preview {
+  margin: 0;
+  padding: 8px 0;
+  background: var(--bg-primary);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.5;
+  overflow-x: auto;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.preview > div {
+  padding: 0 12px;
+  white-space: pre;
+}
+
+.previewAdd {
+  background: rgba(34, 197, 94, 0.12); /* success diff tint — derived for light */
+  color: #bbf7d0;
+}
+
+.previewDel {
+  background: rgba(239, 68, 68, 0.12); /* error diff tint — derived for light */
+  color: #fecaca;
+}
+
+.previewSame {
+  color: var(--text-muted);
+}
+
+.previewGap {
+  color: var(--text-disabled);
+}
+
+.fileActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+}
+
+.actionBtn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: 4px 10px;
+}
+
+.actionBtn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.actionBtn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.primary {
+  background: var(--accent-fill);
+  border-color: var(--accent-fill);
+  color: var(--text-on-accent);
+}
+
+.primary:hover:not(:disabled) {
+  background: var(--accent-fill-hover);
+}
+
+.settled {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--text-sm);
+  color: var(--success);
+}
+
+/* The proof line under a reply. See RunReceiptLine. */
+.receipt {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  margin-top: 8px;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.receiptOk {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #86efac; /* success-tint text — derived for light by themeColors */
+}
+
+.receiptBad {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #fca5a5; /* error-tint text — derived for light by themeColors */
+}
+
+.receiptMeta {
+  color: var(--text-muted);
+}

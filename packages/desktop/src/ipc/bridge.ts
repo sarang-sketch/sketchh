@@ -4,7 +4,10 @@
 // through `SketchClient` (src/lib/client.ts) over stdio in the app and HTTP in dev.
 // This module is ONLY for the things the OS can do and the engine cannot reach from
 // a webview: a folder picker, reading and writing a file the editor has open, a
-// directory listing, git status/diff, and the confirmed terminal command.
+// directory listing, and the confirmed terminal command. Git is NOT here — it is an
+// engine capability (SketchClient), with one parser in packages/core/src/tools/git.ts
+// (B-010): the native git wrappers this module used to carry had no caller and a
+// weaker second parser, so they were removed.
 //
 // Every wrapper here names a command that actually exists in src-tauri/src/main.rs.
 // It previously carried wrappers for `run_task`, `approve_plan`, `cancel_task` and
@@ -27,6 +30,16 @@
 // where containment is (Requirement 13.8).
 
 const IS_TAURI = '__TAURI_INTERNALS__' in window
+
+/**
+ * Whether the window is running inside the Tauri runtime (the packaged app) rather
+ * than a plain browser (the Vite dev preview). The one source of truth for that test,
+ * so a caller that reaches for a Tauri-only API — the window controls in the title
+ * bar, say — can guard first instead of throwing in dev. See `invoke` below.
+ */
+export function isTauri(): boolean {
+  return IS_TAURI
+}
 
 /**
  * There is no fallback. Outside Tauri these commands have no implementation, and
@@ -120,22 +133,11 @@ export async function allowedPrograms(): Promise<string[]> {
   return invoke<string[]>('allowed_programs')
 }
 
-// ── Git ─────────────────────────────────────────────────────────────────────
-
-export interface GitStatus {
-  branch: string
-  staged: string[]
-  modified: string[]
-  untracked: string[]
-}
-
-export async function gitStatus(projectRoot: string): Promise<GitStatus> {
-  return invoke<GitStatus>('git_status', { projectRoot })
-}
-
-export async function gitDiff(projectRoot: string, file?: string): Promise<string> {
-  return invoke<string>('git_diff', { projectRoot, file })
-}
+// ── Git ───────────────────────────────────────────────────────────────────── //
+// Intentionally empty. Git is an engine capability reached through SketchClient
+// (packages/core/src/tools/git.ts, the project's one git parser). The native
+// git_status / git_diff wrappers were removed for B-010: nothing imported them, and
+// their Rust side carried a weaker second porcelain parser.
 
 // ── Credentials ─────────────────────────────────────────────────────────────
 //

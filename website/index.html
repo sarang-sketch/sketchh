@@ -1,0 +1,519 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sketch: the free, open-source AI code editor (beta)</title>
+  <meta name="description" content="Sketch is a free, open-source AI code editor. Its agent plans the change, edits your files and runs your tests, with a model on your computer or any API. Beta: early access is open.">
+  <meta name="theme-color" content="#F5F7FA">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="assets/img/sketch-logo-512.png">
+  <link rel="preload" href="assets/fonts/jetbrains-mono-latin-variable.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="assets/fonts/inter-latin-variable.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="css/site.css">
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Sketch">
+  <meta property="og:title" content="Sketch: the free, open-source AI code editor">
+  <meta property="og:description" content="Describe the change. Sketch plans it, edits your files, runs your tests and only calls it done when they pass. Beta: early access is open.">
+  <meta property="og:image" content="assets/img/og.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "Sketch",
+    "description": "A free, open-source AI code editor. Its agent plans changes, edits files, runs your tests and checks its own work, with a model on your computer or any API.",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "Windows, macOS, Linux",
+    "softwareVersion": "0.1.0",
+    "license": "https://www.apache.org/licenses/LICENSE-2.0",
+    "isAccessibleForFree": true,
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+    "sameAs": ["https://github.com/sarang-sketch/sketch"]
+  }
+  </script>
+  <script src="js/config.js" defer></script>
+  <script src="js/site.js" defer></script>
+</head>
+<body>
+  <svg class="sprite" width="0" height="0" aria-hidden="true" focusable="false">
+    <symbol id="i-check" viewBox="0 0 16 16"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+    <symbol id="i-download" viewBox="0 0 16 16"><path d="M8 2.5v7.5m0 0L5 7m3 3l3-3M3 13h10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 16 16"><rect x="4" y="3" width="3" height="10" rx="1" fill="currentColor"/><rect x="9" y="3" width="3" height="10" rx="1" fill="currentColor"/></symbol>
+    <symbol id="i-play" viewBox="0 0 16 16"><path d="M5 3.2v9.6a.6.6 0 00.92.5l7.3-4.8a.6.6 0 000-1L5.92 2.7A.6.6 0 005 3.2z" fill="currentColor"/></symbol>
+    <symbol id="i-github" viewBox="0 0 16 16"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></symbol>
+  </svg>
+
+  <a class="skip" href="#main">Skip to content</a>
+
+  <div class="announce" role="region" aria-label="Launch status">
+    <p><strong>Sketch is in beta.</strong> Early access is open now, and the launch is coming soon. <a href="#early-access">Get early access</a></p>
+  </div>
+
+  <header class="nav-wrap">
+    <nav class="nav" aria-label="Main">
+      <a class="brand" href="#top" aria-label="Sketch, back to the top">
+        <span class="mark" aria-hidden="true">S</span>
+        <span class="brand-name">Sketch</span>
+      </a>
+      <div class="surface" role="group" aria-label="Choose a surface">
+        <button type="button" class="surface-btn" data-surface="code" aria-pressed="true">Code</button>
+        <button type="button" class="surface-btn" data-surface="cowork" aria-pressed="false">Cowork</button>
+      </div>
+      <ul class="nav-links">
+        <li><a href="#features">Features</a></li>
+        <li><a href="#models">Models</a></li>
+        <li><a href="#privacy">Privacy</a></li>
+        <li><a href="#faq">FAQ</a></li>
+        <li><a href="https://github.com/sarang-sketch/sketch" data-repo>GitHub</a></li>
+      </ul>
+      <a class="btn btn-primary btn-sm" href="#early-access">Get early access</a>
+    </nav>
+  </header>
+
+  <main id="main">
+    <section class="hero" id="top" aria-labelledby="hero-title">
+      <p class="status-pill"><span class="dot" aria-hidden="true"></span>Beta: early access is open</p>
+      <h1 class="hero-title" id="hero-title">
+        <span class="sr-only" data-copy="titleSr">Don't code it all, just describe it.</span>
+        <span class="hero-line" aria-hidden="true" data-copy="title1">Don't code it all,</span>
+        <span class="hero-line hero-line-typed" aria-hidden="true"><span data-copy="title2" data-typed>just describe it.</span><span class="caret"></span></span>
+      </h1>
+      <p class="hero-sub" data-copy="sub">Sketch is a free, open-source AI code editor. Tell its agent what you want, and it plans the change, edits your files, runs your tests, and only calls it done when they pass.</p>
+      <div class="hero-cta">
+        <a class="btn btn-primary" href="#early-access">Get early access</a>
+        <a class="btn btn-ghost" href="https://github.com/sarang-sketch/sketch" data-repo><svg class="icon" aria-hidden="true"><use href="#i-github"/></svg>View the code on GitHub</a>
+      </div>
+      <p class="hero-note">Free and open source under Apache-2.0. No account, no API key, no credit card.</p>
+
+      <div class="ribbon" aria-hidden="true">
+        <svg class="ribbon-svg" viewBox="0 96 1600 320" preserveAspectRatio="xMidYMid slice" focusable="false">
+          <defs>
+            <path id="path-in" d="M -80 150 C 150 150, 230 300, 400 292 C 540 286, 610 352, 712 352"/>
+            <path id="path-out" d="M 888 352 C 1040 352, 1150 300, 1270 240 C 1400 175, 1500 150, 1760 150"/>
+          </defs>
+          <path class="ribbon-band" d="M 888 352 C 1040 352, 1150 300, 1270 240 C 1400 175, 1500 150, 1760 150"/>
+          <text class="ribbon-in"><textPath id="tp-in" href="#path-in" startOffset="0">ok so the login page lets anyone in with any password lol, can you make it actually check the hash, show a proper error and add a couple of tests so this never happens again&#160;&#160;&#160;&#160;&#160;&#160;</textPath></text>
+          <text class="ribbon-code"><textPath id="tp-out" href="#path-out" startOffset="0"><tspan class="k">const</tspan> ok = <tspan class="k">await</tspan> <tspan class="f">verifyPassword</tspan>(password, user.passwordHash);&#160;&#160;<tspan class="k">if</tspan> (!ok) <tspan class="k">return</tspan> res.<tspan class="f">status</tspan>(<tspan class="n">401</tspan>).<tspan class="f">json</tspan>({ error: <tspan class="s">"Wrong email or password"</tspan> });&#160;&#160;<tspan class="f">test</tspan>(<tspan class="s">"rejects a wrong password"</tspan>, ...);&#160;&#160;<tspan class="c">// 12 passed</tspan>&#160;&#160;&#160;&#160;&#160;&#160;</textPath></text>
+          <text class="ribbon-in measure" id="measure-in" x="0" y="-300"></text>
+          <text class="ribbon-code measure" id="measure-out" x="0" y="-300"></text>
+          <g class="pill" transform="translate(800 352)">
+            <rect class="pill-body" x="-88" y="-34" width="176" height="68" rx="34"/>
+            <rect class="pill-mark" x="-74" y="-22" width="44" height="44" rx="12"/>
+            <text class="pill-s" x="-52" y="9" text-anchor="middle">S</text>
+            <g class="bars">
+              <rect class="bar b1" x="-14" y="-15" width="7" height="30" rx="3.5"/>
+              <rect class="bar b2" x="0" y="-15" width="7" height="30" rx="3.5"/>
+              <rect class="bar b3" x="14" y="-15" width="7" height="30" rx="3.5"/>
+              <rect class="bar b4" x="28" y="-15" width="7" height="30" rx="3.5"/>
+              <rect class="bar b5" x="42" y="-15" width="7" height="30" rx="3.5"/>
+              <rect class="bar b6" x="56" y="-15" width="7" height="30" rx="3.5"/>
+            </g>
+          </g>
+          <g class="chip is-pass" id="chip" transform="translate(800 276)">
+            <rect class="chip-bg" id="chip-bg" x="-104" y="-21" width="208" height="42" rx="21"/>
+            <g class="chip-icon" id="chip-icon" transform="translate(-80 0)">
+              <circle class="chip-spin" r="7"/>
+              <path class="chip-check" d="M -5 0.5 L -1.5 4 L 5.5 -4"/>
+            </g>
+            <text class="chip-text" id="chip-text" x="-62" y="6">12 tests passed</text>
+          </g>
+        </svg>
+      </div>
+      <button type="button" class="motion-toggle" id="ribbon-toggle" aria-pressed="false">
+        <svg class="icon" aria-hidden="true"><use href="#i-pause"/></svg><span>Pause animation</span>
+      </button>
+      <p class="sr-only" data-copy="ribbonSr">Animation: a plain-English request flows into Sketch and code comes out, while the agent reports each step: reading the files, writing a plan, editing two files, running the tests, and 12 tests passing.</p>
+    </section>
+
+    <section class="band band-dark" id="models" aria-labelledby="models-title">
+      <h2 class="band-title" id="models-title">Works with the models you already have</h2>
+      <p class="band-sub">Run a model on your own computer, use an API key you own, or sign in with ChatGPT. You can switch models in the middle of a conversation.</p>
+      <div class="marquee">
+        <ul class="marquee-track" aria-label="Supported model providers">
+          <li>Ollama</li><li>LM Studio</li><li>llama.cpp</li><li>OpenAI</li><li>Anthropic</li><li>Google Gemini</li><li>Groq</li><li>OpenRouter</li><li>Mistral</li><li>DeepSeek</li><li>Grok (xAI)</li><li>Kimi (Moonshot)</li><li>Cerebras</li><li>NVIDIA NIM</li><li>GitHub Models</li><li>Azure OpenAI</li><li>Cloudflare Workers AI</li><li>ChatGPT sign-in</li>
+        </ul>
+        <ul class="marquee-track" aria-hidden="true">
+          <li>Ollama</li><li>LM Studio</li><li>llama.cpp</li><li>OpenAI</li><li>Anthropic</li><li>Google Gemini</li><li>Groq</li><li>OpenRouter</li><li>Mistral</li><li>DeepSeek</li><li>Grok (xAI)</li><li>Kimi (Moonshot)</li><li>Cerebras</li><li>NVIDIA NIM</li><li>GitHub Models</li><li>Azure OpenAI</li><li>Cloudflare Workers AI</li><li>ChatGPT sign-in</li>
+        </ul>
+      </div>
+      <p class="band-fine">Plus any server that speaks the OpenAI API.</p>
+    </section>
+
+    <section class="band band-blueprint" id="run" aria-labelledby="run-title">
+      <h2 class="band-title" id="run-title">One sentence in.<br>Tested code out.</h2>
+      <p class="band-sub">Sketch does the parts you would do by hand after the code is written: it reads the files first, writes a plan, asks before it runs a command, and checks its own work.</p>
+
+      <div class="run-grid">
+        <figure class="you-card">
+          <figcaption>You type</figcaption>
+          <p class="you-text">The login page lets anyone in with any password, so make it check the hash, show a proper error and add tests.</p>
+          <p class="you-meta"><span>1 sentence</span><span>22 words</span></p>
+        </figure>
+
+        <figure class="run-window" id="run-window" aria-labelledby="run-caption">
+          <figcaption class="run-bar">
+            <span class="run-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+            <span id="run-caption">Sketch, an example run</span>
+            <button type="button" class="run-replay" id="run-replay">Replay</button>
+          </figcaption>
+          <ol class="run-steps" id="run-steps">
+            <li class="step" data-step="read">
+              <span class="step-icon" aria-hidden="true"></span>
+              <div class="step-body">
+                <p class="step-title">Read 4 files</p>
+                <p class="step-detail"><code>routes/login.ts</code> <code>auth/hash.ts</code> <code>login.test.ts</code> <code>AGENTS.md</code></p>
+              </div>
+            </li>
+            <li class="step" data-step="plan">
+              <span class="step-icon" aria-hidden="true"></span>
+              <div class="step-body">
+                <p class="step-title">Wrote a plan</p>
+                <p class="step-detail">Check the password with <code>verifyPassword</code>, answer a wrong one with a 401 and one clear message, and add two tests.</p>
+              </div>
+            </li>
+            <li class="step" data-step="edit">
+              <span class="step-icon" aria-hidden="true"></span>
+              <div class="step-body">
+                <p class="step-title">Edited 2 files</p>
+                <pre class="diff"><code><span class="del">-  if (user) return signIn(res, user)</span>
+<span class="add">+  const ok = await verifyPassword(password, user.hash)</span>
+<span class="add">+  if (!ok) return res.status(401).json(WRONG_LOGIN)</span>
+<span class="add">+  return signIn(res, user)</span></code></pre>
+              </div>
+            </li>
+            <li class="step" data-step="ask">
+              <span class="step-icon" aria-hidden="true"></span>
+              <div class="step-body">
+                <p class="step-title">Asked before running <code>npm test</code></p>
+                <p class="step-detail approval"><span class="approve-btn">Allow</span><span class="approve-alt">Allow always</span><span class="approve-alt">Deny</span></p>
+              </div>
+            </li>
+            <li class="step" data-step="test">
+              <span class="step-icon" aria-hidden="true"></span>
+              <div class="step-body">
+                <p class="step-title">Ran the tests</p>
+                <div class="test-meter"><span class="test-fill" id="test-fill"></span></div>
+                <p class="step-detail"><strong id="test-count">12</strong> of 12 passed</p>
+              </div>
+            </li>
+            <li class="step" data-step="done">
+              <span class="step-icon" aria-hidden="true"></span>
+              <div class="step-body">
+                <p class="step-title">Done, because the checks passed</p>
+                <p class="step-detail">Every file it changed was saved first, so Undo puts them back.</p>
+              </div>
+            </li>
+          </ol>
+        </figure>
+      </div>
+      <p class="band-fine">An illustration of a typical run. The steps, approvals and checks are the ones Sketch really performs.</p>
+    </section>
+
+    <section class="section split" id="features" aria-labelledby="rules-title">
+      <div class="split-art">
+        <div class="rules-card">
+          <p class="rules-head">What Sketch reads before every run</p>
+          <ul class="rules-chips" id="rules-chips">
+            <li><code>AGENTS.md</code></li>
+            <li><code>CLAUDE.md</code></li>
+            <li><code>/review</code></li>
+            <li><code>/write-tests</code></li>
+          </ul>
+          <button type="button" class="rules-add" id="rules-add"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg><span>Add a skill</span></button>
+        </div>
+      </div>
+      <div class="split-text">
+        <h2 class="section-title" id="rules-title">Make Sketch code like you</h2>
+        <p>Write your conventions down once. Sketch reads <code>AGENTS.md</code> and <code>CLAUDE.md</code> in your project, turns your own Markdown files into slash commands, and loads a skill when a task needs it.</p>
+        <p>Skills can get better on your own tasks: Sketch proposes small edits to a skill and keeps one only when your test tasks score higher.</p>
+      </div>
+    </section>
+
+    <section class="section split split-flip" aria-labelledby="undo-title">
+      <div class="split-art">
+        <div class="undo-card" id="undo-card" data-state="applied">
+          <div class="undo-top">
+            <span class="file"><code>routes/login.ts</code></span>
+            <span class="undo-status" id="undo-status" aria-live="polite">Changed by the agent</span>
+          </div>
+          <pre class="diff diff-light"><code><span class="del">-  if (user) return signIn(res, user)</span>
+<span class="add">+  const ok = await verifyPassword(password, user.hash)</span>
+<span class="add">+  if (!ok) return res.status(401).json(WRONG_LOGIN)</span>
+<span class="add">+  return signIn(res, user)</span></code></pre>
+          <pre class="diff diff-light diff-restored"><code><span class="ctx">   if (user) return signIn(res, user)</span></code></pre>
+          <button type="button" class="btn btn-ink btn-sm" id="undo-btn">Undo this run</button>
+        </div>
+      </div>
+      <div class="split-text">
+        <h2 class="section-title" id="undo-title">Every run can be undone</h2>
+        <p>Before the agent changes a file, Sketch saves a copy. If you don't like the result, one click puts every file back the way it was. It works without Git.</p>
+        <p>Prefer to look first? Switch on review mode and each change waits as a diff for you to accept or reject.</p>
+      </div>
+    </section>
+
+    <section class="section split" aria-labelledby="team-title">
+      <div class="split-art">
+        <div class="team-card">
+          <div class="team-tabs" aria-hidden="true"><span class="is-on">Frontend</span><span>Backend</span><span>Database</span></div>
+          <div class="msg msg-agent">
+            <p class="msg-who">Frontend</p>
+            <p>The sign-up form is ready. It needs somewhere to send the data.</p>
+            <p class="handoff"><code>@backend: add POST /api/signup that validates the email and returns 201</code></p>
+          </div>
+          <div class="msg msg-agent msg-alt">
+            <p class="msg-who">Backend</p>
+            <p>Added the route and its tests. It needs a users table.</p>
+            <p class="handoff"><code>@database: create a users table with a unique email</code></p>
+          </div>
+        </div>
+      </div>
+      <div class="split-text">
+        <h2 class="section-title" id="team-title">A team that hands work to each other</h2>
+        <p>Build Team gives you three chats in the same project: Frontend, Backend and Database. When one needs something from another, it says so in a line like <code>@backend: ...</code> and that chat picks it up.</p>
+        <p>Hand-offs are capped per message, so two agents can't pass work back and forth forever.</p>
+      </div>
+    </section>
+
+    <section class="section split split-flip" aria-labelledby="mcp-title">
+      <div class="split-art">
+        <div class="mcp-card">
+          <p class="mcp-file"><code>~/.sketch/mcp.json</code></p>
+<pre class="json"><code>{
+  <span class="s">"mcpServers"</span>: {
+    <span class="s">"filesystem"</span>: {
+      <span class="s">"command"</span>: <span class="s">"npx"</span>,
+      <span class="s">"args"</span>: [
+        <span class="s">"-y"</span>,
+        <span class="s">"@modelcontextprotocol/server-filesystem"</span>,
+        <span class="s">"."</span>
+      ]
+    }
+  }
+}</code></pre>
+          <p class="mcp-test"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Test: connected, tools listed</p>
+        </div>
+      </div>
+      <div class="split-text">
+        <h2 class="section-title" id="mcp-title">Bring your own tools</h2>
+        <p>Add any MCP server, or paste the config you already use in Claude Desktop or Cursor. Press Test to see its tools before a chat uses them.</p>
+        <p>A server that comes inside a project you cloned only starts after you approve its exact command. If the project changes it, Sketch asks again.</p>
+      </div>
+    </section>
+
+    <section class="section ide" aria-labelledby="ide-title">
+      <h2 class="section-title" id="ide-title">A full editor around the agent</h2>
+      <ul class="ide-list">
+        <li><strong>Monaco editor</strong> with IntelliSense for TypeScript, JavaScript, JSON, CSS and HTML</li>
+        <li><strong>A real terminal</strong> with your own shells: PowerShell, Git Bash, WSL, zsh, bash, fish</li>
+        <li><strong>Git built in:</strong> stage, commit, branches, push and pull, with an AI-written commit message</li>
+        <li><strong>Side-by-side diffs</strong> against what's staged or committed</li>
+        <li><strong>Search and replace</strong> across the project, which you can undo</li>
+        <li><strong>Ghost-text completions</strong> and <strong>Ctrl+K</strong> to rewrite a selection</li>
+        <li><strong>Light and dark themes</strong>, or follow your system</li>
+        <li><strong>Ask, Agent and Auto modes</strong> that decide what the agent may do without asking</li>
+      </ul>
+    </section>
+
+    <section class="privacy" id="privacy" aria-labelledby="privacy-title">
+      <div class="privacy-card">
+        <h2 class="privacy-title" id="privacy-title">Your code stays yours.</h2>
+        <div class="privacy-text">
+          <p>Sketch has no account, no server and no usage tracking. Your code stays on your disk, and your API keys stay in your operating system's credential store. Apart from things you ask for, like a git push, Sketch only talks to the model you picked.</p>
+          <p>Turn on Offline Mode and Sketch refuses every request that would leave this computer, and lists each request it made.</p>
+          <a class="text-link" href="https://github.com/sarang-sketch/sketch/blob/main/PRIVACY.md" data-repo-path="blob/main/PRIVACY.md">Read exactly what leaves your machine</a>
+        </div>
+        <ul class="seals" aria-label="Privacy facts">
+          <li class="seal"><span>Offline<br>Mode</span></li>
+          <li class="seal"><span>No<br>telemetry</span></li>
+          <li class="seal"><span>Keys in your<br>OS keychain</span></li>
+          <li class="seal"><span>Apache<br>2.0</span></li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="section local" id="free" aria-labelledby="free-title">
+      <div class="local-text">
+        <h2 class="section-title" id="free-title">Free, down to the last request</h2>
+        <p>Sketch itself costs nothing. Run a model on your own computer and every request is free too. Sketch checks your memory and graphics card, recommends a coding model that fits, and downloads it when you say so.</p>
+        <ol class="local-steps">
+          <li>Install <a class="text-link" href="https://ollama.com/download">Ollama</a>, which is free.</li>
+          <li>Open Settings, then Models, and pick the model marked Best fit.</li>
+          <li>Start coding. Your prompts and code stay on your machine.</li>
+        </ol>
+        <p class="fine">Prefer a hosted model? Add your own key and pay that provider directly. Sketch shows what each run cost.</p>
+      </div>
+      <div class="model-card" aria-label="Example recommendation for a 16 GB laptop">
+        <p class="model-head">On this computer</p>
+        <p class="model-machine">16 GB memory, NVIDIA RTX 3060 (6 GB)</p>
+        <div class="model-row is-best">
+          <div>
+            <p class="model-name">qwen2.5-coder:7b <span class="badge">Best fit</span></p>
+            <p class="model-facts">4.7 GB download, needs about 11 GB of memory, 32K context</p>
+          </div>
+          <span class="btn btn-primary btn-xs" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-download"/></svg>Download</span>
+        </div>
+        <div class="model-row">
+          <div>
+            <p class="model-name">qwen2.5-coder:3b</p>
+            <p class="model-facts">1.9 GB download, fits this computer</p>
+          </div>
+        </div>
+        <div class="model-row is-dim">
+          <div>
+            <p class="model-name">qwen2.5-coder:32b</p>
+            <p class="model-facts">20 GB download, too big for this computer</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="band band-dark facts" aria-labelledby="facts-title">
+      <h2 class="band-title" id="facts-title">Built for developers who check the work</h2>
+      <p class="band-sub">What developers said about AI tools in the 2025 Stack Overflow Developer Survey, and what Sketch does about it.</p>
+      <ul class="fact-wall">
+        <li class="fact fact-a">
+          <p class="fact-num">46%</p>
+          <p class="fact-said">distrust the accuracy of AI tools. Only 33% trust it.</p>
+          <p class="fact-answer">So Sketch runs your tests, linter and type checker, and only calls a task done when they pass.</p>
+        </li>
+        <li class="fact fact-b">
+          <p class="fact-num">66%</p>
+          <p class="fact-said">say their biggest frustration is AI code that is almost right, but not quite.</p>
+          <p class="fact-answer">So every change is a diff you can review, and every run can be undone.</p>
+        </li>
+        <li class="fact fact-c">
+          <p class="fact-num">81%</p>
+          <p class="fact-said">have concerns about the security and privacy of their data with AI agents.</p>
+          <p class="fact-answer">So your code and keys stay on your computer, and Offline Mode keeps Sketch there too.</p>
+        </li>
+        <li class="fact fact-d">
+          <p class="fact-num">51%</p>
+          <p class="fact-said">of professional developers use AI tools every day.</p>
+          <p class="fact-answer">So Sketch is free to use all day, with a model that runs on your own machine.</p>
+        </li>
+      </ul>
+      <p class="band-fine">Source: <a href="https://survey.stackoverflow.co/2025/ai/">Stack Overflow Developer Survey 2025, AI section</a>.</p>
+    </section>
+
+    <section class="section faq" id="faq" aria-labelledby="faq-title">
+      <h2 class="section-title" id="faq-title">Questions</h2>
+      <div class="faq-list">
+        <details>
+          <summary>Is Sketch really free?</summary>
+          <p>Yes. Sketch is open source under the Apache-2.0 license, with no account and no subscription. With a model on your own computer you pay nothing. If you use a hosted model, you pay that provider for what you use.</p>
+        </details>
+        <details>
+          <summary>Do I need an API key?</summary>
+          <p>No. Ollama, LM Studio and llama.cpp run on your computer and need no key. You can also add a key for OpenAI, Anthropic, Google Gemini, Groq, OpenRouter and more, or sign in with your ChatGPT account.</p>
+        </details>
+        <details>
+          <summary>What does "beta" mean here?</summary>
+          <p>Sketch works and has over 2,000 automated tests, but it is early. Expect rough edges and changes before the launch. When something breaks, <a class="text-link" href="https://github.com/sarang-sketch/sketch/issues" data-repo-path="issues">tell us on GitHub</a>.</p>
+        </details>
+        <details>
+          <summary>When does Sketch launch?</summary>
+          <p>Soon. Early access is open now, so you can use the beta today. Watch the GitHub repository to hear about the launch first.</p>
+        </details>
+        <details>
+          <summary>Which computers does it run on?</summary>
+          <p>Sketch is built for Windows, macOS and Linux. The early-access download is for Windows today. The beta isn't code-signed yet, so Windows asks you to confirm: choose More info, then Run anyway.</p>
+        </details>
+        <details>
+          <summary>Does the agent run commands on its own?</summary>
+          <p>You choose. Ask mode only reads and explains. Agent mode asks before every command. Auto mode runs ordinary commands, but still asks before anything destructive. Commands never go through a shell, so pipes and chained commands are refused.</p>
+        </details>
+        <details>
+          <summary>Can I use it without the internet?</summary>
+          <p>Yes, with a model on your computer. Turn on Offline Mode and Sketch refuses every request that would leave the machine. Programs you start yourself in the terminal are separate, and Sketch says so.</p>
+        </details>
+        <details>
+          <summary>Can the agent read my secrets?</summary>
+          <p>No. The agent can't read or write <code>.env</code> files or private keys, can't change anything inside <code>.git</code>, and can't edit Sketch's own record of what it did.</p>
+        </details>
+      </div>
+    </section>
+
+    <section class="early" id="early-access" aria-labelledby="early-title">
+      <div class="early-card">
+        <p class="status-pill status-pill-dark"><span class="dot" aria-hidden="true"></span>Beta, launching soon</p>
+        <h2 class="early-title" id="early-title">Early access is open</h2>
+        <p class="early-sub">Try the beta today and help shape the launch. It's free and open source.</p>
+        <div class="early-actions">
+          <a class="btn btn-primary" id="download-btn" href="https://github.com/sarang-sketch/sketch/releases"><svg class="icon" aria-hidden="true"><use href="#i-download"/></svg>Download the beta for Windows</a>
+          <a class="btn btn-light" href="https://github.com/sarang-sketch/sketch" data-repo><svg class="icon" aria-hidden="true"><use href="#i-github"/></svg>Watch on GitHub for the launch</a>
+        </div>
+        <p class="early-note" id="download-note">Version 0.1.0 beta, about 28 MB. Free and open source.</p>
+
+        <form class="signup" id="signup" hidden novalidate>
+          <label class="signup-label" for="signup-email">Get an email when Sketch launches</label>
+          <div class="signup-row">
+            <input id="signup-email" name="email" type="email" autocomplete="email" placeholder="you@example.com" required>
+            <input class="hp" name="company" type="text" tabindex="-1" autocomplete="off" aria-hidden="true">
+            <button class="btn btn-primary" type="submit">Notify me</button>
+          </div>
+          <p class="signup-status" id="signup-status" role="status" aria-live="polite"></p>
+        </form>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer" aria-labelledby="footer-title">
+    <h2 class="sr-only" id="footer-title">Sketch</h2>
+    <div class="footer-products">
+      <a class="product-card" href="#top" data-surface-link="code">
+        <span class="product-art product-art-code" aria-hidden="true"><code>&lt;/&gt;</code></span>
+        <span><strong>Sketch Code</strong><span>The editor: Monaco, git, terminal and the agent in one window.</span></span>
+      </a>
+      <a class="product-card" href="#top" data-surface-link="cowork">
+        <span class="product-art product-art-cowork" aria-hidden="true"><code>&#9654;_</code></span>
+        <span><strong>Sketch Cowork</strong><span>Hand a task to the agent, follow every step, undo any run.</span></span>
+      </a>
+    </div>
+    <div class="footer-cols">
+      <div>
+        <h3>Product</h3>
+        <ul>
+          <li><a href="#features">Features</a></li>
+          <li><a href="#models">Models</a></li>
+          <li><a href="#free">Free with local models</a></li>
+          <li><a href="#privacy">Privacy</a></li>
+          <li><a href="#early-access">Early access</a></li>
+        </ul>
+      </div>
+      <div>
+        <h3>Open source</h3>
+        <ul>
+          <li><a href="https://github.com/sarang-sketch/sketch" data-repo>Source code</a></li>
+          <li><a href="https://github.com/sarang-sketch/sketch/blob/main/CONTRIBUTING.md" data-repo-path="blob/main/CONTRIBUTING.md">Contributing</a></li>
+          <li><a href="https://github.com/sarang-sketch/sketch/blob/main/CODE_OF_CONDUCT.md" data-repo-path="blob/main/CODE_OF_CONDUCT.md">Code of conduct</a></li>
+          <li><a href="https://github.com/sarang-sketch/sketch/blob/main/LICENSE" data-repo-path="blob/main/LICENSE">License (Apache-2.0)</a></li>
+        </ul>
+      </div>
+      <div>
+        <h3>Trust</h3>
+        <ul>
+          <li><a href="https://github.com/sarang-sketch/sketch/blob/main/PRIVACY.md" data-repo-path="blob/main/PRIVACY.md">What leaves your machine</a></li>
+          <li><a href="https://github.com/sarang-sketch/sketch/blob/main/SECURITY.md" data-repo-path="blob/main/SECURITY.md">Security policy</a></li>
+          <li><a href="https://github.com/sarang-sketch/sketch/blob/main/RELEASES.md" data-repo-path="blob/main/RELEASES.md">Verify a release</a></li>
+        </ul>
+      </div>
+      <div>
+        <h3>Help</h3>
+        <ul>
+          <li><a href="#faq">Questions</a></li>
+          <li><a href="https://github.com/sarang-sketch/sketch/issues/new/choose" data-repo-path="issues/new/choose">Report a problem</a></li>
+          <li><a href="https://ollama.com/download">Get Ollama</a></li>
+        </ul>
+      </div>
+    </div>
+    <p class="wordmark" aria-hidden="true"><span class="wordmark-mark">S</span>Sketch<span class="wordmark-caret"></span></p>
+    <p class="footer-fine">Sketch is free and open source under the Apache-2.0 license. Beta, version 0.1.0.</p>
+  </footer>
+</body>
+</html>

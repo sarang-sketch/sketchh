@@ -92,8 +92,14 @@ function tsInterfaces(): Map<string, string[]> {
 const structs = rustStructs()
 const interfaces = tsInterfaces()
 
-/** Structs a command hands back to the webview — the ones whose names must line up. */
-const RETURNED_TO_WEBVIEW = ['FsEntry', 'CommandOutput', 'GitStatus', 'ProviderKeyPresence']
+/**
+ * Structs a command hands back to the webview — the ones whose names must line up.
+ *
+ * `GitStatus` was here until B-010 removed the native git_status/git_diff commands:
+ * git is an engine capability now (packages/core/src/tools/git.ts), with no struct
+ * crossing this bridge, so it is no longer part of the wire shape.
+ */
+const RETURNED_TO_WEBVIEW = ['FsEntry', 'CommandOutput', 'ProviderKeyPresence']
 
 describe('the Rust wire shape matches what bridge.ts declares', () => {
   it('finds both sides to compare', () => {

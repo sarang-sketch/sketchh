@@ -34,8 +34,9 @@
 // Validates: Requirements 5.5, 6.4
 
 import { readFile } from 'node:fs/promises'
-import { resolve } from 'node:path'
-import { isWithin } from '../orchestrator/file-writer.js'
+import { relative, resolve } from 'node:path'
+import { assertRealContainment, isWithin } from '../orchestrator/file-writer.js'
+import { writeRefusal } from '../tools/protectedPaths.js'
 import type { FileWriter } from '../orchestrator/file-writer.js'
 import type { EditSpec } from './actions.js'
 
@@ -132,6 +133,120 @@ export function unifiedDiff(path: string, original: string, proposed: string): s
   return `${out.join('\n')}\n`
 }
 
+/**
+ * Where `search` occurs in `current`, and what to substitute there.
+ *
+ * Exact first, always. Then three normalisations, each one a failure a real model
+ * makes constantly and none of which changes what the model MEANT:
+ *
+ *   1. line-number prefixes copied from `read_file` output (`  12 | code`);
+ *   2. LF in the edit against a CRLF file — every file checked out on Windows;
+ *   3. trailing/leading whitespace drift per line, accepted ONLY when exactly one
+ *      region of the file matches, so an ambiguous edit is still refused.
+ *
+ * Returns null when nothing matches unambiguously. Never guesses between two places.
+ */
+export function locateEdit(
+  current: string,
+  search: string,
+  replace: string,
+): { start: number; end: number; replacement: string; normalized: string | null } | null {
+  const exact = current.indexOf(search)
+  if (exact >= 0) return { start: exact, end: exact + search.length, replacement: replace, normalized: null }
+
+  let s = search
+  let r = replace
+  const notes: string[] = []
+
+  // 1. Line-number prefixes, only when EVERY non-blank line of the search carries one.
+  const PREFIX = /^\s*\d+\s?\|\s?/
+  const searchLines = s.split(/\r?\n/)
+  const nonBlank = searchLines.filter((line) => line.trim() !== '')
+  if (nonBlank.length > 0 && nonBlank.every((line) => PREFIX.test(line))) {
+    s = searchLines.map((line) => line.replace(PREFIX, '')).join('\n')
+    const replaceLines = r.split(/\r?\n/)
+    const replaceNonBlank = replaceLines.filter((line) => line.trim() !== '')
+    if (replaceNonBlank.length > 0 && replaceNonBlank.every((line) => PREFIX.test(line))) {
+      r = replaceLines.map((line) => line.replace(PREFIX, '')).join('\n')
+    }
+    notes.push('line-number prefixes removed')
+    const index = current.indexOf(s)
+    if (index >= 0) return { start: index, end: index + s.length, replacement: r, normalized: notes.join(', ') }
+  }
+
+  // 2. Line endings. The replacement is converted too, so the file keeps one style.
+  const crlf = current.includes('\r\n')
+  if (crlf && !s.includes('\r')) {
+    const s2 = s.replace(/\n/g, '\r\n')
+    const index = current.indexOf(s2)
+    if (index >= 0) {
+      return {
+        start: index,
+        end: index + s2.length,
+        replacement: r.replace(/\r?\n/g, '\r\n'),
+        normalized: [...notes, 'line endings normalised'].join(', '),
+      }
+    }
+  }
+
+  // 3. Whitespace drift, line by line, unique match only.
+  const wanted = s.split(/\r?\n/)
+  while (wanted.length > 0 && wanted[0]!.trim() === '') wanted.shift()
+  while (wanted.length > 0 && wanted[wanted.length - 1]!.trim() === '') wanted.pop()
+  if (wanted.length === 0) return null
+
+  // Offsets of each line in `current`, so a match maps back to exact byte positions.
+  const lines: Array<{ text: string; start: number; end: number }> = []
+  const lineRe = /([^\r\n]*)(\r\n|\n|$)/g
+  let m: RegExpExecArray | null
+  while ((m = lineRe.exec(current)) !== null) {
+    lines.push({ text: m[1]!, start: m.index, end: m.index + m[1]!.length })
+    if (m[2] === '') break
+  }
+  const matches: number[] = []
+  for (let i = 0; i + wanted.length <= lines.length; i++) {
+    let ok = true
+    for (let j = 0; j < wanted.length; j++) {
+      if (lines[i + j]!.text.trim() !== wanted[j]!.trim()) {
+        ok = false
+        break
+      }
+    }
+    if (ok) {
+      matches.push(i)
+      if (matches.length > 1) break
+    }
+  }
+  if (matches.length !== 1) return null
+  const first = lines[matches[0]!]!
+  const last = lines[matches[0]! + wanted.length - 1]!
+  const eol = crlf ? '\r\n' : '\n'
+
+  // Indentation drift: the model dropped (or added) a uniform indent. Shift the
+  // replacement by the same amount so the edited block lines up with its neighbours.
+  const indentOf = (text: string): string => /^[ \t]*/.exec(text)?.[0] ?? ''
+  const fileIndent = indentOf(first.text)
+  const searchIndent = indentOf(wanted[0]!)
+  let replacementLines = r.replace(/(?:\r?\n)+$/, '').split(/\r?\n/)
+  if (fileIndent !== searchIndent) {
+    if (fileIndent.startsWith(searchIndent)) {
+      const extra = fileIndent.slice(searchIndent.length)
+      replacementLines = replacementLines.map((line) => (line.trim() === '' ? line : `${extra}${line}`))
+    } else if (searchIndent.startsWith(fileIndent)) {
+      const surplus = searchIndent.slice(fileIndent.length)
+      replacementLines = replacementLines.map((line) =>
+        line.startsWith(surplus) ? line.slice(surplus.length) : line,
+      )
+    }
+  }
+  return {
+    start: first.start,
+    end: last.end,
+    replacement: replacementLines.join(eol),
+    normalized: [...notes, 'whitespace differences ignored'].join(', '),
+  }
+}
+
 /** Resolve and compute an edit without touching disk. */
 export async function prepareEdit(
   edit: EditSpec,
@@ -156,6 +271,25 @@ export async function prepareEdit(
       },
     }
   }
+  // Inside the project, but not the agent's to write: git's own folder, Sketch's
+  // records, secrets files. See tools/protectedPaths.ts.
+  const refusal = writeRefusal(relative(rootAbs, target))
+  if (refusal !== null) {
+    return { ok: false, outcome: { path: edit.path, ok: false, reason: refusal } }
+  }
+  // The REAL destination, before anything is read: a link inside the project that
+  // points elsewhere must not leak the outside file's bytes into the proposed diff.
+  // Only checked against the real disk; an injected reader is a test's own world.
+  if (options.readText === undefined) {
+    try {
+      await assertRealContainment(rootAbs, target, edit.path)
+    } catch (err) {
+      return {
+        ok: false,
+        outcome: { path: edit.path, ok: false, reason: (err as Error).message },
+      }
+    }
+  }
 
   const current = await readText(target)
   let content: string
@@ -172,8 +306,8 @@ export async function prepareEdit(
         },
       }
     }
-    const index = current.indexOf(edit.search)
-    if (index < 0) {
+    const located = locateEdit(current, edit.search, edit.replace)
+    if (located === null) {
       return {
         ok: false,
         outcome: {
@@ -185,7 +319,7 @@ export async function prepareEdit(
         },
       }
     }
-    content = current.slice(0, index) + edit.replace + current.slice(index + edit.search.length)
+    content = current.slice(0, located.start) + located.replacement + current.slice(located.end)
   }
 
   const original = current ?? ''

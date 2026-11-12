@@ -114,6 +114,40 @@ export const SENSITIVE_CAPABILITIES: CapabilitySet = Object.freeze([
   'secrets:read' as const,
 ])
 
+/**
+ * The capabilities a READ-ONLY (Ask mode) run may hold — an ALLOWLIST, not a
+ * denylist, so a capability added to the vocabulary later is excluded from Ask
+ * mode until someone decides it is a read. A denylist would do the opposite: a
+ * new write-shaped capability would be silently allowed in Ask mode until
+ * someone remembered to ban it.
+ *
+ * Ask mode's contract is that it writes no file through ANY tool path — edits,
+ * commands, MCP, or skills. The edit action is refused in the loop; this set is
+ * what keeps the TOOL layer to the same bar. `proc:spawn` is absent, so
+ * `run_command` and any process-launching tool are out; `fs:write:*` and
+ * `git:write` are absent, so a write-capable MCP server is not even started and
+ * a write tool the model calls is refused by the one guard. Reading the project,
+ * its git history, the network and stored credentials to ANSWER a question is
+ * still allowed — that is what Ask mode is for.
+ */
+export const READ_ONLY_CAPABILITIES: CapabilitySet = Object.freeze([
+  'fs:read:project' as const,
+  'fs:read:home' as const,
+  'net:http' as const,
+  'net:localhost' as const,
+  'secrets:read' as const,
+  'git:read' as const,
+])
+
+/**
+ * Narrow a grant to only its read-only members. The result is a subset of both
+ * `granted` and {@link READ_ONLY_CAPABILITIES}, in canonical order — so an Ask
+ * run holds no more than it already held AND no more than a read-only run may.
+ */
+export function readOnlyGrant(granted: CapabilitySet): CapabilitySet {
+  return canonical(granted.filter((capability) => READ_ONLY_CAPABILITIES.includes(capability)))
+}
+
 export function isCapability(value: unknown): value is Capability {
   return typeof value === 'string' && (CAPABILITIES as readonly string[]).includes(value)
 }

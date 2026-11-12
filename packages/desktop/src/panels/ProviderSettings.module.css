@@ -265,8 +265,8 @@
 }
 
 .saveBtn {
-  background-color: var(--accent);
-  color: #fff;
+  background-color: var(--accent-fill);
+  color: var(--text-on-accent);
   border: none;
   border-radius: var(--radius-sm);
   font-family: var(--font-sans);
@@ -278,7 +278,7 @@
 }
 
 .saveBtn:hover:not(:disabled) {
-  background-color: var(--accent-hover);
+  background-color: var(--accent-fill-hover);
 }
 
 .saveBtn:disabled {
