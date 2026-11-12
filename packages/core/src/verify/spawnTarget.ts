@@ -70,8 +70,15 @@ export function shimScript(shimPath: string): string | null {
     return null
   }
   const dir = dirname(shimPath)
-  const expand = (raw: string): string =>
-    resolve(raw.replace(/%~dp0\\?|%dp0%\\?/gi, `${dir}\\`).replace(/\\\\/g, '\\'))
+  // A shim is Windows batch text, so the path after %~dp0 is written with backslashes.
+  // It is rebuilt with this host's own path rules: on Windows the result is unchanged,
+  // and elsewhere (the tests simulate Windows on Linux CI) the same shim still reads
+  // as the same file instead of one long name full of backslashes.
+  const expand = (raw: string): string => {
+    const anchored = /^(?:%~dp0|%dp0%)[\\/]*(.*)$/i.exec(raw)
+    if (anchored !== null) return resolve(dir, ...anchored[1]!.split(/[\\/]+/).filter((part) => part !== ''))
+    return resolve(raw.replace(/%~dp0\\?|%dp0%\\?/gi, `${dir}\\`).replace(/\\\\/g, '\\'))
+  }
 
   // npm.cmd / npx.cmd: the CLI script variable is SET explicitly.
   const npmStyle = /SET\s+"(NPM_CLI_JS|NPX_CLI_JS)=([^"]+)"/i.exec(text)
