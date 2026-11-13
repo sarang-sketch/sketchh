@@ -828,7 +828,24 @@ packages/desktop     React 19 + Vite window, Tauri 2 shell
   src/styles         appearance preferences, design tokens and local fonts
   src/lib            SketchClient contract, stdio + HTTP transports, factory
   src-tauri/         Rust host: command policy, containment, OS credentials
+
+packages/mobile      Vite + React phone app (PWA / Capacitor-ready)
+  src/               files on the phone, editor, agent chat, preview, settings
 ```
+
+## What's new — 13 November 2026 polish
+
+- **Normal / Turbo** in the chat: Turbo caps turns and reads less context;
+  Normal is the full agent. Same model, same permissions.
+- **Chat export and import**: download any conversation as Markdown or JSON,
+  import a JSON export back; a context meter in the chat header.
+- **Git init** from the Git panel; the first checkpoint is a commit.
+- **Asta theme**: the dark UI now matches the charcoal/ember cover
+  (`#141414` / `#191919` / `#222222` / `#303030` / `#eeeeec` / `#f58a50`).
+- **Sketch Mobile** (`packages/mobile/`): code on your phone — Files, Editor,
+  Agent, Preview, Settings. See its README for the APK build steps (the APK
+  needs an Android SDK; the Windows EXE needs a Windows host — neither was
+  built on the Linux VM used for this polish).
 
 ## License
 

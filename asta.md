@@ -1,6 +1,6 @@
 # Asta — Sketch workspace design and implementation
 
-Updated: 11 November 2026 (Asia/Kolkata). This is the design record for the requested Code + Cowork redesign.
+Updated: 13 November 2026 (Asia/Kolkata). This is the design record for the requested Code + Cowork redesign.
 
 ## Product intent
 
@@ -169,3 +169,266 @@ restriction. Code navigation, settings, workflow actions and keyboard behavior p
 interaction tests. Narrow layouts have source and sizing checks; their visual pass remains
 unverified. No final screenshots were saved, and README explicitly labels the retained
 screenshots as the previous interface.
+
+## 2026-11-12/13 polish — branch `sketchh-polish` (not pushed yet)
+
+The user asked, with full liberty, to check what was done, finish the IDE end to end,
+fix the chat Normal/Turbo display, polish the UI to the cover design, and also build
+a mobile coding app, a Windows EXE and an Android APK. This entry records what was
+actually found and done on a Linux VM (1.5 CPU, 6 GB RAM), with real measurements.
+Nothing here was pushed to GitHub or uploaded to Drive: GitHub/Drive were still
+being connected while this work ran, so the branch stays local until access lands.
+
+### Audit findings (re-verified, not taken on trust)
+
+- The 1 November audit docs are stale against the 11 November code. Two of their
+  fixes were already in the code: B-008 (TitleBar window controls now guard on
+  `isTauri()`) and B-009 (Settings now has separate Privacy and Shortcuts tabs).
+  The teal token names the UI/UX audit flagged are already kept as aliases in
+  `global.css`.
+- Baseline, re-run before any edit: `npm ci` clean; `npm run build:core` clean;
+  root `npm run typecheck` passes only after the core build — before it, desktop
+  `tsc` fails with `Cannot find module '@sketch/core'`, an ordering quirk, not a
+  code bug. Core tests: **1,412 passed, 1 skipped, 86 files, 67.9 s**. Desktop
+  tests: **949 passed, 1 failed, 104 files, 124.8 s** — the failure is the
+  `devBridge` ping test timing out at 5 s under load; it passes in isolation in
+  ~2 s. The claimed 2,363 tests (core 1,413 + desktop 950) match these baseline
+  counts within the one skipped / one timed-out test.
+- **"Turbo" did not exist in the committed desktop code.** A grep finds it only
+  in model pricing names (`gpt-4-turbo`, `gpt-3.5-turbo`) and `.turbo` ignore
+  patterns. The chat modes were Ask / Agent / Auto. The user's Turbo control
+  lived only in their uncommitted local 13 GB desktop work, which was never
+  pushed. So the fix was to build the control properly (below), not to repair a
+  reversed one — and the existing mode pills were also hardened with explicit
+  left-to-right direction.
+- The dark theme in code (`#121212` / `#171717` / `#1e1e1e`, accent `#f97316`)
+  did not match this record's cover values. It does now (below).
+- Confirmed remaining gaps (from `docs/IMPLEMENTATION_STATUS.md`): chat
+  management had rename and copy-as-Markdown, but no file export, no import,
+  and no context meter; per-chat model still missing; git had commit/stage/diff
+  but no `git init` button (the panel told users to run it in a terminal);
+  hooks, remote MCP, Project Rescue, UI Doctor, API Lab, split editor and
+  debugger are still not built.
+
+### Research summary (primary sources, 12 November 2026)
+
+Cursor (agent modes, Plan/Ask/Agent/Debug, per-change review, checkpoints),
+Kiro (specs as requirements → design → tasks, Crew persistent bots),
+OpenCode (agents as Markdown files, allow/ask/deny per-tool permissions,
+themes, MCP), DeepSeek Harness (everything-is-a-plugin on Cordis, developer
+preview — borrow the architecture, do not depend on the project), VS Code
+(two side bars, draggable panels, Zen/Centered modes, one Customize Layout
+control). Patterns actually applied here: the mode picker and review entry
+points Sketch already had were kept; the permission model stays allow/ask/deny;
+no second harness or competing agent client was added. No speed ranking between
+products was made or claimed — none of the sources publish comparable,
+independently verified figures for this use case.
+
+### What changed
+
+- **Normal / Turbo speed** (`packages/desktop/src/state/AppState.tsx`,
+  `lib/AgentSession.tsx`, `panels/agent/Composer.tsx`, `Composer.module.css`).
+  A segmented control in the composer bottom row, left of the mode pills:
+  Normal first, Turbo second, explicit `dir="ltr"` and `flex-direction: row`,
+  with a radiogroup label and tooltips. Speed is orthogonal to mode and never
+  switches the model: Normal is the full agent (configured turns, last 12
+  turns of history, 400k token budget); Turbo caps turns at 10 (20 in Auto),
+  sends only the last 6 turns, and caps the token budget at 150k. The mapping
+  is in `modeRunOptions` / `historyFrom` so the label and the run cannot drift.
+  4 new tests in `composer.test.tsx` (order, caps, history, validation).
+- **Chat management** (`conversationImport.ts`, `ConversationSidebar.tsx`,
+  `state/AppState.tsx`). Download a conversation as Markdown or JSON, and
+  import a JSON export back (validated; invalid files are refused with a
+  reason, run receipts and file states are not trusted from a file). Rename
+  and copy-as-Markdown already existed; Retry under a reply is the existing
+  regenerate. 5 new tests.
+- **Context meter** (`lib/contextMeter.ts`, `panels/agent/AgentChat.tsx`).
+  The chat header shows `Context ≈ 3.2k tokens · 8 turns · last 12 sent`,
+  estimated at ~1 token per 4 characters and labelled as an estimate, with the
+  kept-turn count following Normal/Turbo. 3 new tests.
+- **Git init / checkpoints** (`core/src/tools/git.ts`, `core/src/rpc/methods.ts`,
+  `desktop/src/lib/{client,httpClient,stdioClient,mockClient}.ts`,
+  `desktop/src/git/GitProvider.tsx`, `panels/GitPanel.tsx`). New `git-init`
+  engine method (the engine now answers 85 RPC methods), wired through both
+  transports; the Git panel's "Not a git repository" state now has an
+  "Initialise repository" button, and the first checkpoint is the existing
+  Commit button. 3 new tests (2 core, 1 panel, all against real git).
+- **Asta theme alignment** (`styles/global.css`, `editor/extensionRegistry.ts`,
+  `terminal/ShellSessions.tsx`, `components/settings/ConnectWizard.module.css`,
+  plus `var()` fallbacks). Dark tokens are now canvas `#141414`, sidebar
+  `#191919`, graphite `#222222`, dividers `#303030`, porcelain `#eeeeec`,
+  ember `#f58a50`. One test expectation updated to the new fallback value.
+- **Sketch Mobile** (`packages/mobile/`, new). A Vite + React PWA /
+  Capacitor-ready app with the same Asta tokens: bottom navigation (Files,
+  Editor, Agent, Preview, Settings), 44px touch targets, safe-area insets,
+  reduced-motion support. Files live in the phone's browser storage with
+  create/rename/delete and JSON export/import; the editor saves on the phone;
+  the agent has the same Ask/Agent/Auto + Normal/Turbo controls and calls a
+  provider the user configures (base URL + model + key, stored only on the
+  phone — no provider, no send); Preview renders HTML live and runs JavaScript
+  in a sandboxed frame with console capture. There is no terminal on mobile
+  and the app says so. Capacitor config (`dev.sketch.mobile`) and an Android
+  manifest are included; see its README for the exact APK steps.
+
+### Validation record (2026-11-13, this VM)
+
+- `npm run typecheck` (root): passes — core, desktop and mobile.
+- Core tests: **1,413 passed, 1 failed, 1 skipped, 86 files** (1,415 total;
+  +2 git-init tests). The failure is `test/cli.test.ts` "stops a run that is
+  still in flight" (41 s in the full run); it passes in isolation in 0.7 s —
+  load flakiness on this 1.5-CPU host, unrelated to the change (git tools only).
+- Desktop tests: **959 passed, 4 failed, 106 files** (963 total; +13 new
+  tests). The failures are the `devBridge` ping timeout and 3
+  `workspaceNavigation` lazy-load timing failures; all 4 pass when the two
+  files run together (18/18) and in isolation. Same load flakiness, not a
+  regression — the baseline full run already had the devBridge timeout.
+- Mobile tests: **10 passed, 2 files**.
+- `npm run build:desktop`: passes (77 s). `npm run check:bundle`: passes
+  (shell JavaScript 401,962 bytes raw / 125,109 gzip).
+- Mobile build: passes (212.5 kB JS, 66.96 kB gzip; `dist` 236K). Preview
+  smoke test: index, manifest and icon-512 all HTTP 200.
+- **No Windows EXE was built**: this VM has no Rust toolchain (`cargo` /
+  `rustc` absent) and `PACKAGING.md` states Windows NSIS packaging is
+  native-Windows-only. **No APK was built**: no Java, Gradle or Android SDK
+  in this VM. No dummy `.exe` / `.apk` was created; the packaging scripts and
+  docs are ready for a Windows host (EXE) and an Android-SDK host (APK).
+
+### What remains
+
+Hooks, remote MCP (stdio only), Project Rescue, UI Doctor, API Lab, split
+editor, debugger, per-chat model, voice, daily briefing, and a service worker
+for the mobile PWA. Visual verification: no screenshots and no packaged-app
+visual pass were possible on this VM — same limit as the previous round; the
+theme change was verified by tests and build only, and should get a visual
+pass on a real machine. Full-suite test runs are timing-sensitive on low-CPU
+hosts; run them serially (`--no-file-parallelism` for desktop) if they flake.
+
+## 2026-11-13 production — branch `sketchh-polish` (still not pushed)
+
+Sarang's follow-up, from the Android app at 08:53 IST: "finish all the work,
+test it and make it production ready". The GitHub App repository selection was
+**not** done at that point, so nothing below was pushed; the branch stays local
+until Sarang confirms the selection himself. This entry records what the
+production pass actually finished, wired, and verified — and what it honestly
+did not.
+
+### Finished and wired (not just built)
+
+- **Hooks** (`core/src/hooks/`, `core/src/rpc/methods.ts`,
+  `desktop/src/panels/HooksPanel.tsx`, `hooksAdapter.ts`,
+  `components/ide/SidePanel.tsx`). Engine hooks for `SessionStart`,
+  `PreToolUse` (can deny the tool call), `PostToolUse`, `Stop`, run as an
+  argv array — never a shell string — with timeout kill and 16 KiB output
+  caps. Three new RPC methods (`hooks-list`, `hooks-save`, `hooks-test`),
+  so the engine now answers **85 RPC methods**. The panel is wired through
+  `HooksPanelHost` (load/save/test against the real engine). Hooks are
+  **opt-in per run** (`params.hooksEnabled`, off by default, set only when
+  the user saves hooks through the panel) — a `.sketch/hooks.json` from an
+  untrusted project never runs on its own. Remaining gap, stated plainly:
+  there is still no per-file trust/approval flow for hooks like the one MCP
+  user servers have, and no OAuth for remote MCP below.
+- **Remote MCP** (`core/src/mcp/httpTransport.ts`, `userServers.ts`).
+  Streamable HTTP servers (`RemoteMcpServer`, session id, JSON + minimal
+  SSE, timeout + latch) alongside stdio; `mcp-server-save` accepts a URL
+  (+ optional headers) or a command, never both; `mcp-server-test` branches
+  to the remote server for URL servers. Remote servers are not catalogued
+  (the host would otherwise try to spawn them) and get `net:http` only, not
+  `proc:spawn`. No OAuth, no `resources/read` / `prompts/get` / sampling,
+  no streaming push.
+- **Project Rescue, UI Doctor, API Lab** (`desktop/src/panels/`,
+  wired into the side panel + activity bar). Rescue analyses the open files
+  (a partial view, not a whole-tree scan; `.env` flagged, contents never
+  rendered). UI Doctor runs real DOM checks on the page it runs in (images
+  without alt, buttons without accessible name, inputs without label,
+  title/lang, contrast estimate < 3:1 flagged as an estimate). API Lab makes
+  real fetches (AbortController, 10 s default timeout, body truncated at
+  50 KB, secrets scrubbed from history). No auto-fix in Rescue, no manual
+  Cancel/replay in API Lab, UI Doctor cannot check an arbitrary URL.
+- **Chat management, complete**: pin/archive (pinned first, archived in
+  their own section), per-chat model (a conversation's own model wins over
+  the global pick), thumbs up/down feedback (toggle to clear, persisted),
+  edit-and-resend (replaces the message, drops everything after it, one
+  fresh run, no duplicated user message — the run takes the edited history
+  directly to avoid a state-update race), and voice input (a Dictate button
+  in the composer, SpeechRecognition where the browser has it, disabled with
+  a plain title where it does not; final transcripts append to the draft).
+- **Debugger basics** (`panels/ide/DebuggerPanel.tsx`, `debuggerStore.ts`,
+  wired into the side panel). Breakpoints are recorded; launch starts a
+  bare `node --inspect=<port>` session in the terminal. No entry-file
+  selection, no stepping/pausing/variables — that is not implemented, and
+  the panel does not pretend otherwise.
+- **Daily briefing** (`panels/DailyBriefing.tsx`, `DailyBriefingHost.tsx`).
+  Built from what the window actually recorded (conversations only — no
+  runs/costs/tasks are seeded); empty days say so. The host exists so no
+  briefing module is statically imported by the Code shell (see the bundle
+  fix below).
+- **Cost Dashboard per-model grouping** (`panels/costGrouping.ts`,
+  `CostDashboard.tsx`). A "By model" section above "Every call", sorted by
+  cost desc; fully-unknown models show `unknown`, never `$0`. The section
+  renders only when entries exist — an empty log still shows the honest-zero
+  footnote exactly once.
+- **Split editor** (`components/SplitEditor.tsx`): built and tested, but
+  **not wired into the UI**. `CodeEditor` takes no path/content/onChange
+  props and projects `AppState.activeFile`, so both panes would show the
+  active file. Wiring it as-is would ship a split that shows the same file
+  twice; it needs a `CodeEditor` per-pane-props change first.
+- **Mobile service worker + sync** (`mobile/public/sw.js`,
+  `src/serviceWorker.ts`, `src/sync.ts`, Settings → "Sync with desktop").
+  App-shell cache-first, network-first navigations, provider/API calls never
+  cached; sync bundle v2 (SHA-256 over canonical JSON, FNV-1a fallback
+  labelled non-cryptographic, 5 MiB per-file limit, path-traversal
+  rejection, newer-wins / conflict-keeps-existing merge). This is
+  **file-bundle export/import, not live/real-time sync**, and there is no
+  desktop-side bundle import yet.
+
+### Fixes found by testing this round
+
+- The core zero-dependency gate (`test/deps.test.ts`) failed on the two new
+  worker test files placed under `src/` (they import `vitest`): moved to
+  `test/hooks.test.ts` and `test/httpTransport.test.ts`, the convention the
+  rest of the core tests follow.
+- The desktop bundle check failed after wiring the panels:
+  `IdeLayout.tsx` lost its own lazy entry because SidePanel statically
+  imported `buildBriefing` from `panels/dailyBriefing`, which the briefing
+  component also imports — Rollup merged the briefing code into the
+  IdeLayout chunk. Fixed with `DailyBriefingHost.tsx`: everything
+  briefing-related now sits behind one lazy import, and the check passes.
+- The `CostDashboard` empty-log test failed (the new "By model" section
+  duplicated the honest-zero footnote); fixed by rendering the section only
+  when entries exist.
+- The `cli.test.ts` cancel test failed once under full-suite load (40.9 s);
+  it passes in isolation (~4 s) and per-file. Hardened, not weakened: the
+  cancel is now sent at 1,500 ms instead of 700 ms (on a loaded VM the
+  engine can take over 700 ms to boot and start the run, so the earlier
+  delay exercised the tombstone path instead of the in-flight path the test
+  is for) and the test timeout is 60 s. All assertions unchanged.
+- The `devBridge` ping timeout (30 s on `beforeAll` and the ping test) and
+  the `workspaceNavigation` cold-transform timeout (3 s → 10 s) were raised
+  the same way — margins, not weaker assertions. Both files now pass in the
+  full suite.
+- One stale test fixture remained from the old hook events (`'pre-commit'`
+  in `HooksPanel.test.tsx`): updated to the engine events (`SessionStart`,
+  `PreToolUse`, `PostToolUse`, `Stop`).
+
+### Validation record (2026-11-13, this VM, final numbers)
+
+- Typecheck clean in all three packages: core, desktop, mobile.
+- Core tests: **1,450 passed, 1 skipped, 88 files**.
+- Desktop tests: **1,049 passed, 117 files** (`--no-file-parallelism`).
+- Mobile tests: **25 passed, 4 files**.
+- Desktop build passes; `npm run check:bundle` passes (shell JavaScript
+  407,624 bytes raw / 126,520 gzip; Cowork 487,106 / 155,037).
+- Mobile build passes; `dist/sw.js` present.
+- Theme tokens verified in the built CSS (desktop + mobile): `#141414`,
+  `#f58a50`, `#191919`, `#eeeeec` all present. No browser exists on this VM
+  (no Chromium/Playwright), so there is still no pixel-level visual pass —
+  the Asta colours need a look on a real machine.
+- **No Windows EXE**: no `cargo`/`rustc`, no Java/Gradle/Android SDK,
+  `ANDROID_HOME`/`JAVA_HOME` unset; `PACKAGING.md` says Windows NSIS is
+  native-Windows-only. **No APK**: same reason. No fake `.exe`/`.apk` was
+  created. Exact host commands are in the production report.
+- **Nothing pushed to GitHub**: repo selection unconfirmed (see above). The
+  text-only branch `sketchh-polish-textonly` is the push candidate (drops
+  the two binary PWA icons, keeps the SVG icon); it must be refreshed from
+  this branch before pushing, since this round added commits after it was
+  cut.
