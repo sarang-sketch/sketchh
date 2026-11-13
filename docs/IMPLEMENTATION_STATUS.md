@@ -51,6 +51,10 @@ See `asta.md` for the full record with validation numbers. In short:
 
 The engine now answers 85 RPC methods (81 before the 2026-11-13 polish added `git-init`; 85 after the production pass added `hooks-list`, `hooks-save`, `hooks-test`).
 
+## EGM Design & Review plugin (2026-11-13, branch `sketchh-polish`, not pushed)
+
+Google's Elephant-Goldfish Model (https://github.com/google/elephant-goldfish-model, Apache-2.0) as a Sketch plugin: Elephant drafts specs with full project context; Goldfish reviewers read the draft with **no prior conversation**; the user approves before implementing. Seven skills in the registry (`egm-brainstorm`, `egm-draft`, `egm-review`, `egm-resolve`, `egm-bootstrap`, `egm-drift-report`, `egm-review-loop`, pack `egm`), wired as `/egm-*` composer commands and an "EGM Design & Review" panel (activity bar, Brain icon) with a reviewer-context preview. Elephant side: brainstorm saves `concepts_brief.md`, draft produces `design_draft.md` section by section, approved specs save under `docs/designs/`. Goldfish side: a five-stage review, findings resolved through `goldfish_review_report.md`, drift reports compare `docs/designs/` with live code. One new read-only RPC method, `egm-goldfish-context`; the engine now answers 88 RPC methods. **Honest limit:** Sketch cannot yet spawn isolated subagent contexts, so the five review stages run sequentially in one fresh session (empty history) instead of in five isolated subagents — fresh eyes, but the stages share that one session. The panel and the review skill say so, and the review prompt refuses a same-conversation review. Tests: `core/test/egm.test.ts`, `desktop/src/lib/egm.test.ts`, `desktop/src/panels/EgmPanel.test.tsx`.
+
 Every new safeguard was checked by temporarily removing it and confirming its test fails: the provider check and the fetch guard (M1), the clear-history confirmation (M1), the edit and read refusals (M3), the download confirmation in engine and window (M2), and project-server approval in engine and window (M4).
 
 ## Final acceptance criteria from the brief
@@ -75,7 +79,7 @@ Every new safeguard was checked by temporarily removing it and confirming its te
 | Critical workflows pass end-to-end tests | Partly met | Engine and window tests drive real engine methods, real git, real stdio processes and real loopback HTTP; the installed desktop app was not driven end to end in this task |
 | Documentation is complete | Met for what exists | The ten requested docs plus the five audit docs |
 
-Sketch does **not** have feature parity with Claude Code or Codex. The largest remaining gaps are now the honest stubs and missing pieces of this round: split editor wiring (`CodeEditor` per-pane props), debugger stepping, hooks trust/approval and remote MCP OAuth, live (not file-bundle) mobile↔desktop sync, and a desktop-side sync-bundle import.
+Sketch does **not** have feature parity with Claude Code or Codex. The largest remaining gaps are now the honest stubs and missing pieces of this round: split editor wiring (`CodeEditor` per-pane props), debugger stepping, hooks trust/approval and remote MCP OAuth, live (not file-bundle) mobile↔desktop sync, a desktop-side sync-bundle import, and isolated subagent contexts (EGM Goldfish reviews run in one fresh session, not five isolated ones).
 
 ## Still pending, with the precise limitation
 

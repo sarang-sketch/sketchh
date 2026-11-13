@@ -432,3 +432,84 @@ did not.
   the two binary PWA icons, keeps the SVG icon); it must be refreshed from
   this branch before pushing, since this round added commits after it was
   cut.
+
+## 2026-11-13 EGM plugin — branch `sketchh-polish` (still not pushed)
+
+Sarang, from the Android app: "Use this as your plug in also put it in our
+ide sketch https://github.com/google/elephant-goldfish-model". EGM is not a
+model: it is Google's open-source plugin of agent skills for designing and
+reviewing software (Apache-2.0, ~18k stars, upstream commit
+`270b10326bf366d823bc76fd662cf83808d5781e`, read from a shallow clone in
+`~/workspace/egm-reference`). Elephant holds project context and drafts the
+specification; Goldfish reviewers examine the draft with NO prior
+conversation, to expose unstated assumptions and blind spots; the user
+approves the spec before implementing.
+
+### What was built
+
+- **Seven skills** in the registry
+  (`packages/core/registry/skills/egm-*/SKILL.md`, pack `egm`; 14 skills
+  total now): `egm-brainstorm`, `egm-draft`, `egm-review`, `egm-resolve`,
+  `egm-bootstrap`, `egm-drift-report`, `egm-review-loop`. Each file carries
+  EGM attribution (Apache-2.0, repo link, upstream commit) and states the
+  Goldfish fresh-context rule. Registry re-pinned
+  (`npm run pin:registry`).
+- **Core support** (`packages/core/src/egm/`): `buildGoldfishContext`
+  (target document plus the files it links to inside the project only;
+  anchor-only, external and missing links excluded with reasons; the result
+  has no chat-history field and `priorChatTurns` is always 0), the five
+  review stages with their report files, the semantic split at
+  "## Detailed Implementation Plan", finding dedup/sort, review-loop
+  convergence (two consecutive clean rounds, cap 5 rounds), and the artifact
+  conventions (`concepts_brief.md`, `design_draft.md`,
+  `docs/designs/<feature>.md`, `{YYYY-MM-DD}_DRIFT_REPORT.md`). One new RPC
+  method, `egm-goldfish-context` (read-only). The engine now answers **88
+  RPC methods** — the "85" in the production section above was already two
+  short of the table, which held 87 at `64b7adc`.
+- **Commands** (`packages/desktop/src/lib/egm.ts`, wired into
+  `slashCommands.ts`): `/egm-brainstorm`, `/egm-draft`, `/egm-review`,
+  `/egm-resolve`, `/egm-bootstrap`, `/egm-drift-report`,
+  `/egm-review-loop`. Review and drift-report run in Ask mode (read-only).
+  Each command's expanded prompt is self-contained — it carries the file
+  conventions and the Goldfish rule — so it works even before the skill is
+  installed.
+- **Panel** (`packages/desktop/src/panels/EgmPanel.tsx`, activity-bar entry
+  "EGM Design & Review", Brain icon): lists the seven skills, the workflow
+  (Brainstorm → Draft → Review → Resolve → Implement), a target-file input,
+  and a "Preview reviewer context" that shows exactly what the reviewers
+  will see — including that they see 0 prior chat turns. Review commands
+  start a new conversation and send the run with an empty history.
+- **Client seam**: `egmGoldfishContext` on `SketchClient`, implemented in
+  the HTTP and stdio clients, `noEngine` in the mock client.
+
+### The honest limit
+
+Sketch cannot yet spawn isolated subagent contexts, so the five Goldfish
+review stages run sequentially in ONE fresh session (empty history) instead
+of in five isolated subagents. The fresh session still guarantees the
+property that matters most — the reviewers never see the drafting
+conversation — but the stages can in principle influence each other within
+that session. The panel, the review skill text, and the consolidated report
+header all say this; a same-conversation "review" is refused by the prompt,
+which tells the user to start a new conversation first.
+
+### Validation record (2026-11-13, this VM)
+
+- Typecheck clean in core and desktop.
+- Core tests: **1,469 passed, 1 skipped, 89 files** (full suite, third run
+  green; two earlier full runs each failed the same one bench test —
+  `taskCompletionRate` 0.5 in the offline eval gate — which passes in
+  isolation and on re-run, and also fails differently on a clean baseline
+  worktree, so it is a load-flaky timing failure in the verify-policy
+  stage, not an EGM path: the bench executor never touches the skills
+  registry).
+- Desktop tests: **1,064 passed, 119 files** (full suite with
+  `--no-file-parallelism`; the parallel runs each failed a different timing
+  flake — `RunPanel` once, `workspaceNavigation` twice — and each passes in
+  isolation, so the flakes are load on this 1.5-CPU VM, not this change).
+- New tests: `packages/core/test/egm.test.ts` (fresh-context rule, stages,
+  artifacts, registry), `packages/desktop/src/lib/egm.test.ts` (command
+  registration, prompts), `packages/desktop/src/panels/EgmPanel.test.tsx`
+  (panel, preview, fresh-review start).
+- Nothing pushed to GitHub; `packages/mobile/` untouched (another agent was
+  rebuilding it during this work).
