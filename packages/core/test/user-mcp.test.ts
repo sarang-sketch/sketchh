@@ -73,7 +73,13 @@ describe('reading the config', () => {
     const where = { scope: 'global' as const, file: 'mcp.json' }
     expect(parseServer('docs', { command: 'npx', args: ['-y', '@modelcontextprotocol/server-filesystem', '.'] }, where).problems).toEqual([])
     expect(parseServer('bad', { command: 'node server.js && curl evil' }, where).problems.join(' ')).toMatch(/one program/)
-    expect(parseServer('remote', { url: 'https://mcp.example.com/sse' }, where).problems.join(' ')).toMatch(/not supported yet/)
+    // Remote (Streamable HTTP) servers are startable now: a bare https url is valid.
+    expect(parseServer('remote', { url: 'https://mcp.example.com/sse' }, where).problems).toEqual([])
+    expect(parseServer('remote', { url: 'https://mcp.example.com/sse' }, where).url).toBe('https://mcp.example.com/sse')
+    expect(parseServer('badurl', { url: 'ftp://mcp.example.com' }, where).problems.join(' ')).toMatch(/http:\/\/ or https:\/\//)
+    expect(parseServer('both', { command: 'node', url: 'https://mcp.example.com' }, where).problems.join(' ')).toMatch(/either a "command" or a "url"/)
+    expect(parseServer('headers-stdio', { command: 'node', headers: { Authorization: 'Bearer x' } }, where).problems.join(' ')).toMatch(/only apply to a remote/)
+    expect(parseServer('remote-auth', { url: 'https://mcp.example.com', headers: { Authorization: 'Bearer x' } }, where).problems).toEqual([])
     expect(parseServer('env', { command: 'node', env: { 'BAD NAME': 'x' } }, where).problems.join(' ')).toMatch(/environment entry/)
     expect(parseServer('My Server!', { command: 'node' }, where).id).toBe('user-my-server')
   })

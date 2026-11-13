@@ -19,8 +19,10 @@
 // capability for "runs a program as you". Offline Mode does not start user servers at
 // all: Sketch cannot tell whether a program uses the network.
 //
-// Remote servers (`"url": ...`) are listed and marked unsupported: only stdio is
-// implemented.
+// Remote servers (`"url": ...`) run over Streamable HTTP (`mcp/httpTransport.ts`):
+// no process is spawned, the tools cost `net:http`, and Offline Mode does not
+// start them. A remote server needs no OAuth support in Sketch — a server that
+// demands it answers 401 and the call fails cleanly (see `httpTransport.ts`).
 
 import { createHash } from 'node:crypto'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
@@ -28,6 +30,7 @@ import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import type { McpCatalogEntry } from './catalog.js'
 import type { McpServerSpec } from './client.js'
+import type { RemoteMcpServerSpec } from './httpTransport.js'
 import { backupCorruptConfig } from '../settings/providerSettings.js'
 
 export const USER_SERVER_PREFIX = 'user-'
@@ -44,8 +47,13 @@ export interface UserMcpServer {
   command: string | null
   args: string[]
   env: Record<string, string>
-  /** A remote server's address. Listed, not started: only stdio is supported. */
+  /** A remote (Streamable HTTP) server's address. Null for stdio servers. */
   url: string | null
+  /**
+   * Extra HTTP headers sent to a remote server, e.g. an `Authorization` value
+   * the user put in their own config. Stored like `env` and never logged.
+   */
+  headers: Record<string, string>
   /** Why it cannot start. Empty when it can. */
   problems: string[]
   /** Global servers always; project servers once the user approved this exact launch. */
@@ -101,9 +109,10 @@ async function writeJson(file: string, value: unknown): Promise<void> {
   await rename(temp, file)
 }
 
-export function fingerprintOf(input: { scope: string; root?: string; name: string; command: string | null; args: string[]; env: Record<string, string>; url: string | null }): string {
+export function fingerprintOf(input: { scope: string; root?: string; name: string; command: string | null; args: string[]; env: Record<string, string>; url: string | null; headers?: Record<string, string> }): string {
   const env = Object.keys(input.env).sort().map((key) => [key, input.env[key]])
-  const canonical = JSON.stringify([input.scope, input.root ?? '', input.name, input.command, input.args, env, input.url])
+  const headers = Object.keys(input.headers ?? {}).sort().map((key) => [key, input.headers?.[key]])
+  const canonical = JSON.stringify([input.scope, input.root ?? '', input.name, input.command, input.args, env, input.url, headers])
   return createHash('sha256').update(canonical).digest('hex')
 }
 
@@ -129,9 +138,21 @@ export function parseServer(
       else env[key] = value
     }
   }
-  if (command === null && url === null) problems.push('it needs a "command" to run')
+  if (command === null && url === null) problems.push('it needs a "command" to run or a "url" for a remote server')
   if (command !== null && /[;&|<>`$]/.test(command)) problems.push('"command" must be one program, not a shell command line; put its arguments in "args"')
-  if (command === null && url !== null) problems.push('remote (url) servers are not supported yet; only servers Sketch starts itself (stdio)')
+  if (command !== null && url !== null) problems.push('give either a "command" or a "url", not both')
+  if (url !== null && !/^https?:\/\/[^\s/]+/.test(url)) problems.push('"url" must be an http:// or https:// address')
+  const headers: Record<string, string> = {}
+  const rawHeaders = entry['headers']
+  const HEADER_NAME = /^[A-Za-z0-9-]+$/
+  if (rawHeaders !== undefined && (rawHeaders === null || typeof rawHeaders !== 'object' || Array.isArray(rawHeaders))) problems.push('"headers" must be an object of strings')
+  else if (rawHeaders !== undefined) {
+    for (const [key, value] of Object.entries(rawHeaders as Record<string, unknown>)) {
+      if (!HEADER_NAME.test(key) || typeof value !== 'string') problems.push(`header entry ${key} must be NAME: "text"`)
+      else headers[key] = value
+    }
+  }
+  if (url === null && Object.keys(headers).length > 0) problems.push('"headers" only apply to a remote ("url") server')
   return {
     name,
     id: idForName(name),
@@ -141,9 +162,10 @@ export function parseServer(
     args,
     env,
     url,
+    headers,
     problems,
     trusted: where.scope === 'global',
-    fingerprint: fingerprintOf({ scope: where.scope, ...(where.root !== undefined ? { root: where.root } : {}), name, command, args, env, url }),
+    fingerprint: fingerprintOf({ scope: where.scope, ...(where.root !== undefined ? { root: where.root } : {}), name, command, args, env, url, headers }),
   }
 }
 
@@ -223,9 +245,14 @@ export async function readUserServers(options: UserServersOptions = {}): Promise
 export interface ServerInput {
   scope: 'global' | 'project'
   name: string
-  command: string
+  /** Required for a stdio server; omit for a remote (`url`) server. */
+  command?: string
   args?: string[]
   env?: Record<string, string>
+  /** Remote (Streamable HTTP) server address. Omit for a stdio server. */
+  url?: string
+  /** Extra HTTP headers for a remote server. Never logged. */
+  headers?: Record<string, string>
 }
 
 /** Add or replace one server, keeping every other entry and key in the file. */
@@ -233,7 +260,7 @@ export async function saveUserServer(options: UserServersOptions, input: ServerI
   const files = userServerFiles(options)
   const file = input.scope === 'project' ? files.project : files.global
   if (file === undefined) throw new Error('a project server needs an open project')
-  const parsed = parseServer(input.name, { command: input.command, args: input.args ?? [], env: input.env ?? {} }, {
+  const parsed = parseServer(input.name, { command: input.command, args: input.args ?? [], env: input.env ?? {}, url: input.url, headers: input.headers }, {
     scope: input.scope,
     file,
     ...(input.scope === 'project' && options.root !== undefined ? { root: resolve(options.root) } : {}),
@@ -243,7 +270,13 @@ export async function saveUserServer(options: UserServersOptions, input: ServerI
   if (error !== undefined) throw new Error(`${error}. Fix or remove the file first; Sketch will not overwrite it.`)
   const doc = value ?? {}
   const block = doc['mcpServers'] !== null && typeof doc['mcpServers'] === 'object' && !Array.isArray(doc['mcpServers']) ? { ...(doc['mcpServers'] as Record<string, unknown>) } : {}
-  block[input.name] = { command: parsed.command, args: parsed.args, ...(Object.keys(parsed.env).length > 0 ? { env: parsed.env } : {}) }
+  block[input.name] = {
+    ...(parsed.command !== null ? { command: parsed.command } : {}),
+    ...(parsed.url !== null ? { url: parsed.url } : {}),
+    args: parsed.args,
+    ...(Object.keys(parsed.env).length > 0 ? { env: parsed.env } : {}),
+    ...(Object.keys(parsed.headers).length > 0 ? { headers: parsed.headers } : {}),
+  }
   await writeJson(file, { ...doc, mcpServers: block })
   return parsed
 }
@@ -286,4 +319,18 @@ export function catalogEntryFor(server: UserMcpServer): McpCatalogEntry {
 
 export function specFor(server: UserMcpServer, root: string, deadlines: { requestTimeoutMs?: number; handshakeTimeoutMs?: number } = {}): McpServerSpec {
   return { id: server.id, command: server.command ?? '', args: server.args, cwd: root, env: server.env, ...deadlines }
+}
+
+/**
+ * The HTTP spec for a remote user server. Only call for a server with a `url`;
+ * stdio servers go through `specFor`. Header values come from the user's own
+ * config and are never logged (see `httpTransport.ts`).
+ */
+export function remoteSpecFor(server: UserMcpServer, deadlines: { requestTimeoutMs?: number; handshakeTimeoutMs?: number } = {}): RemoteMcpServerSpec {
+  return {
+    id: server.id,
+    url: server.url ?? '',
+    ...(Object.keys(server.headers).length > 0 ? { headers: { ...server.headers } } : {}),
+    ...deadlines,
+  }
 }

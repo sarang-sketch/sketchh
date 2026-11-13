@@ -31,7 +31,7 @@ import type { RunBudget, UsageCause } from '../cost/index.js'
 import { latestBenchArtifactPath, loadLatestBenchArtifact } from '../bench/index.js'
 import * as memory from '../memory/index.js'
 import type { Capability, CapabilitySet } from '../capabilities/index.js'
-import { MCP_CATALOG, McpHost, McpServer, catalogIds, findCatalogEntry, missingEnv } from '../mcp/index.js'
+import { MCP_CATALOG, McpHost, McpServer, RemoteMcpServer, catalogIds, findCatalogEntry, missingEnv } from '../mcp/index.js'
 import { McpCatalogRegistry } from '../mcp/catalog.js'
 import {
   catalogEntryFor,
@@ -40,8 +40,10 @@ import {
   saveUserServer,
   setServerTrust,
   specFor,
+  remoteSpecFor,
   type UserMcpServer,
 } from '../mcp/userServers.js'
+import { HookRunner, hooksList, hooksSave, hooksTest, loadHooks } from '../hooks/index.js'
 import {
   assembleContext,
   buildRepoGraph,
@@ -733,6 +735,35 @@ async function ping(_params: Record<string, unknown>, ctx: MethodContext): Promi
 const inFlightRuns = new Map<string, AbortController>()
 
 /**
+ * Run ids cancelled before any run registered under them.
+ *
+ * `cancel` used to answer `{ cancelled: false }` when no run was in flight and
+ * forget the request entirely — so a `cancel` that arrived while a run was still
+ * starting (slow host, cold engine) was lost, and the run then ran to completion
+ * even though the user had already asked it to stop. A tombstone remembers the
+ * request for 60 s: a run starting under that id aborts immediately instead.
+ * Tombstones are consumed on use and pruned by age, so the map cannot grow
+ * without bound and a reused id is only affected inside the window.
+ */
+const cancelledRunIds = new Map<string, number>()
+const CANCELLED_RUN_TOMBSTONE_MS = 60_000
+
+function noteCancelledRunId(runId: string): void {
+  const now = Date.now()
+  for (const [id, at] of cancelledRunIds) {
+    if (now - at > CANCELLED_RUN_TOMBSTONE_MS) cancelledRunIds.delete(id)
+  }
+  cancelledRunIds.set(runId, now)
+}
+
+function takeCancelledRunId(runId: string): boolean {
+  const at = cancelledRunIds.get(runId)
+  if (at === undefined) return false
+  cancelledRunIds.delete(runId)
+  return Date.now() - at <= CANCELLED_RUN_TOMBSTONE_MS
+}
+
+/**
  * `params.runId`, or `undefined` to let the engine mint one.
  *
  * A caller-supplied id is a correlation handle, not a licence to collide: a second run
@@ -898,7 +929,9 @@ function readCommandMode(params: Record<string, unknown>): CommandMode | undefin
  * Idempotent and honest: `{ cancelled: false }` when no run is in flight under that id,
  * which is the same answer for "already finished", "never started", and "wrong id". A
  * caller cannot distinguish those and should not try to — the only thing it can act on is
- * whether a run is still going.
+ * whether a run is still going. The request is still remembered for 60 s (see
+ * `cancelledRunIds`): a run that starts under this id inside that window aborts
+ * immediately instead of running to completion after the user already asked it to stop.
  *
  * This does not fabricate a terminal event. The run itself observes the abort and emits
  * `run_failed{reason:"aborted"}` through its own log, so the record of a cancelled run is
@@ -909,7 +942,12 @@ async function cancel(params: Record<string, unknown>, _ctx: MethodContext): Pro
   if (runId === undefined) throw new InvalidParamsError('params.runId is required')
   const controller = inFlightRuns.get(runId)
   if (controller === undefined) {
-    return { runId, cancelled: false, detail: 'no run with that id is in flight' }
+    noteCancelledRunId(runId)
+    return {
+      runId,
+      cancelled: false,
+      detail: 'no run with that id is in flight; a run starting under this id in the next 60 s will abort immediately',
+    }
   }
   controller.abort()
   return { runId, cancelled: true, detail: 'abort requested; the run emits its own terminal event' }
@@ -946,6 +984,13 @@ async function run(params: Record<string, unknown>, ctx: MethodContext): Promise
   const runId = readRunId(params) ?? newRunId()
   const controller = new AbortController()
   inFlightRuns.set(runId, controller)
+  // A Stop that arrived before this run registered is remembered as a tombstone
+  // (see `cancelledRunIds`): abort immediately instead of running a run the
+  // user already asked to stop.
+  if (takeCancelledRunId(runId)) {
+    controller.abort()
+    ctx.log(`run ${runId} aborted immediately: it was cancelled before it started`)
+  }
   // OPT-IN. Without it an `ask` ends the run exactly as it always has, which is what
   // every headless caller and the eval harness need.
   const interactive = optionalBoolean(params, 'interactive', 'params.interactive') ?? false
@@ -962,6 +1007,31 @@ async function run(params: Record<string, unknown>, ctx: MethodContext): Promise
     new JsonlEventStore({ baseDir: root, secrets: () => ctx.secrets() }),
     (event) => ctx.emitEvent(event),
   )
+
+  // Hooks are OPT-IN per run (`params.hooksEnabled`). A `.sketch/hooks.json` names
+  // programs Sketch runs as the user, so a run never loads it unasked: the window
+  // sets the flag only after the user configured hooks through the Hooks panel.
+  // An invalid or absent file loads as zero hooks and the run proceeds unchanged.
+  const hooksEnabled = optionalBoolean(params, 'hooksEnabled', 'params.hooksEnabled') ?? false
+  let hooksRunner: HookRunner | undefined
+  if (hooksEnabled) {
+    try {
+      const loaded = await loadHooks(root)
+      if (loaded.config.hooks.length > 0) {
+        hooksRunner = new HookRunner(loaded.config, {
+          root,
+          events,
+          runId,
+          log: (line) => ctx.log(line),
+        })
+        if (loaded.problems.length > 0) {
+          ctx.log(`hooks: ${loaded.problems.length} problem(s) in .sketch/hooks.json; ${loaded.config.hooks.length} hook(s) loaded`)
+        }
+      }
+    } catch (err) {
+      ctx.log(`hooks: could not load .sketch/hooks.json, continuing without hooks: ${messageOf(err)}`)
+    }
+  }
 
   const skills = await loadRequestedSkills(root, params, task, ctx)
   const granted = await grantForRun(root, skills, ctx)
@@ -1088,6 +1158,8 @@ async function run(params: Record<string, unknown>, ctx: MethodContext): Promise
     // which run a Stop request means.
     ids: () => runId,
     signal: controller.signal,
+    // Hooks, only when this run opted in (see above). Absent: previous behaviour.
+    ...(hooksRunner !== undefined ? { hooks: hooksRunner } : {}),
     // Auto mode answers the model itself (see AUTONOMOUS_ANSWER); otherwise an
     // interactive run waits for a human, and a headless one ends on a question.
     ...(autonomous
@@ -1237,10 +1309,16 @@ async function openToolLayerFor(
   if (requested.length === 0 && userNames.length === 0 && !projectTools && extraTools.length === 0) return undefined
 
   const userServers = await userServersForRun(root, params, ctx, userNames)
+  // Stdio servers go through the catalog (their `launch` is real); remote
+  // (Streamable HTTP) servers must NOT be catalogued — `host.open` takes the
+  // catalog path for a listed id and would try to spawn them. They open
+  // through `remoteOverrides` instead, with a synthetic `net:http` entry.
+  const stdioServers = userServers.filter((server) => server.url === null)
+  const remoteServers = userServers.filter((server) => server.url !== null)
   const requestTimeoutMs = optionalNumber(params, 'mcpRequestTimeoutMs', 'params.mcpRequestTimeoutMs')
   const catalog =
-    userServers.length > 0
-      ? (ctx.extensions?.mcp ?? new McpCatalogRegistry()).withUserServers(userServers.map(catalogEntryFor))
+    stdioServers.length > 0
+      ? (ctx.extensions?.mcp ?? new McpCatalogRegistry()).withUserServers(stdioServers.map(catalogEntryFor))
       : ctx.extensions?.mcp
   const host = new McpHost({
     root,
@@ -1256,10 +1334,17 @@ async function openToolLayerFor(
       ...userServers.map((server) => server.id),
     ]),
     ...(catalog !== undefined ? { catalog } : {}),
-    ...(userServers.length > 0
+    ...(stdioServers.length > 0
       ? {
           launchOverrides: Object.fromEntries(
-            userServers.map((server) => [server.id, specFor(server, root, requestTimeoutMs !== undefined ? { requestTimeoutMs } : {})]),
+            stdioServers.map((server) => [server.id, specFor(server, root, requestTimeoutMs !== undefined ? { requestTimeoutMs } : {})]),
+          ),
+        }
+      : {}),
+    ...(remoteServers.length > 0
+      ? {
+          remoteOverrides: Object.fromEntries(
+            remoteServers.map((server) => [server.id, remoteSpecFor(server, requestTimeoutMs !== undefined ? { requestTimeoutMs } : {})]),
           ),
         }
       : {}),
@@ -1269,8 +1354,10 @@ async function openToolLayerFor(
     // A user server runs a program (`proc:spawn`), which a read-only (Ask mode) run
     // must not do — so it is not started at all. Not merely refused: a process that
     // never launched cannot write a file or open a socket. (W5 invariant 2.)
+    // A remote server is the same rule for a different reason: its tools can write
+    // through the network, so Ask mode does not open it either.
     if (extra.readOnly === true) {
-      ctx.log(`mcp: not starting ${server.name} — this run is read-only (Ask mode) and a user server runs a program`)
+      ctx.log(`mcp: not starting ${server.name} — this run is read-only (Ask mode)${server.url !== null ? ' and a remote server can write through the network' : ' and a user server runs a program'}`)
       continue
     }
     const opened = await host.open(server.id)
@@ -1307,17 +1394,22 @@ async function openToolLayerFor(
     )
   }
 
-  // The user's servers cost `proc:spawn`. Naming them for this run granted exactly that,
-  // and only their descriptors carry it unless commands were enabled as well.
+  // The user's servers cost `proc:spawn` (stdio) or `net:http` (remote). Naming
+  // them for this run granted exactly those, and only their descriptors carry
+  // them unless commands were enabled as well. A remote-only run does NOT gain
+  // `proc:spawn`, and vice versa.
   //
   // EXCEPT in a read-only (Ask mode) run: `proc:spawn` is a write-shaped capability that
   // Ask mode must not hold, so it is NOT re-added here. A user MCP server's tools then
   // stay unauthorised and any call to one is refused by the guard — Ask mode writes no
   // file through the MCP path either (W5 invariant 2). Agent/Auto are unchanged.
   const baseGrant = extra.dispatcherGrant ?? granted
+  const extraCaps: Capability[] = []
+  if (stdioServers.length > 0) extraCaps.push('proc:spawn')
+  if (remoteServers.length > 0) extraCaps.push('net:http')
   const dispatcherGrant =
-    userServers.length > 0 && extra.readOnly !== true
-      ? (Object.freeze([...new Set<Capability>([...baseGrant, 'proc:spawn'])].sort()) as CapabilitySet)
+    extraCaps.length > 0 && extra.readOnly !== true
+      ? (Object.freeze([...new Set<Capability>([...baseGrant, ...extraCaps])].sort()) as CapabilitySet)
       : baseGrant
   const dispatcher = new ToolDispatcher({
     // The engine's own git tools sit alongside the MCP servers', behind the same
@@ -2214,6 +2306,11 @@ async function gitCommit(params: Record<string, unknown>, ctx: MethodContext): P
   const message = typeof params['message'] === 'string' ? params['message'] : ''
   const result = await tool.commit(message)
   return { output: result.output, status: await tool.status() }
+}
+
+async function gitInit(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
+  const tool = gitTool(gitRoot(params), ctx, true)
+  return tool.init()
 }
 
 async function gitDiscard(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
@@ -3824,9 +3921,15 @@ async function mcpServerSave(params: Record<string, unknown>): Promise<unknown> 
     const saved = await saveUserServer(userServerOptions(params), {
       scope: serverScope(params),
       name: readString(params, 'name', 'params.name').trim(),
-      command: readString(params, 'command', 'params.command').trim(),
+      ...(optionalString(params, 'command', 'params.command') !== undefined
+        ? { command: optionalString(params, 'command', 'params.command')!.trim() }
+        : {}),
+      ...(optionalString(params, 'url', 'params.url') !== undefined
+        ? { url: optionalString(params, 'url', 'params.url')!.trim() }
+        : {}),
       args: optionalStringArray(params['args'], 'params.args') ?? [],
       env: env as Record<string, string>,
+      ...(params['headers'] !== undefined ? { headers: asObject(params['headers'], 'params.headers') as Record<string, string> } : {}),
     })
     return { saved: saved.name, ...(await readUserServers(userServerOptions(params))) }
   } catch (err) {
@@ -3859,9 +3962,27 @@ async function mcpServerTest(params: Record<string, unknown>, ctx: MethodContext
   const server = await findUserServer(params)
   if (server.problems.length > 0) return { ok: false, name: server.name, detail: server.problems.join('; '), tools: [] }
   if (!server.trusted) return { ok: false, name: server.name, detail: 'Approve this project server before starting it.', tools: [] }
-  assertOnlineAction(params, ctx, `stdio://${server.name}`, `starting the MCP server "${server.name}"`)
   const root = optionalString(params, 'root', 'params.root') ?? ctx.cwd()
   const timeoutMs = optionalNumber(params, 'timeoutMs', 'params.timeoutMs') ?? 60_000
+  if (server.url !== null) {
+    // Remote (Streamable HTTP): no process to spawn — handshake over the wire.
+    assertOnlineAction(params, ctx, server.url, `starting the MCP server "${server.name}"`)
+    const instance = new RemoteMcpServer(remoteSpecFor(server, { handshakeTimeoutMs: timeoutMs, requestTimeoutMs: timeoutMs }), {
+      log: (line) => ctx.log(line),
+    })
+    try {
+      const started = await instance.start()
+      return {
+        ok: started.ok,
+        name: server.name,
+        detail: started.detail,
+        tools: instance.tools.map((tool) => ({ name: tool.name, description: tool.description })),
+      }
+    } finally {
+      await instance.close()
+    }
+  }
+  assertOnlineAction(params, ctx, `stdio://${server.name}`, `starting the MCP server "${server.name}"`)
   const instance = new McpServer(specFor(server, resolve(root), { handshakeTimeoutMs: timeoutMs, requestTimeoutMs: timeoutMs }), {
     log: (line) => ctx.log(line),
   })
@@ -4031,6 +4152,16 @@ export const METHODS: Readonly<Record<string, MethodHandler>> = {
   'git-stage': gitStage,
   'git-unstage': gitUnstage,
   'git-commit': gitCommit,
+  'git-init': gitInit,
+  // Hooks (`.sketch/hooks.json`): list, save, test. Runs load hooks only when
+  // `params.hooksEnabled` is true; these three methods only read, write and
+  // test the config — `hooks-test` does execute the matching hooks once.
+  'hooks-list': async (params, ctx) =>
+    hooksList(resolve(optionalString(params, 'root', 'params.root') ?? ctx.cwd()), params),
+  'hooks-save': async (params, ctx) =>
+    hooksSave(resolve(optionalString(params, 'root', 'params.root') ?? ctx.cwd()), params),
+  'hooks-test': async (params, ctx) =>
+    hooksTest(resolve(optionalString(params, 'root', 'params.root') ?? ctx.cwd()), params),
   // Source control beyond stage/commit: discard, branches, sync, history, and an AI
   // commit message drafted from the staged diff (one model call, nothing committed).
   'git-discard': gitDiscard,

@@ -57,6 +57,7 @@ import type {
 } from '../types.js'
 import { parseAction } from './actions.js'
 import type { Action, EditSpec } from './actions.js'
+import type { HookRunnerLike } from '../hooks/index.js'
 import {
   applyPreparedEdit,
   prepareEdit,
@@ -268,6 +269,19 @@ export interface RunTaskDeps {
    * may DO is still decided by its grant, its tools and `readOnly`.
    */
   autonomous?: boolean
+  /**
+   * User hooks (`.sketch/hooks.json`), already loaded by the caller.
+   *
+   * Absent means no hooks run, which is the behaviour every existing caller
+   * has. When present, SessionStart runs after `run_started`, Stop runs before
+   * the terminal event, and every `tool` action is gated by PreToolUse and
+   * followed by PostToolUse. The runner never throws into the loop: a hook
+   * failure is logged and the run proceeds, except an explicit PreToolUse
+   * denial, which refuses the tool call with the hook's reason. The loop does
+   * NOT load hooks itself — loading is the caller's job (`hooks.loadHooks`),
+   * so a headless or eval run that never asked for hooks pays nothing.
+   */
+  hooks?: HookRunnerLike
 }
 
 /** Why every edit in a read-only (Ask mode) run is refused. */
@@ -554,6 +568,8 @@ export async function runTask(task: Task, deps: RunTaskDeps): Promise<RunResult>
   const verifyState: { policy: PolicyResult | null } = { policy: null }
   let verifyRan = false
   let terminated = false
+  /** Stop hooks have run. Set before they run, so a re-entrant finish cannot run them twice. */
+  let sessionStopDone = false
   /**
    * COMPLETION HONESTY (Requirement 5.8, B-003). The run's own record of what its
    * APPLY-mode edits did, so a model that says "done" cannot report success over
@@ -604,6 +620,16 @@ export async function runTask(task: Task, deps: RunTaskDeps): Promise<RunResult>
   ): Promise<RunResult> => {
     if (!terminated) {
       terminated = true
+      // Stop hooks run before the terminal event, once, whatever ended the run.
+      // A hook failure here is logged by the runner and never fails the run.
+      if (deps.hooks !== undefined && !sessionStopDone) {
+        sessionStopDone = true
+        try {
+          await deps.hooks.runSessionStop({ runId })
+        } catch {
+          // The runner's contract is never to throw; this is the belt under it.
+        }
+      }
       await emit(ok ? 'run_completed' : 'run_failed', {
         taskId: task.id,
         ok,
@@ -674,6 +700,16 @@ export async function runTask(task: Task, deps: RunTaskDeps): Promise<RunResult>
     root: deps.root,
     verifyStages: task.verify.map((v) => v.name),
   })
+
+  // SessionStart hooks run once the run exists on the log. A hook failure is
+  // logged by the runner and never stops the run from starting.
+  if (deps.hooks !== undefined) {
+    try {
+      await deps.hooks.runSessionStart({ runId })
+    } catch {
+      // The runner's contract is never to throw; this is the belt under it.
+    }
+  }
 
   /**
    * The adapter in force. Mutable, because a budget breach with `onBreach: 'downgrade'`
@@ -1107,8 +1143,45 @@ export async function runTask(task: Task, deps: RunTaskDeps): Promise<RunResult>
           // run's slice of the log. A dispatcher built before `runTask` was called
           // cannot know the id, and events under a different one are present in the
           // log but invisible to `forRun(runId)`.
+          // HOOKS: PreToolUse gates the call, PostToolUse observes it. A hook
+          // denial refuses the call here, before the dispatcher is reached, and
+          // is fed back to the model like any other denial. The dispatcher
+          // remains the ONE authorisation point for grants; a hook is an
+          // additional user veto, not a grant check.
+          if (deps.hooks !== undefined) {
+            let decision: { allowed: boolean; reason?: string }
+            try {
+              decision = await deps.hooks.preToolUse(action.name, action.args ?? {}, { runId })
+            } catch {
+              decision = { allowed: true }
+            }
+            if (!decision.allowed) {
+              await emit('tool_denied', {
+                iteration: iterations,
+                name: action.name,
+                component: 'hooks',
+                reason: decision.reason ?? 'a PreToolUse hook denied the tool call',
+              })
+              messages.push({
+                role: 'user',
+                content:
+                  `TOOL DENIED (${action.name}) — ${decision.reason ?? 'a PreToolUse hook denied the tool call'}. ` +
+                  'Use a different approach.',
+              })
+              break
+            }
+          }
+
           const outcome = await dispatch.call(action.name, action.args, { runId })
           messages.push({ role: 'user', content: outcome.output })
+
+          if (deps.hooks !== undefined) {
+            try {
+              await deps.hooks.postToolUse(action.name, action.args ?? {}, outcome.output, { runId })
+            } catch {
+              // PostToolUse observes only; a hook failure never fails the run.
+            }
+          }
           break
         }
 

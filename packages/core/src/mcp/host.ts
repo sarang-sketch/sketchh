@@ -35,6 +35,7 @@ import type { EventInput } from '../events/store.js'
 import type { ToolDescriptor, ToolOutcome } from '../capabilities/index.js'
 import { McpCatalogRegistry, missingEnv, type McpCatalogEntry } from './catalog.js'
 import { McpServer, framePayload, type McpServerSpec } from './client.js'
+import { RemoteMcpServer, type RemoteMcpServerSpec } from './httpTransport.js'
 
 export interface McpHostOptions {
   /** Project root. Passed to servers as their working directory. */
@@ -54,6 +55,15 @@ export interface McpHostOptions {
    * an override cannot make the Docker server cost less than `proc:spawn`.
    */
   launchOverrides?: Record<string, McpServerSpec>
+  /**
+   * Remote (Streamable HTTP) servers, by id. Like `launchOverrides`, but the
+   * server lives at a URL instead of a child process: there is no catalog entry
+   * to look up, so the spec itself is the launch description. Headers come
+   * from the caller in the spec; this code never reads them from a config file.
+   * A remote server's tools cost `net:http`, the honest capability for
+   * "talks HTTP to a server the user named".
+   */
+  remoteOverrides?: Record<string, RemoteMcpServerSpec>
   /** Curated defaults plus validated externally supplied entries. */
   catalog?: McpCatalogRegistry | readonly McpCatalogEntry[]
   /**
@@ -84,7 +94,7 @@ export interface McpOpenResult {
  * runs would carry a dead server's verdict into a run that might have worked.
  */
 export class McpHost {
-  readonly #servers = new Map<string, McpServer>()
+  readonly #servers = new Map<string, McpServer | RemoteMcpServer>()
   readonly #entries = new Map<string, McpCatalogEntry>()
   readonly #catalog: McpCatalogRegistry
 
@@ -119,6 +129,10 @@ export class McpHost {
 
     const entry = this.#catalog.find(id)
     if (entry === null) {
+      // A remote server has no catalog entry: its spec IS its launch
+      // description, and it opens through the HTTP transport instead.
+      const remote = this.options.remoteOverrides?.[id]
+      if (remote !== undefined) return this.#openRemote(id, remote)
       // Curated: an id not in the table is not startable, full stop.
       return {
         ok: false,
@@ -190,6 +204,59 @@ export class McpHost {
     // instead of trying to spawn the same broken server again.
     this.#servers.set(id, server)
     this.#entries.set(id, entry)
+
+    const started = await server.start()
+    return {
+      ok: started.ok,
+      id,
+      detail: started.detail,
+      tools: server.tools.map((tool) => `${id}.${tool.name}`),
+      missingEnv: [],
+    }
+  }
+
+  /**
+   * Start a remote (Streamable HTTP) server.
+   *
+   * The same gates as a stdio open: the host launch allowlist applies, and the
+   * host-wide deadlines apply unless the spec sets its own. The synthetic
+   * catalog entry exists only so `descriptors()` can name the capability the
+   * tools cost (`net:http`) and the title the surface shows; it is never
+   * spawned, so its launch is empty by construction.
+   */
+  async #openRemote(id: string, remote: RemoteMcpServerSpec): Promise<McpOpenResult> {
+    if (this.options.allowedLaunches !== undefined && !this.options.allowedLaunches.has(id)) {
+      return {
+        ok: false,
+        id,
+        detail: `remote MCP server ${id} was not approved for launch by this host`,
+        tools: [],
+        missingEnv: [],
+      }
+    }
+
+    const spec: RemoteMcpServerSpec = {
+      id,
+      url: remote.url,
+      ...(remote.headers !== undefined ? { headers: remote.headers } : {}),
+      requestTimeoutMs:
+        remote.requestTimeoutMs ?? this.options.requestTimeoutMs ?? undefined,
+      handshakeTimeoutMs:
+        remote.handshakeTimeoutMs ?? this.options.handshakeTimeoutMs ?? undefined,
+    }
+    const server = new RemoteMcpServer(spec, {
+      ...(this.options.events !== undefined ? { events: this.options.events } : {}),
+      ...(this.options.runId !== undefined ? { runId: this.options.runId } : {}),
+      ...(this.options.log !== undefined ? { log: this.options.log } : {}),
+    })
+    this.#servers.set(id, server)
+    this.#entries.set(id, {
+      id,
+      title: `Remote MCP: ${id}`,
+      summary: 'Remote MCP server over Streamable HTTP.',
+      requires: 'net:http',
+      launch: { command: '', args: [] },
+    })
 
     const started = await server.start()
     return {

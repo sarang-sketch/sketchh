@@ -866,7 +866,12 @@ describeCli(`lifecycle and correlation (Requirement 12.1)${CLI_SKIP_NOTE}`, () =
               provider: { id: 'custom', kind: 'openai-compatible', baseUrl: model.baseUrl, model: 'm' },
             }),
           },
-          { afterMs: 700, line: request('cancel-1', 'cancel', { runId }) },
+          // 1500 ms, not 700: on a loaded VM the engine can take over 700 ms to
+          // boot and start the run, and a cancel that lands before the run is in
+          // flight exercises the tombstone path instead of the in-flight path
+          // this test is for. The model still has ~30 s of thoughts left, so
+          // the run is genuinely in flight when the cancel arrives.
+          { afterMs: 1500, line: request('cancel-1', 'cancel', { runId }) },
         ],
         2,
         { fakeProvider: false },
@@ -883,7 +888,7 @@ describeCli(`lifecycle and correlation (Requirement 12.1)${CLI_SKIP_NOTE}`, () =
     } finally {
       await model.close()
     }
-  }, 45_000)
+  }, 60_000)
 })
 
 // ── 12. a credential in params never reaches stdout ──────────────────────────

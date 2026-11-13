@@ -296,6 +296,19 @@ describeRepo(`GitTool against a real repository${SKIP_NOTE}`, () => {
     expect(status.untracked).toEqual([])
   })
 
+  it('initialises a plain folder and reports a clean, empty repository', async () => {
+    const dir = await makeRepoDir()
+    const tool = new GitTool({ root: dir })
+    expect((await tool.status()).isRepo).toBe(false)
+
+    const status = await tool.init()
+    expect(status.isRepo).toBe(true)
+    expect(status.initialCommit).toBe(true)
+    expect(status.clean).toBe(true)
+    // git init is idempotent: a second call is a no-op, not an error.
+    expect((await tool.init()).isRepo).toBe(true)
+  })
+
   it('reports a freshly initialized repository as clean and on its branch', async () => {
     const dir = await initRepo()
     const status = await new GitTool({ root: dir }).status()
@@ -438,9 +451,17 @@ function testCtx(): { ctx: MethodContext; streamed: string[] } {
 describeRepo(`the git-* RPC methods${SKIP_NOTE}`, () => {
   it('requires a root rather than silently using the server cwd', async () => {
     const { ctx } = testCtx()
-    for (const method of ['git-status', 'git-diff', 'git-stage', 'git-unstage', 'git-commit']) {
+    for (const method of ['git-status', 'git-diff', 'git-stage', 'git-unstage', 'git-commit', 'git-init']) {
       await expect(METHODS[method]!({}, ctx)).rejects.toBeInstanceOf(InvalidParamsError)
     }
+  })
+
+  it('answers git-init by initialising the folder', async () => {
+    const dir = await makeRepoDir()
+    const { ctx } = testCtx()
+    const status = (await METHODS['git-init']!({ root: dir }, ctx)) as { isRepo: boolean; initialCommit: boolean }
+    expect(status.isRepo).toBe(true)
+    expect(status.initialCommit).toBe(true)
   })
 
   it('answers git-status with the parsed status and git-diff with a diff string', async () => {

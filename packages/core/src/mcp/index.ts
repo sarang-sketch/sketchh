@@ -39,3 +39,11 @@ export type { McpCatalogEntry, McpLaunch } from './catalog.js'
 
 export { McpHost } from './host.js'
 export type { McpHostOptions, McpOpenResult } from './host.js'
+
+export { RemoteMcpServer, parseSseMessages } from './httpTransport.js'
+export type {
+  RemoteListResult,
+  RemoteMcpServerSpec,
+  RemotePromptInfo,
+  RemoteResourceInfo,
+} from './httpTransport.js'

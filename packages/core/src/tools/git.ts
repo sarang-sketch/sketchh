@@ -536,6 +536,18 @@ export class GitTool {
   }
 
   /**
+   * Start tracking this folder: `git init`. `git init` is idempotent, so a
+   * folder that became a repository behind the panel's back is a no-op that
+   * reports the fresh status, not an error. The first checkpoint is the next
+   * commit, made from the panel's Commit button.
+   */
+  async init(): Promise<GitStatusResult> {
+    const run = await this.#run('init', ['init'], { record: true })
+    if (run.exitCode !== 0) throw this.#failure('init', run)
+    return this.status()
+  }
+
+  /**
    * A unified diff. `staged` compares the index against HEAD; otherwise the work
    * tree against the index. `path` narrows it to one pathspec.
    */
