@@ -537,6 +537,8 @@ export interface AppState {
     | 'debugger'
     /** Daily briefing: runs, costs, tasks and conversations for one day. */
     | 'briefing'
+    /** EGM Design & Review: Elephant drafts, Goldfish reviewers, you approve. */
+    | 'egm'
     | null;
   terminalOpen: boolean;
   /**
@@ -1017,7 +1019,7 @@ export function persistedTabs(): { root: string; paths: string[]; active: string
 const PANEL_IDS: ReadonlyArray<Exclude<AppState['ideActivePanel'], null>> = [
   'explorer', 'search', 'git', 'review', 'architecture', 'agents', 'skills', 'settings',
   'timeline', 'console', 'run', 'tests', 'mcp', 'cost', 'benchmarks', 'memory',
-  'rescue', 'ui-doctor', 'api-lab', 'hooks', 'debugger', 'briefing',
+  'rescue', 'ui-doctor', 'api-lab', 'hooks', 'debugger', 'briefing', 'egm',
 ];
 
 function storage(): Storage | null {

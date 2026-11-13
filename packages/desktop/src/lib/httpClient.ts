@@ -9,6 +9,7 @@ import type {
   RunOptions,
   ArchitectureResult,
   SkillsCatalogResult,
+  EgmGoldfishContextResult,
   SkillInstallResult,
   SkillUninstallResult,
   SkillTrainResult,
@@ -311,6 +312,18 @@ export class HttpSketchClient implements SketchClient {
     return this.callMethod<SkillsCatalogResult>('skills-catalog', {
       root: params.root,
       ...(params.registryDir !== undefined ? { registryDir: params.registryDir } : {}),
+    })
+  }
+
+  async egmGoldfishContext(params: {
+    root: string
+    target: string
+    extraContext?: string[]
+  }): Promise<EgmGoldfishContextResult> {
+    return this.callMethod<EgmGoldfishContextResult>('egm-goldfish-context', {
+      root: params.root,
+      target: params.target,
+      ...(params.extraContext !== undefined ? { extraContext: params.extraContext } : {}),
     })
   }
 

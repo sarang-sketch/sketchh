@@ -329,6 +329,10 @@ export class MockSketchClient implements SketchClient {
     return this.noEngine('skills-catalog')
   }
 
+  async egmGoldfishContext(): Promise<never> {
+    return this.noEngine('egm-goldfish-context')
+  }
+
   async skillInstall(): Promise<never> {
     return this.noEngine('skill-install')
   }

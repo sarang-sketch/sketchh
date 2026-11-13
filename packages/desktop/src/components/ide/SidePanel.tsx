@@ -39,6 +39,7 @@ const DebuggerPanel = lazy(() => import('../../panels/ide/DebuggerPanel').then((
 // conversations, so no briefing module is statically imported by this shell
 // — see DailyBriefingHost.tsx for why that matters to the bundle check.
 const DailyBriefingHost = lazy(() => import('../../panels/DailyBriefingHost').then((m) => ({ default: m.DailyBriefingHost })));
+const EgmPanel = lazy(() => import('../../panels/EgmPanel').then((m) => ({ default: m.EgmPanel })));
 
 /**
  * The Hooks panel's data host: loads `.sketch/hooks.json` through the engine,
@@ -145,6 +146,7 @@ const OWNS_HEADER = new Set<PanelId>([
   'hooks',
   'debugger',
   'briefing',
+  'egm',
   'timeline',
   'console',
   'settings',
@@ -307,6 +309,12 @@ export default function SidePanel() {
       content = <DailyBriefingHost conversations={state.conversations} />;
       break;
     }
+    case 'egm':
+      // EGM Design & Review — no props, no data to wire: the panel reads the
+      // app state and the client seam itself.
+      title = 'EGM Design & Review';
+      content = <EgmPanel />;
+      break;
     default:
       return null;
   }

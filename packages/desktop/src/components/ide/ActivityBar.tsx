@@ -47,6 +47,7 @@ import {
   Eye,
   Globe,
   Bug,
+  Brain,
   MoreHorizontal,
   X,
 } from '../Icons';
@@ -93,6 +94,7 @@ const SECONDARY: ActivityItem[] = [
   { id: 'hooks', icon: Zap, label: 'Hooks', hint: 'Local commands that run around tools' },
   { id: 'debugger', icon: Bug, label: 'Debugger', hint: 'Breakpoints and inspector launch — no stepping yet' },
   { id: 'briefing', icon: Clock, label: 'Daily briefing', hint: 'Runs, costs, tasks and chats for today' },
+  { id: 'egm', icon: Brain, label: 'EGM Design & Review', hint: 'Draft specs with the Elephant, review them with fresh-eyes Goldfish' },
 ];
 
 export default function ActivityBar() {

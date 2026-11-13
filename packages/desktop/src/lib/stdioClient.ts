@@ -36,6 +36,7 @@ import type {
   RunOptions,
   ArchitectureResult,
   SkillsCatalogResult,
+  EgmGoldfishContextResult,
   SkillInstallResult,
   SkillUninstallResult,
   SkillTrainResult,
@@ -644,6 +645,18 @@ export class StdioSketchClient implements SketchClient {
     return this.call<SkillsCatalogResult>('skills-catalog', {
       root: params.root,
       ...(params.registryDir !== undefined ? { registryDir: params.registryDir } : {}),
+    })
+  }
+
+  async egmGoldfishContext(params: {
+    root: string
+    target: string
+    extraContext?: string[]
+  }): Promise<EgmGoldfishContextResult> {
+    return this.call<EgmGoldfishContextResult>('egm-goldfish-context', {
+      root: params.root,
+      target: params.target,
+      ...(params.extraContext !== undefined ? { extraContext: params.extraContext } : {}),
     })
   }
 

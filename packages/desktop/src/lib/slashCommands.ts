@@ -12,6 +12,7 @@
 // same run path, the same permissions and the same Stop as anything typed by hand.
 
 import type { AgentMode } from '../state/AppState'
+import { EGM_COMMANDS } from './egm'
 
 export type AppAction =
   | 'clear'
@@ -140,6 +141,19 @@ export const BUILTIN_COMMANDS: readonly MenuCommand[] = [
   { name: 'skills', description: 'Browse and install skills', source: 'builtin', action: 'skills' },
   { name: 'settings', description: 'Open settings', source: 'builtin', action: 'settings' },
   { name: 'help', description: 'Show what you can type here', source: 'builtin', action: 'help' },
+  // EGM (Elephant-Goldfish Model): design and review with fresh eyes. Each
+  // loads its skill in full when installed, and its expanded prompt carries
+  // the file conventions and the Goldfish fresh-context rule, so the command
+  // still works from the prompt alone. See `lib/egm.ts` for the definitions.
+  ...EGM_COMMANDS.map((command): MenuCommand => ({
+    name: command.name,
+    description: command.description,
+    ...(command.argumentHint !== undefined ? { argumentHint: command.argumentHint } : {}),
+    source: 'builtin',
+    ...(command.mode !== undefined ? { mode: command.mode } : {}),
+    skillNames: [command.name],
+    expand: command.expand,
+  })),
 ]
 
 /** A custom Markdown command, as the engine listed it. */

@@ -273,6 +273,27 @@ export interface SkillsCatalogResult {
   diagnostics: string[]
 }
 
+/**
+ * The Goldfish context for an EGM review, as built by the engine. `ok: false`
+ * carries `error` instead: a missing target or a target outside the project
+ * is not an empty context.
+ */
+export interface EgmGoldfishContextResult {
+  ok: boolean
+  /** Why the context could not be built, when it could not. */
+  error?: string
+  /** The document under review: project-relative path and content. */
+  target?: { path: string; content: string }
+  /** The linked files inside the project, target excluded, sorted by path. */
+  files?: { path: string; content: string }[]
+  /** Links left out, with the reason each was left out. */
+  excluded?: { link: string; reason: 'anchor-only' | 'url' | 'outside-project' | 'missing' }[]
+  /** Always 0: this context never carries chat history. */
+  priorChatTurns?: 0
+  /** What the reviewers were told they are: fresh eyes, no prior conversation. */
+  note?: string
+}
+
 export interface SkillInstallResult {
   ok: boolean
   name: string
@@ -1328,6 +1349,18 @@ export interface SketchClient {
 
   /** The pinned registry, plus what is installed in this project. Reads only. */
   skillsCatalog?(params: { root: string; registryDir?: string }): Promise<SkillsCatalogResult>
+
+  /**
+   * The Goldfish context for an EGM review: the target document plus the files
+   * it links to inside the project — and nothing else. Read-only. The panel
+   * shows this before a review runs, so the user can see what the reviewers
+   * will see and that `priorChatTurns` is 0.
+   */
+  egmGoldfishContext?(params: {
+    root: string
+    target: string
+    extraContext?: string[]
+  }): Promise<EgmGoldfishContextResult>
 
   /** Verify and install one pinned skill. Refuses on a hash mismatch. */
   skillInstall?(params: {
