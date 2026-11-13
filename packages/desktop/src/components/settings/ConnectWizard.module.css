@@ -15,7 +15,7 @@
   max-height: calc(100vh - 64px);
   display: flex;
   flex-direction: column;
-  background: #171717;
+  background: #191919;
   border: 1px solid #2f2f2f;
   border-radius: 16px;
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
@@ -327,7 +327,7 @@
   height: 18px;
   border-radius: 50%;
   border: 2px solid #404040;
-  border-top-color: #f97316;
+  border-top-color: #f58a50;
   animation: spin 0.8s linear infinite;
   flex-shrink: 0;
   margin-top: 2px;
@@ -484,7 +484,7 @@
 }
 
 .modelRow:hover {
-  background: #1e1e1e;
+  background: #222222;
 }
 
 .modelSelected {

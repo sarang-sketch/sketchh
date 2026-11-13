@@ -490,6 +490,58 @@ export interface UserMcpTestResult {
   tools: Array<{ name: string; description: string }>
 }
 
+// ── hooks (`.sketch/hooks.json`) ─────────────────────────────────────────────
+// Same vocabulary as the engine (`packages/core/src/hooks/`): SessionStart runs
+// when a run starts, PreToolUse can deny a tool call, PostToolUse runs after
+// one, Stop runs when a run ends. Hooks run locally as argv, never a shell
+// string, and a run loads them only when it opted in (`hooksEnabled`).
+
+export type HookEventName = 'SessionStart' | 'PreToolUse' | 'PostToolUse' | 'Stop'
+
+export interface HookListItem {
+  name: string
+  event: HookEventName
+  matcher?: string
+  command: string[]
+  timeoutMs?: number
+  blocking?: boolean
+}
+
+export interface HooksListResult {
+  ok: boolean
+  file: string
+  present: boolean
+  hooks: HookListItem[]
+  problems: string[]
+}
+
+export interface HooksSaveResult {
+  ok: boolean
+  file: string
+  hooks: Array<{ name: string; event: HookEventName; command: string[] }>
+  problems: string[]
+}
+
+export interface HookTestOutcome {
+  hook: string
+  ok: boolean
+  allowed: boolean
+  reason?: string
+  stdout: string
+  stderr: string
+  durationMs: number
+  timedOut: boolean
+}
+
+export interface HooksTestResult {
+  ok: true
+  event: HookEventName
+  tool?: string
+  outcomes: HookTestOutcome[]
+  matched: string[]
+  problems: string[]
+}
+
 /** One installed Ollama model, as `local-models` reports it. */
 export interface LocalModelInfo {
   name: string
@@ -959,6 +1011,12 @@ export interface RunOptions {
   autoSkills?: boolean
   /** The user's own MCP servers this run may start, by name (MCP panel → "Use in chats"). */
   userMcpServers?: string[]
+  /**
+   * Load `.sketch/hooks.json` for this run. Off unless the user enabled hooks
+   * through the Hooks panel — a hooks file names programs the engine runs as
+   * the user, so a run never loads it unasked.
+   */
+  hooksEnabled?: boolean
 }
 
 /** One inline completion. `text` is empty when there is nothing to suggest. */
@@ -1144,6 +1202,9 @@ export interface SketchClient {
     root: string
     message: string
   }): Promise<{ output: string; status: GitStatusResult }>
+
+  /** Start tracking the folder: `git init`. Returns the fresh status. */
+  gitInit?(params: { root: string }): Promise<GitStatusResult>
 
   /** Throw away working-tree edits to tracked files. Staged changes are kept. */
   gitDiscard?(params: { root: string; paths: string[] }): Promise<GitStatusResult>
@@ -1357,9 +1418,11 @@ export interface SketchClient {
   mcpServerSave?(params: {
     scope: 'global' | 'project'
     name: string
-    command: string
+    command?: string
     args?: string[]
     env?: Record<string, string>
+    url?: string
+    headers?: Record<string, string>
     root?: string
   }): Promise<UserMcpServersResult & { saved: string }>
   mcpServerRemove?(params: { scope: 'global' | 'project'; name: string; root?: string }): Promise<UserMcpServersResult & { removed: boolean }>
@@ -1367,6 +1430,17 @@ export interface SketchClient {
   mcpServerTrust?(params: { name: string; trusted: boolean; root?: string }): Promise<UserMcpServersResult>
   /** Start the server once, list its tools, stop it. */
   mcpServerTest?(params: { name: string; root?: string }): Promise<UserMcpTestResult>
+
+  // ── hooks ──────────────────────────────────────────────────────────────────
+  // `.sketch/hooks.json` for a project. `hooks-test` really executes the
+  // matching hooks once and reports what each did.
+
+  /** The hooks on disk for a project, plus any config problems. */
+  hooksList?(params: { root: string }): Promise<HooksListResult>
+  /** Validate and write the whole hooks config. Writes nothing when invalid. */
+  hooksSave?(params: { root: string; config: { hooks: HookListItem[] } }): Promise<HooksSaveResult>
+  /** Run the hooks matching one event, for real, and report each outcome. */
+  hooksTest?(params: { root: string; event: HookEventName; tool?: string }): Promise<HooksTestResult>
 
   // ── local models (Ollama) ──────────────────────────────────────────────────
 

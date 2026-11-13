@@ -48,7 +48,7 @@ describe('the Code and Cowork workspaces', () => {
     fireEvent.change(screen.getByRole('textbox', { name: 'Message the agent' }), { target: { value: 'An unfinished idea' } })
     await user.click(screen.getByRole('button', { name: 'Code' }))
     // Code's first visit imports the real workbench; allow for cold transforms.
-    await screen.findByRole('complementary', { name: 'Code agent' }, { timeout: 3000 })
+    await screen.findByRole('complementary', { name: 'Code agent' }, { timeout: 10000 })
     expect(welcome.closest('[aria-hidden="true"]')?.hasAttribute('inert')).toBe(true)
     expect((screen.getByRole('textbox', { name: 'Message the agent' }) as HTMLTextAreaElement).value).toBe('An unfinished idea')
     fireEvent.change(screen.getByRole('textbox', { name: 'Message the agent' }), { target: { value: 'Refined in Code' } })

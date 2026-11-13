@@ -73,7 +73,7 @@ const EMPTY_STATE: Record<string, { title: string; detail: string }> = {
   'not-a-repo': {
     title: 'Not a git repository',
     detail:
-      'This folder has no .git directory, so there is no branch, no history, and nothing to stage. Run git init in the terminal to start tracking changes.',
+      'This folder has no .git directory, so there is no branch, no history, and nothing to stage. Initialise it here to start tracking changes — the first checkpoint is your first commit.',
   },
   clean: {
     title: 'No changes',
@@ -542,6 +542,11 @@ export function GitPanel() {
           <div className={styles.empty}>
             <div className={styles.emptyTitle}>{EMPTY_STATE[empty]!.title}</div>
             <div className={styles.emptyDetail}>{EMPTY_STATE[empty]!.detail}</div>
+            {empty === 'not-a-repo' && (
+              <button className={styles.commitBtn} onClick={() => void git.init()} disabled={git.busy} title="Run git init in this folder">
+                <GitBranch size={14} /> Initialise repository
+              </button>
+            )}
           </div>
         ) : status === null ? (
           <div className={styles.empty}>

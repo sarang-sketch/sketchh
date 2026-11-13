@@ -152,6 +152,10 @@ cancel(): Promise<never> {
     return this.call<{ output: string; status: GitStatusResult }>('git-commit', params)
   }
 
+  gitInit(params: { root: string }): Promise<GitStatusResult> {
+    return this.call<GitStatusResult>('git-init', params)
+  }
+
   // Provider settings reach the same `METHODS` table, but nothing in the Git panel
   // calls them. Rejecting says so instead of answering with an invented catalog.
   providerCatalog(): Promise<never> {
@@ -326,6 +330,15 @@ describeRepo(`GitPanel against a real repository${SKIP_NOTE}`, () => {
     expect(await screen.findByText('Not a git repository')).toBeDefined()
     expect(screen.queryByText('No changes')).toBeNull()
     expect(screen.queryByText('main')).toBeNull()
+  })
+
+  it('initialises a folder that is not a repository from the panel', async () => {
+    mount(makeDir())
+    expect(await screen.findByText('Not a git repository')).toBeDefined()
+    fireEvent.click(screen.getByRole('button', { name: /Initialise repository/ }))
+    // The fresh repository is clean, with no commits yet — and the panel says so.
+    expect(await screen.findByText('No changes')).toBeDefined()
+    expect(screen.queryByText('Not a git repository')).toBeNull()
   })
 })
 

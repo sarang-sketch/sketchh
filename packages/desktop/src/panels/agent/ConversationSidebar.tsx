@@ -2,9 +2,11 @@ import { useMemo, useRef, useState } from 'react';
 import { useAppState, useAppDispatch } from '../../state/AppState';
 import type { AppState } from '../../state/AppState';
 import {
-  Plus, Folder, FileText, Puzzle, Settings, Activity, MessageSquare, Search, Trash, X, Key, Pencil, Copy, Layers, Server, Database, ChevronDown
+  Plus, Folder, FileText, Puzzle, Settings, Activity, MessageSquare, Search, Trash, X, Key, Pencil, Copy, Layers, Server, Database, ChevronDown, Download, Upload
 } from '../../components/Icons';
 import { conversationToMarkdown } from '../../conversationMarkdown';
+import { conversationToJson, parseImportedConversation } from '../../conversationImport';
+import { getExtras, listArchivedConversations, orderConversations } from '../../state/conversationExtras';
 import { isComposing } from '../../lib/keys';
 import { useOptionalAgentSession } from '../../lib/AgentSession';
 import { isActivationKey } from '../../lib/keys';
@@ -72,7 +74,38 @@ export const ConversationSidebar: React.FC = () => {
     }
   };
 
-  // Inline rename. Enter commits, Escape cancels, blur commits — but Enter and Escape both
+  // Download the conversation as a file (Markdown or JSON), not just to the
+  // clipboard: the JSON file is what "Import chat" reads back. A blob download
+  // needs no native file permission and no new dependency.
+  const downloadConversation = (c: AppState['conversations'][number], format: 'md' | 'json') => {
+    const slug = c.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'conversation';
+    const text = format === 'md' ? conversationToMarkdown(c) : conversationToJson(c);
+    const blob = new Blob([text], { type: format === 'md' ? 'text/markdown' : 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${slug}.${format}`;
+    a.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  // Import a conversation from a JSON export file. The file is read locally and
+  // parsed with the same validator the export writes; an invalid file is reported
+  // in the editor notice rather than half-imported.
+  const importRef = useRef<HTMLInputElement | null>(null);
+  const importConversation = async (file: File) => {
+    try {
+      const parsed = parseImportedConversation(JSON.parse(await file.text()));
+      if (!parsed.ok) {
+        dispatch({ type: 'SET_EDITOR_NOTICE', payload: { level: 'error', message: `Could not import that chat: ${parsed.reason}` } });
+        return;
+      }
+      dispatch({ type: 'IMPORT_CONVERSATION', payload: parsed.conversation });
+      dispatch({ type: 'SET_AGENT_VIEW', payload: 'new_task' });
+    } catch {
+      dispatch({ type: 'SET_EDITOR_NOTICE', payload: { level: 'error', message: 'Could not import that chat: the file is not valid JSON.' } });
+    }
+  };
   // also blur the field, so a synchronously-updated ref (`editRef`) records whether the
   // edit is still open and whether it was cancelled, so the follow-on blur commits exactly
   // once (Enter) or not at all (Escape). React state alone would lag the blur that fires in
@@ -151,13 +184,24 @@ export const ConversationSidebar: React.FC = () => {
   };
 
   const now = Date.now();
+  // Pinned first, archived excluded from the main list (see conversationExtras).
   const recents = useMemo(() => {
     const needle = filter.trim().toLowerCase();
-    if (needle === '') return state.conversations;
-    return state.conversations.filter(
-      (c) => c.title.toLowerCase().includes(needle) || c.messages.some((m) => m.content.toLowerCase().includes(needle))
-    );
-  }, [filter, state.conversations]);
+    const pool =
+      needle === ''
+        ? state.conversations
+        : state.conversations.filter(
+            (c) => c.title.toLowerCase().includes(needle) || c.messages.some((m) => m.content.toLowerCase().includes(needle)),
+          );
+    return orderConversations(pool, state.conversationExtras);
+  }, [filter, state.conversations, state.conversationExtras]);
+  const archived = useMemo(
+    () => listArchivedConversations(state.conversations, state.conversationExtras),
+    [state.conversations, state.conversationExtras],
+  );
+  const activeExtras =
+    state.activeConversationId !== null ? getExtras(state.conversationExtras, state.activeConversationId) : null;
+  const activeModel = activeExtras?.model ?? null;
 
   const busyId = session?.activeRunId ?? null;
   const connected = state.providers.length > 0;
@@ -198,6 +242,26 @@ export const ConversationSidebar: React.FC = () => {
           <span>Recents</span>
           <button
             className={styles.filterBtn}
+            title="Import a chat from a JSON export file"
+            aria-label="Import chat"
+            onClick={() => importRef.current?.click()}
+          >
+            <Upload size={13} />
+          </button>
+          <input
+            ref={importRef}
+            type="file"
+            accept=".json,application/json"
+            aria-label="Choose a chat export file to import"
+            hidden
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = '';
+              if (file) void importConversation(file);
+            }}
+          />
+          <button
+            className={styles.filterBtn}
             title={filterOpen ? 'Close search' : 'Search conversations'}
             aria-label={filterOpen ? 'Close search' : 'Search conversations'}
             onClick={() => {
@@ -217,6 +281,32 @@ export const ConversationSidebar: React.FC = () => {
             onChange={(e) => setFilter(e.target.value)}
             aria-label="Search conversations"
           />
+        )}
+
+        {state.activeConversationId !== null && state.providers.length > 0 && (
+          <label className={styles.recentMeta} style={{ display: 'flex', gap: 6, alignItems: 'center', padding: '4px 0' }}>
+            <span>Model for this chat</span>
+            <select
+              className={styles.filterInput}
+              style={{ flex: 1, minWidth: 0 }}
+              aria-label="Model for this chat"
+              value={activeModel ?? ''}
+              onChange={(e) => {
+                const value = e.target.value;
+                dispatch({
+                  type: 'SET_CONVERSATION_MODEL',
+                  payload: { id: state.activeConversationId!, model: value === '' ? null : value },
+                });
+              }}
+            >
+              <option value="">Use global model</option>
+              {state.providers.map((provider) => (
+                <option key={provider.id} value={provider.model}>
+                  {provider.label} — {provider.model}
+                </option>
+              ))}
+            </select>
+          </label>
         )}
 
         <div className={styles.recentsList}>
@@ -283,6 +373,32 @@ export const ConversationSidebar: React.FC = () => {
                 {editing?.id !== c.id && (
                   <button
                     className={styles.recentRename}
+                    aria-label={`Download conversation ${c.title} as Markdown`}
+                    title="Download as Markdown"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      downloadConversation(c, 'md');
+                    }}
+                  >
+                    <FileText size={12} />
+                  </button>
+                )}
+                {editing?.id !== c.id && (
+                  <button
+                    className={styles.recentRename}
+                    aria-label={`Download conversation ${c.title} as JSON`}
+                    title="Download as JSON (can be imported back)"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      downloadConversation(c, 'json');
+                    }}
+                  >
+                    <Download size={12} />
+                  </button>
+                )}
+                {editing?.id !== c.id && (
+                  <button
+                    className={styles.recentRename}
                     aria-label={`Copy conversation ${c.title} as Markdown`}
                     title={copied === c.id ? 'Copied' : 'Copy as Markdown'}
                     onClick={(e) => {
@@ -291,6 +407,35 @@ export const ConversationSidebar: React.FC = () => {
                     }}
                   >
                     <Copy size={12} />
+                  </button>
+                )}
+                {editing?.id !== c.id && (
+                  <button
+                    className={styles.recentRename}
+                    aria-label={`${getExtras(state.conversationExtras, c.id).pinned ? 'Unpin' : 'Pin'} conversation ${c.title}`}
+                    title={getExtras(state.conversationExtras, c.id).pinned ? 'Unpin (pinned chats sort first)' : 'Pin (sorts first)'}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      dispatch({
+                        type: getExtras(state.conversationExtras, c.id).pinned ? 'UNPIN_CONVERSATION' : 'PIN_CONVERSATION',
+                        payload: c.id,
+                      });
+                    }}
+                  >
+                    {getExtras(state.conversationExtras, c.id).pinned ? '📌' : '📍'}
+                  </button>
+                )}
+                {editing?.id !== c.id && (
+                  <button
+                    className={styles.recentRename}
+                    aria-label={`Archive conversation ${c.title}`}
+                    title="Archive (leaves the main list)"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      dispatch({ type: 'ARCHIVE_CONVERSATION', payload: c.id });
+                    }}
+                  >
+                    🗄️
                   </button>
                 )}
                 <button
@@ -309,6 +454,30 @@ export const ConversationSidebar: React.FC = () => {
             );
           })}
         </div>
+        {archived.length > 0 && (
+          <div className={styles.recentsList} aria-label="Archived conversations">
+            <div className={styles.recentsHeader}>
+              <span>Archived</span>
+            </div>
+            {archived.map((c) => (
+              <div key={c.id} className={styles.recentItem} role="button" tabIndex={0} title={c.title} onClick={() => open(c)}>
+                <span className={styles.recentTitle}>{c.title}</span>
+                <span className={styles.recentMeta}>{ago(c.updatedAt ?? c.createdAt, now)}</span>
+                <button
+                  className={styles.recentRename}
+                  aria-label={`Restore conversation ${c.title} from archive`}
+                  title="Restore to Recents"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    dispatch({ type: 'UNARCHIVE_CONVERSATION', payload: c.id });
+                  }}
+                >
+                  ↩
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className={styles.bottomFooter}>

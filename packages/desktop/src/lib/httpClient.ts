@@ -20,6 +20,11 @@ import type {
   LocalModelPull,
   UserMcpServersResult,
   UserMcpTestResult,
+  HookEventName,
+  HookListItem,
+  HooksListResult,
+  HooksSaveResult,
+  HooksTestResult,
   StrategyCatalogResult,
   CostReport,
   UsageSummary,
@@ -216,6 +221,10 @@ export class HttpSketchClient implements SketchClient {
     return this.callMethod<{ output: string; status: GitStatusResult }>('git-commit', params)
   }
 
+  async gitInit(params: { root: string }): Promise<GitStatusResult> {
+    return this.callMethod<GitStatusResult>('git-init', params)
+  }
+
   // ── provider settings ─────────────────────────────────────────────────────
   //
   // The dev bridge dispatches the same `provider-*` methods the sidecar does, so the
@@ -394,7 +403,7 @@ export class HttpSketchClient implements SketchClient {
     return this.callMethod<UserMcpServersResult>('mcp-servers', { ...options })
   }
 
-  async mcpServerSave(params: { scope: 'global' | 'project'; name: string; command: string; args?: string[]; env?: Record<string, string>; root?: string }): Promise<UserMcpServersResult & { saved: string }> {
+  async mcpServerSave(params: { scope: 'global' | 'project'; name: string; command?: string; args?: string[]; env?: Record<string, string>; url?: string; headers?: Record<string, string>; root?: string }): Promise<UserMcpServersResult & { saved: string }> {
     return this.callMethod<UserMcpServersResult & { saved: string }>('mcp-server-save', { ...params })
   }
 
@@ -408,6 +417,18 @@ export class HttpSketchClient implements SketchClient {
 
   async mcpServerTest(params: { name: string; root?: string }): Promise<UserMcpTestResult> {
     return this.callMethod<UserMcpTestResult>('mcp-server-test', { ...params })
+  }
+
+  async hooksList(params: { root: string }): Promise<HooksListResult> {
+    return this.callMethod<HooksListResult>('hooks-list', { ...params })
+  }
+
+  async hooksSave(params: { root: string; config: { hooks: HookListItem[] } }): Promise<HooksSaveResult> {
+    return this.callMethod<HooksSaveResult>('hooks-save', { ...params })
+  }
+
+  async hooksTest(params: { root: string; event: HookEventName; tool?: string }): Promise<HooksTestResult> {
+    return this.callMethod<HooksTestResult>('hooks-test', { ...params })
   }
 
   async localModelPull(params: { model: string; baseUrl?: string; confirmed: true }): Promise<LocalModelPull> {

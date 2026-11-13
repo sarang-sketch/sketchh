@@ -47,6 +47,11 @@ import type {
   LocalModelPull,
   UserMcpServersResult,
   UserMcpTestResult,
+  HookEventName,
+  HookListItem,
+  HooksListResult,
+  HooksSaveResult,
+  HooksTestResult,
   StrategyCatalogResult,
   CostReport,
   UsageSummary,
@@ -546,6 +551,10 @@ export class StdioSketchClient implements SketchClient {
     })
   }
 
+  async gitInit(params: { root: string }): Promise<GitStatusResult> {
+    return this.call<GitStatusResult>('git-init', { root: params.root })
+  }
+
   // ── provider settings ─────────────────────────────────────────────────────
 
   async providerCatalog(): Promise<ProviderCatalogResult> {
@@ -730,7 +739,7 @@ export class StdioSketchClient implements SketchClient {
     return this.call<UserMcpServersResult>('mcp-servers', { ...options })
   }
 
-  async mcpServerSave(params: { scope: 'global' | 'project'; name: string; command: string; args?: string[]; env?: Record<string, string>; root?: string }): Promise<UserMcpServersResult & { saved: string }> {
+  async mcpServerSave(params: { scope: 'global' | 'project'; name: string; command?: string; args?: string[]; env?: Record<string, string>; url?: string; headers?: Record<string, string>; root?: string }): Promise<UserMcpServersResult & { saved: string }> {
     return this.call<UserMcpServersResult & { saved: string }>('mcp-server-save', { ...params })
   }
 
@@ -744,6 +753,18 @@ export class StdioSketchClient implements SketchClient {
 
   async mcpServerTest(params: { name: string; root?: string }): Promise<UserMcpTestResult> {
     return this.call<UserMcpTestResult>('mcp-server-test', { ...params })
+  }
+
+  async hooksList(params: { root: string }): Promise<HooksListResult> {
+    return this.call<HooksListResult>('hooks-list', { ...params })
+  }
+
+  async hooksSave(params: { root: string; config: { hooks: HookListItem[] } }): Promise<HooksSaveResult> {
+    return this.call<HooksSaveResult>('hooks-save', { ...params })
+  }
+
+  async hooksTest(params: { root: string; event: HookEventName; tool?: string }): Promise<HooksTestResult> {
+    return this.call<HooksTestResult>('hooks-test', { ...params })
   }
 
   async localModelPull(params: { model: string; baseUrl?: string; confirmed: true }): Promise<LocalModelPull> {

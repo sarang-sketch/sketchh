@@ -37,6 +37,7 @@ import { AlertCircle, Refresh, Zap } from '../components/Icons'
 import { useSketchClient } from '../lib/ClientProvider'
 import { useAppState } from '../state/AppState'
 import type { CostEntry, CostReport, UsageSummary } from '../lib/client'
+import { groupByModel } from './costGrouping'
 import styles from './CostDashboard.module.css'
 
 /** Human label per non-run cause. */
@@ -193,6 +194,26 @@ export function CostDashboard() {
                       {run.calls} call(s) · {run.tokensIn} in / {run.tokensOut} out
                       {run.cacheHits > 0 ? ` · ${run.cacheHits} cached` : ''}
                       {run.unpriced > 0 ? ` · ${run.unpriced} unpriced` : ''}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+
+          {report.entries.length > 0 && (
+            <>
+              <h3 className={styles.sectionTitle}>By model</h3>
+              <ul className={styles.runs} aria-label="Cost by model">
+                {groupByModel(report.entries).map((group) => (
+                  <li key={group.model} className={styles.run}>
+                    <code className={styles.runId}>{group.model}</code>
+                    <span className={styles.runMoney}>
+                      {group.totalCost === null ? 'unknown' : `$${group.totalCost.toFixed(4)}`}
+                    </span>
+                    <span className={styles.runMeta}>
+                      {group.calls} call(s)
+                      {group.unknownCostCalls > 0 ? ` · ${group.unknownCostCalls} unpriced` : ''}
                     </span>
                   </li>
                 ))}

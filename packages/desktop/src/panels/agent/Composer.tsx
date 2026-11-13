@@ -14,9 +14,10 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 
 import styles from './AgentChat.module.css'
 import ui from './Composer.module.css'
-import { AlertTriangle, FileCode, Plus, Send, Shield, Sparkles, Stop, Terminal, X, Zap } from '../../components/Icons'
+import { AlertTriangle, FileCode, Mic, Plus, Send, Shield, Sparkles, Stop, Terminal, X, Zap } from '../../components/Icons'
 import { ModelSelector } from '../../components/ModelSelector'
-import { useAppDispatch, useAppState, AGENT_MODES, type AgentMode, type ChatMessage } from '../../state/AppState'
+import { useVoiceInput } from '../../lib/useVoiceInput'
+import { useAppDispatch, useAppState, AGENT_MODES, AGENT_SPEEDS, type AgentMode, type AgentSpeed, type ChatMessage } from '../../state/AppState'
 import { useComposerDraft } from '../../state/ComposerDrafts'
 import { useAgentSession } from '../../lib/AgentSession'
 import { conversationRootRelation, relativeToRoot } from '../../editor/paths'
@@ -52,7 +53,7 @@ export function ModeSwitcher() {
   const dispatch = useAppDispatch()
   const mode = state.agentPrefs.mode
   return (
-    <div className={ui.modeGroup} role="radiogroup" aria-label="Agent mode">
+    <div className={ui.modeGroup} dir="ltr" role="radiogroup" aria-label="Agent mode">
       {AGENT_MODES.map((m) => (
         <button
           key={m}
@@ -65,6 +66,50 @@ export function ModeSwitcher() {
         >
           <ModeIcon mode={m} />
           {MODE_INFO[m].label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+const SPEED_INFO: Record<AgentSpeed, { label: string; hint: string }> = {
+  normal: {
+    label: 'Normal',
+    hint: 'The full agent: up to the configured number of turns, with the last 12 turns of context.',
+  },
+  turbo: {
+    label: 'Turbo',
+    hint: 'Faster and lighter: turns capped at 10 (20 in Auto) and only the last 6 turns of context. Same model, same permissions — it just stops sooner and reads less.',
+  },
+}
+
+/**
+ * Normal / Turbo speed. This is the control the user reported as displaying in
+ * the wrong direction: it did not exist in the committed code at all (only
+ * Ask/Agent/Auto did), so a local Turbo toggle had nowhere to live. It is a
+ * plain left-to-right segmented control — Normal first, Turbo second — with an
+ * explicit `dir="ltr"` and `flex-direction: row` in CSS, so no ancestor's
+ * direction or flex reversal can flip it. Speed is orthogonal to mode: it caps
+ * turns and context (see modeRunOptions), it never switches the model.
+ */
+export function SpeedSwitcher() {
+  const state = useAppState()
+  const dispatch = useAppDispatch()
+  const speed = state.agentPrefs.speed
+  return (
+    <div className={ui.speedGroup} dir="ltr" role="radiogroup" aria-label="Speed">
+      {AGENT_SPEEDS.map((s) => (
+        <button
+          key={s}
+          type="button"
+          role="radio"
+          aria-checked={speed === s}
+          className={`${ui.speedBtn} ${speed === s ? ui[`speed_${s}`] : ''}`}
+          title={`${SPEED_INFO[s].label}: ${SPEED_INFO[s].hint}`}
+          onClick={() => dispatch({ type: 'SET_AGENT_PREFS', payload: { speed: s } })}
+        >
+          {s === 'turbo' && <Zap size={11} />}
+          {SPEED_INFO[s].label}
         </button>
       ))}
     </div>
@@ -156,6 +201,18 @@ export function Composer({
   const commands = useCommandMenu()
   const { text, attached, setText, setAttached } = useComposerDraft()
   const [caret, setCaret] = useState(text.length)
+  // Dictation: final transcripts are appended to the draft, so a spoken sentence
+  // never wipes what was already typed. Unsupported browsers get a disabled
+  // button with a plain title instead of a dead one.
+  const voice = useVoiceInput({
+    onFinal: (spoken) => {
+      setText((current) => {
+        const joined = current === '' ? spoken : `${current}${current.endsWith(' ') ? '' : ' '}${spoken}`
+        setCaret(joined.length)
+        return joined
+      })
+    },
+  })
   const [attachOpen, setAttachOpen] = useState(false)
   const [selected, setSelected] = useState(0)
   const [dismissed, setDismissed] = useState(false)
@@ -475,7 +532,33 @@ export function Composer({
               />
             )}
           </div>
+          <SpeedSwitcher />
           <ModeSwitcher />
+          <button
+            className={styles.attachBtn}
+            aria-label={voice.listening ? 'Stop dictation' : 'Dictate'}
+            title={
+              !voice.supported
+                ? 'Voice input is not available in this browser'
+                : voice.listening
+                  ? 'Listening… click to stop'
+                  : 'Dictate (speech recognition)'
+            }
+            disabled={!voice.supported}
+            onClick={() => {
+              if (voice.listening) voice.stop();
+              else voice.start();
+            }}
+            style={voice.listening ? { color: 'var(--accent, #f58a50)' } : undefined}
+          >
+            <Mic size={16} />
+          </button>
+          {voice.listening && <span style={{ fontSize: 12, opacity: 0.8 }}>Listening…</span>}
+          {voice.error !== null && (
+            <span style={{ fontSize: 12, opacity: 0.8 }} role="alert" title={voice.error}>
+              Voice input failed
+            </span>
+          )}
         </div>
         <div className={styles.promptRightActions}>
           <ModelSelector />

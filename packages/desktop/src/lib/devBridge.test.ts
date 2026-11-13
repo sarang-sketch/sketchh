@@ -92,7 +92,7 @@ beforeAll(async () => {
   })
   port = await listen(server)
   base = `http://127.0.0.1:${port}`
-})
+}, 30000)
 
 afterAll(async () => {
   await new Promise<void>((done) => server.close(() => done()))
@@ -206,7 +206,9 @@ describe('vite dev bridge — POST /__sketch', () => {
     expect(result['version']).toBe('0.1.0')
     expect(result['fakeProvider']).toBe(true)
     expect(result['pid']).toBe(process.pid)
-  })
+    // The first engine call spawns the stdio engine under load; the default
+    // 5 s vitest timeout was too tight on a 1.5-CPU VM.
+  }, 30000)
 
   it('answers an unknown method with an ok:false frame and stays up', async () => {
     const { status, frame } = await call('no-such-method')

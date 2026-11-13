@@ -16,7 +16,7 @@ import { SketchClientProvider } from './lib/ClientProvider'
 import type { ProviderSettingsEntry, RunResult, SketchEvent, Task } from './lib/contracts'
 import { AppStateProvider, DEFAULT_AGENT_PREFS, appReducer, initialAppState } from './state/AppState'
 import { AgentChat } from './panels/agent/AgentChat'
-import { AgentSessionProvider, modeRunOptions, parseApprovalText } from './lib/AgentSession'
+import { AgentSessionProvider, historyFrom, modeRunOptions, NORMAL_MAX_TURNS, TURBO_MAX_TURNS, parseApprovalText } from './lib/AgentSession'
 import { menuAt, mentionedPaths, nextMode } from './panels/agent/Composer'
 import { fuzzyFilter, fuzzyScore } from './lib/fuzzy'
 import { BUILTIN_COMMANDS, expandTemplate, parseSlash } from './lib/slashCommands'
@@ -145,6 +145,61 @@ describe('Ask / Agent / Auto', () => {
     expect(nextMode('auto')).toBe('ask')
     const state = appReducer(initialAppState, { type: 'SET_AGENT_PREFS', payload: { mode: 'bogus' as never } })
     expect(state.agentPrefs.mode).toBe('agent')
+  })
+})
+
+// ── Normal / Turbo speed ──────────────────────────────────────────────────────
+//
+// The user reported "Normal agent" and "Turbo mode" displaying in the wrong
+// direction. The committed code had no Turbo control at all — only Ask / Agent /
+// Auto — so the fix is a real Normal / Turbo switch, rendered left to right
+// (Normal first, Turbo second), wired to the run: Turbo caps turns and reads
+// less history. Same model, same permissions; it is not a different backend.
+
+describe('Normal / Turbo speed', () => {
+  it('caps turns in Turbo and leaves Normal alone', () => {
+    const normalAgent = modeRunOptions({ ...DEFAULT_AGENT_PREFS, mode: 'agent', speed: 'normal' })
+    expect(normalAgent.maxIterations).toBe(30)
+    const turboAgent = modeRunOptions({ ...DEFAULT_AGENT_PREFS, mode: 'agent', speed: 'turbo' })
+    expect(turboAgent.maxIterations).toBe(10)
+    const turboAsk = modeRunOptions({ ...DEFAULT_AGENT_PREFS, mode: 'ask', speed: 'turbo' })
+    expect(turboAsk.maxIterations).toBe(10)
+    expect(turboAsk.readOnly).toBe(true)
+    const normalAuto = modeRunOptions({ ...DEFAULT_AGENT_PREFS, mode: 'auto', speed: 'normal' })
+    expect(normalAuto.maxIterations).toBeGreaterThanOrEqual(50)
+    const turboAuto = modeRunOptions({ ...DEFAULT_AGENT_PREFS, mode: 'auto', speed: 'turbo' })
+    expect(turboAuto.maxIterations).toBe(20)
+    expect(turboAuto.autonomous).toBe(true)
+  })
+
+  it('reads less history in Turbo than in Normal', () => {
+    const messages = Array.from({ length: 20 }, (_, i) => ({
+      id: `m${i}`,
+      role: i % 2 === 0 ? 'user' : 'agent',
+      content: `turn ${i}`,
+      timestamp: i,
+    })) as never
+    expect(historyFrom(messages)).toHaveLength(12)
+    expect(historyFrom(messages, TURBO_MAX_TURNS)).toHaveLength(6)
+    expect(historyFrom(messages, NORMAL_MAX_TURNS)).toHaveLength(12)
+  })
+
+  it('renders Normal before Turbo, left to right, and switches on click', () => {
+    const run = vi.fn(async (_task: Task, _options?: RunOptions) => done())
+    mount(fakeClient(run))
+    const group = screen.getByRole('radiogroup', { name: 'Speed' })
+    expect(group.getAttribute('dir')).toBe('ltr')
+    const buttons = within(group).getAllByRole('radio')
+    expect(buttons.map((b) => b.textContent)).toEqual(['Normal', 'Turbo'])
+    expect(buttons[0]!.getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(buttons[1]!)
+    expect(buttons[1]!.getAttribute('aria-checked')).toBe('true')
+    expect(buttons[0]!.getAttribute('aria-checked')).toBe('false')
+  })
+
+  it('validates a stored speed value', () => {
+    const state = appReducer(initialAppState, { type: 'SET_AGENT_PREFS', payload: { speed: 'bogus' as never } })
+    expect(state.agentPrefs.speed).toBe('normal')
   })
 })
 

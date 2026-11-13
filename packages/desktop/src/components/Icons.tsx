@@ -512,10 +512,32 @@ export const Eye = createIcon(
     <circle cx="12" cy="12" r="3" />
   </>
 );
+export const Bug = createIcon(
+  <>
+    <rect x="8" y="6" width="8" height="14" rx="4" />
+    <path d="M12 6V2" />
+    <path d="M9 9h.01" />
+    <path d="M15 9h.01" />
+    <path d="M8 10H3" />
+    <path d="M8 14H3" />
+    <path d="M16 10h5" />
+    <path d="M16 14h5" />
+    <path d="M9 20l-2 2" />
+    <path d="M15 20l2 2" />
+  </>
+);
 export const ArrowUp = createIcon(
   <>
     <line x1="12" y1="19" x2="12" y2="5" />
     <polyline points="5 12 12 5 19 12" />
+  </>
+);
+export const Mic = createIcon(
+  <>
+    <rect x="9" y="2" width="6" height="12" rx="3" />
+    <path d="M5 10a7 7 0 0 0 14 0" />
+    <line x1="12" y1="17" x2="12" y2="22" />
+    <line x1="8" y1="22" x2="16" y2="22" />
   </>
 );
 export const ArrowDown = createIcon(

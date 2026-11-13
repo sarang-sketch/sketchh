@@ -24,32 +24,34 @@
  * change to stop lying.
  * ───────────────────────────────────────────────────────────────────────────── */
 :root {
-  /* ── Backgrounds and surfaces (darkest base → most raised) ───────────────── */
-  --bg-primary: #121212;       /* the window's base */
-  --bg-secondary: #171717;     /* panels, side bars, title/status bars */
-  --bg-surface: #1e1e1e;       /* cards, menus, dialogs */
+  /* ── Backgrounds and surfaces (darkest base → most raised) ─────────────────
+   * The Asta cover values: canvas #141414, sidebar #191919, graphite #222222,
+   * dividers #303030, porcelain #eeeeec, ember #f58a50. ───────────────────── */
+  --bg-primary: #141414;       /* the window's base */
+  --bg-secondary: #191919;     /* panels, side bars, title/status bars */
+  --bg-surface: #222222;       /* cards, menus, dialogs */
   --bg-elevated: #262626;      /* a raised control on a surface (inputs, pills) */
   --bg-hover: #2a2a2a;         /* the hover wash on an elevated control */
-  --bg-active: rgba(249, 115, 22, 0.15); /* the selected-row / active wash (accent-tinted) */
+  --bg-active: rgba(245, 138, 80, 0.15); /* the selected-row / active wash (accent-tinted) */
 
   /* ── Text (strongest → faintest, plus the on-accent label and link) ──────── */
-  --text-primary: #f5f5f5;     /* body and headings */
+  --text-primary: #eeeeec;     /* body and headings */
   --text-secondary: #a3a3a3;   /* secondary labels, menu hints */
   --text-muted: #8a8a8a;       /* the faintest readable text — meets AA on the dark surfaces */
   --text-disabled: #5a5a5a;    /* a disabled control's label (deliberately sub-AA) */
   --text-on-accent: #ffffff;   /* a label sitting on an accent / status fill */
 
   /* ── The orange accent and its states ────────────────────────────────────── */
-  --accent: #f97316;                       /* the brand orange: links, active icons, focus ring */
-  --accent-hover: #fb923c;                 /* a lighter orange on hover for text/icon accents */
-  --accent-active: #ea580c;                /* the pressed/active orange */
-  --accent-subtle: rgba(249, 115, 22, 0.2);/* a faint accent tint (chips, active backgrounds) */
+  --accent: #f58a50;                       /* the brand ember: links, active icons, focus ring */
+  --accent-hover: #f8a273;                 /* a lighter ember on hover for text/icon accents */
+  --accent-active: #e07038;                /* the pressed/active ember */
+  --accent-subtle: rgba(245, 138, 80, 0.2);/* a faint accent tint (chips, active backgrounds) */
   /* The fill of a button with a white label (Commit, Install, Save…): deep enough for
    * the label to read. White on this clears WCAG AA 4.5:1 (4.68:1); #ea580c was only
    * 3.56:1. Hover goes deeper still, never lighter. */
   --accent-fill: #cf4409;
   --accent-fill-hover: #c2410c;
-  --accent-strong: #f97316;                /* the bright orange used for the logo gradient top */
+  --accent-strong: #f58a50;                /* the bright ember used for the logo gradient top */
 
   /* ── Status ──────────────────────────────────────────────────────────────── */
   --success: #22c55e;
@@ -60,8 +62,8 @@
   --pink: #f472b6;
 
   /* ── Borders ─────────────────────────────────────────────────────────────── */
-  --border: #262626;           /* the normal 1px line between surfaces */
-  --border-subtle: #1e1e1e;    /* a quieter divider inside a surface */
+  --border: #303030;           /* the normal 1px line between surfaces */
+  --border-subtle: #222222;    /* a quieter divider inside a surface */
   --border-strong: #333333;    /* the line around a menu or dialog that floats above */
 
   /* ── Compatibility aliases — the OLD teal-brand names, now pointing at the

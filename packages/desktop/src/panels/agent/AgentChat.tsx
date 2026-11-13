@@ -8,7 +8,8 @@ import { useFileActions } from '../../editor/useFileActions';
 import { canonicalPath, conversationRootRelation, relativeToRoot } from '../../editor/paths';
 import { insertEditorText } from '../../editor/editorBridge';
 import { useSketchEvents } from '../../lib/ClientProvider';
-import { AgentSessionProvider, useOptionalAgentSession, useAgentSession } from '../../lib/AgentSession';
+import { AgentSessionProvider, useOptionalAgentSession, useAgentSession, NORMAL_MAX_TURNS, TURBO_MAX_TURNS } from '../../lib/AgentSession';
+import { contextSummary, formatContextSummary } from '../../lib/contextMeter';
 import { ApprovalCard, Composer } from './Composer';
 
 // The composer lives in its own module; it is re-exported here because both chat
@@ -77,8 +78,11 @@ function scrollParentOf(node: HTMLElement | null): HTMLElement | null {
  */
 function MessageActions({ message }: { message: ChatMessage }) {
   const session = useAgentSession();
+  const state = useAppState();
+  const dispatch = useAppDispatch();
   const [copied, setCopied] = useState(false);
   const canRetry = session.activeRunId === null && session.promptBehind(message) !== null;
+  const feedback = state.messageFeedback[message.id];
   const copy = () => {
     void navigator.clipboard
       ?.writeText(message.content)
@@ -99,6 +103,26 @@ function MessageActions({ message }: { message: ChatMessage }) {
           <Refresh size={12} /> Retry
         </button>
       )}
+      <button
+        type="button"
+        className={styles.msgActionBtn}
+        aria-label="Good reply"
+        aria-pressed={feedback?.vote === 'up'}
+        title={feedback?.vote === 'up' ? 'You marked this reply helpful (click again to clear)' : 'Mark this reply helpful'}
+        onClick={() => dispatch({ type: 'SET_MESSAGE_FEEDBACK', payload: { messageId: message.id, vote: 'up' } })}
+      >
+        👍{feedback?.vote === 'up' ? ' ✓' : ''}
+      </button>
+      <button
+        type="button"
+        className={styles.msgActionBtn}
+        aria-label="Poor reply"
+        aria-pressed={feedback?.vote === 'down'}
+        title={feedback?.vote === 'down' ? 'You marked this reply unhelpful (click again to clear)' : 'Mark this reply unhelpful'}
+        onClick={() => dispatch({ type: 'SET_MESSAGE_FEEDBACK', payload: { messageId: message.id, vote: 'down' } })}
+      >
+        👎{feedback?.vote === 'down' ? ' ✓' : ''}
+      </button>
     </div>
   );
 }
@@ -118,6 +142,9 @@ export function MessageList({
   const bottomRef = useRef<HTMLDivElement>(null);
   const messages = state.chatMessages;
   const [stopping, setStopping] = useState(false);
+  /** The user message being edited for edit-and-resend, or null. */
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState('');
 
   useEffect(() => {
     if (session.activeRunId === null) setStopping(false);
@@ -210,7 +237,58 @@ export function MessageList({
               )}
             </div>
           )}
-          {isUser ? <div className={styles.userText}>{msg.content}</div> : <Markdown text={msg.content} onInsertCode={insertCode} />}
+          {isUser ? (
+            editingId === msg.id ? (
+              <div>
+                <textarea
+                  aria-label="Edit your message"
+                  value={editingText}
+                  onChange={(e) => setEditingText(e.target.value)}
+                  rows={3}
+                  style={{ width: '100%', resize: 'vertical' }}
+                />
+                <div className={styles.messageActions}>
+                  <button
+                    type="button"
+                    className={styles.msgActionBtn}
+                    disabled={editingText.trim() === '' || session.activeRunId !== null}
+                    onClick={() => {
+                      const text = editingText;
+                      setEditingId(null);
+                      session.resendEdited(msg.id, text);
+                    }}
+                  >
+                    Save &amp; resend
+                  </button>
+                  <button type="button" className={styles.msgActionBtn} onClick={() => setEditingId(null)}>
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <div className={styles.userText}>{msg.content}</div>
+                {session.activeRunId === null && (
+                  <div className={styles.messageActions}>
+                    <button
+                      type="button"
+                      className={styles.msgActionBtn}
+                      aria-label="Edit and resend this message"
+                      title="Edit this message and run again from it — replies below it are dropped"
+                      onClick={() => {
+                        setEditingId(msg.id);
+                        setEditingText(msg.content);
+                      }}
+                    >
+                      Edit &amp; resend
+                    </button>
+                  </div>
+                )}
+              </div>
+            )
+          ) : (
+            <Markdown text={msg.content} onInsertCode={insertCode} />
+          )}
           {!isUser && msg.files && msg.files.length > 0 && (
             <ChangedFilesCard
               message={msg}
@@ -310,6 +388,12 @@ const AgentChatView: React.FC = () => {
     <div className={`${styles.container} dottedCanvas`}>
       <div className={styles.conversationHeader}>
         <span>{state.conversations.find((c) => c.id === state.activeConversationId)?.title ?? 'Current task'}</span>
+        <span
+          className={styles.contextMeter}
+          title={`Estimated from message text (~1 token per 4 characters). Only the last ${state.agentPrefs.speed === 'turbo' ? TURBO_MAX_TURNS : NORMAL_MAX_TURNS} turns are sent to the model in ${state.agentPrefs.speed === 'turbo' ? 'Turbo' : 'Normal'} speed; older turns stay in the transcript.`}
+        >
+          {formatContextSummary(contextSummary(state.chatMessages, state.agentPrefs.speed === 'turbo' ? TURBO_MAX_TURNS : NORMAL_MAX_TURNS))}
+        </span>
         <span className={styles.conversationStatus}>{session.activeRunId !== null ? 'Working' : 'Conversation'}</span>
       </div>
       <MessageList onJumpChange={(fn) => setJump(() => fn)} />

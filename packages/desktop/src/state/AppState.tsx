@@ -2,6 +2,19 @@ import React, { createContext, useContext, useEffect, useReducer, useRef, ReactN
 import { basename, canonicalPath, languageForPath } from '../editor/paths';
 import { DEFAULT_APPEARANCE, normalizeAppearance, type AppearanceSettings } from '../styles/appearance';
 import { ComposerDraftsProvider } from './ComposerDrafts';
+import {
+  archiveConversation,
+  editAndResend,
+  pinConversation,
+  setFeedback,
+  setPerChatModel,
+  toggleFeedback,
+  unarchiveConversation,
+  unpinConversation,
+  type ConversationExtrasMap,
+  type FeedbackStore,
+  type FeedbackVote,
+} from './conversationExtras';
 import type {
   ProviderDescriptor,
   ProviderSettingsEntry,
@@ -273,10 +286,28 @@ export type AgentMode = 'ask' | 'agent' | 'auto';
 
 export const AGENT_MODES: readonly AgentMode[] = ['ask', 'agent', 'auto'];
 
+/**
+ * Speed is orthogonal to mode: it says how long a run may go on, not what it may
+ * do. The user asked for a Normal / Turbo switch in the chat; the committed code
+ * had no "Turbo" anywhere (only Ask/Agent/Auto), so this is the control that was
+ * missing. It is NOT a different model or a fake backend:
+ *
+ *   * `normal` — the full agent: up to `maxIterations` turns, the last 12 turns of
+ *     history, the configured spend/token budget.
+ *   * `turbo`  — faster and lighter: turns capped (10 in Ask/Agent, 20 in Auto),
+ *     only the last 6 turns of history, a smaller token budget. Same model, same
+ *     permissions, same mode — it just stops sooner and reads less context.
+ */
+export type AgentSpeed = 'normal' | 'turbo';
+
+export const AGENT_SPEEDS: readonly AgentSpeed[] = ['normal', 'turbo'];
+
 /** How the agent behaves. Chosen by the user; persisted with the window. */
 export interface AgentPrefs {
   /** See {@link AgentMode}. */
   mode: AgentMode;
+  /** See {@link AgentSpeed}. Normal is the full agent; Turbo is faster and lighter. */
+  speed: AgentSpeed;
   /**
    * Write edits as the run makes them (every run can be undone from its snapshot),
    * or leave each one as a proposal to review first.
@@ -297,9 +328,16 @@ export interface AgentPrefs {
    * chats"). Each run starts only these, and only once each is approved where needed.
    */
   mcpServers?: string[];
+  /**
+   * Hooks (`.sketch/hooks.json`) run for this project's runs. Off by default: it
+   * turns on only when the user saves hooks through the Hooks panel, because a
+   * hooks file names programs Sketch runs as the user. The engine still only
+   * loads hooks when the run passes `hooksEnabled: true`.
+   */
+  hooksEnabled?: boolean;
 }
 
-export const DEFAULT_AGENT_PREFS: AgentPrefs = { mode: 'agent', autoApply: true, maxIterations: 30, maxUsd: 2, verifyChanges: true };
+export const DEFAULT_AGENT_PREFS: AgentPrefs = { mode: 'agent', speed: 'normal', autoApply: true, maxIterations: 30, maxUsd: 2, verifyChanges: true };
 
 /** How the code editor looks and behaves. Chosen in Settings → Editor; persisted. */
 export interface EditorSettings {
@@ -448,6 +486,13 @@ export interface AppState {
   // Agent Mode State
   conversations: Conversation[];
   activeConversationId: string | null;
+  /**
+   * Per-conversation extras (pin, archive, per-chat model) and thumbs feedback,
+   * keyed by conversation / message id. Pure helpers in `conversationExtras.ts`;
+   * persisted alongside conversations (see `PersistedState`).
+   */
+  conversationExtras: ConversationExtrasMap;
+  messageFeedback: FeedbackStore;
   isThinking: boolean;
   thinkingStage: string;
   // No `agentTeam`. See the note where its twelve entries used to be initialised.
@@ -480,6 +525,18 @@ export interface AppState {
     /** Benchmarks: latest validated artifact only. Reading never starts a benchmark. */
     | 'benchmarks'
     | 'memory'
+    /** Project Rescue: real findings about this project's health. */
+    | 'rescue'
+    /** UI Doctor: real accessibility and markup checks on the live page. */
+    | 'ui-doctor'
+    /** API Lab: real HTTP requests with a timeout, from this window. */
+    | 'api-lab'
+    /** Hooks: the `.sketch/hooks.json` programs runs may execute. */
+    | 'hooks'
+    /** Debugger: recorded breakpoints and the Node inspector launch. No stepping yet. */
+    | 'debugger'
+    /** Daily briefing: runs, costs, tasks and conversations for one day. */
+    | 'briefing'
     | null;
   terminalOpen: boolean;
   /**
@@ -655,9 +712,25 @@ export type AppAction =
   /** Patch one message of the active conversation (attach steps, mark undone). */
   | { type: 'UPDATE_MESSAGE'; payload: { id: string; patch: Partial<ChatMessage> } }
   | { type: 'DELETE_CONVERSATION'; payload: string }
+  /** A conversation imported from a JSON export file (see conversationImport.ts). */
+  | { type: 'IMPORT_CONVERSATION'; payload: Conversation }
   /** Rename one conversation (Recents inline edit). Title is trimmed and capped; an empty
    *  title keeps the old one; an unknown id is a no-op. */
   | { type: 'RENAME_CONVERSATION'; payload: { id: string; title: string } }
+  /** Pin / archive a conversation. Pinned conversations sort first in Recents;
+   * archived ones leave the main list (see `conversationExtras.ts`). */
+  | { type: 'PIN_CONVERSATION'; payload: string }
+  | { type: 'UNPIN_CONVERSATION'; payload: string }
+  | { type: 'ARCHIVE_CONVERSATION'; payload: string }
+  | { type: 'UNARCHIVE_CONVERSATION'; payload: string }
+  /** Run this conversation with a different model. `null` clears back to the global
+   * model. Unknown model ids are rejected (the reducer keeps the old value). */
+  | { type: 'SET_CONVERSATION_MODEL'; payload: { id: string; model: string | null } }
+  /** Thumbs up / down on one agent message. Sending the same vote again clears it. */
+  | { type: 'SET_MESSAGE_FEEDBACK'; payload: { messageId: string; vote: FeedbackVote } }
+  /** Replace one of your messages and drop everything after it, so a new run can
+   * start from the edited text. The re-run itself is the caller's job. */
+  | { type: 'EDIT_AND_RESEND'; payload: { messageId: string; newText: string } }
   /** Settings → Privacy → Clear chat history. Every conversation, from memory and from disk. */
   | { type: 'CLEAR_CONVERSATIONS' }
   /** What the engine last reported about Offline Mode (`null` until it has answered). */
@@ -747,6 +820,8 @@ const initialState: AppState = {
   // restored from local storage by the provider when persistence is on.
   conversations: [],
   activeConversationId: null,
+  conversationExtras: {},
+  messageFeedback: {},
   isThinking: false,
   thinkingStage: '',
   chatMessages: [],
@@ -873,6 +948,10 @@ export function scrubSecrets(text: string): string {
 interface PersistedState {
   conversations: Conversation[];
   activeConversationId: string | null;
+  /** Per-conversation pin/archive/model extras, keyed by conversation id. */
+  conversationExtras?: ConversationExtrasMap;
+  /** Thumbs feedback, keyed by message id. */
+  messageFeedback?: FeedbackStore;
   workspaces: WorkspaceEntry[];
   projectRoot: string | null;
   agentPrefs: AgentPrefs;
@@ -938,6 +1017,7 @@ export function persistedTabs(): { root: string; paths: string[]; active: string
 const PANEL_IDS: ReadonlyArray<Exclude<AppState['ideActivePanel'], null>> = [
   'explorer', 'search', 'git', 'review', 'architecture', 'agents', 'skills', 'settings',
   'timeline', 'console', 'run', 'tests', 'mcp', 'cost', 'benchmarks', 'memory',
+  'rescue', 'ui-doctor', 'api-lab', 'hooks', 'debugger', 'briefing',
 ];
 
 function storage(): Storage | null {
@@ -997,6 +1077,36 @@ export function loadPersistedState(): Partial<AppState> {
       .filter((c): c is Conversation => !!c && typeof c.id === 'string' && Array.isArray(c.messages))
       .slice(0, MAX_CONVERSATIONS);
   }
+  if (data.conversationExtras && typeof data.conversationExtras === 'object' && !Array.isArray(data.conversationExtras)) {
+    const extras: ConversationExtrasMap = {};
+    for (const [id, value] of Object.entries(data.conversationExtras)) {
+      if (value !== null && typeof value === 'object') {
+        const entry = value as { pinned?: unknown; archived?: unknown; model?: unknown };
+        extras[id] = {
+          pinned: entry.pinned === true,
+          archived: entry.archived === true,
+          model: typeof entry.model === 'string' ? entry.model : null,
+        };
+      }
+    }
+    out.conversationExtras = extras;
+  }
+  if (data.messageFeedback && typeof data.messageFeedback === 'object' && !Array.isArray(data.messageFeedback)) {
+    const feedback: FeedbackStore = {};
+    for (const [id, value] of Object.entries(data.messageFeedback)) {
+      if (value !== null && typeof value === 'object') {
+        const entry = value as { vote?: unknown; note?: unknown };
+        if (entry.vote === 'up' || entry.vote === 'down') {
+          feedback[id] = {
+            messageId: id,
+            vote: entry.vote,
+            ...(typeof entry.note === 'string' && entry.note !== '' ? { note: entry.note } : {}),
+          };
+        }
+      }
+    }
+    out.messageFeedback = feedback;
+  }
   if (Array.isArray(data.workspaces)) {
     out.workspaces = data.workspaces.filter(
       (w): w is WorkspaceEntry => !!w && typeof w.path === 'string' && typeof w.name === 'string'
@@ -1009,6 +1119,7 @@ export function loadPersistedState(): Partial<AppState> {
     if (servers !== undefined && !(Array.isArray(servers) && servers.every((name) => typeof name === 'string'))) {
       delete out.agentPrefs.mcpServers;
     }
+    if (!AGENT_SPEEDS.includes(out.agentPrefs.speed)) out.agentPrefs.speed = DEFAULT_AGENT_PREFS.speed;
   }
   if (data.mode === 'agent' || data.mode === 'ide') out.mode = data.mode;
   if (data.ghostCompletionsEnabled === true) out.ghostCompletionsEnabled = true;
@@ -1043,6 +1154,8 @@ export function savePersistedState(state: AppState): void {
       title: scrubSecrets(c.title),
       messages: c.messages.map(m => ({ ...m, content: scrubSecrets(m.content) })),
     })),
+    conversationExtras: state.conversationExtras,
+    messageFeedback: state.messageFeedback,
     activeConversationId: null,
     workspaces: state.workspaces,
     projectRoot: state.projectRoot,
@@ -1393,12 +1506,58 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       });
       return changed ? { ...state, conversations } : state;
     }
+    case 'PIN_CONVERSATION':
+      return { ...state, conversationExtras: pinConversation(state.conversationExtras, action.payload) };
+    case 'UNPIN_CONVERSATION':
+      return { ...state, conversationExtras: unpinConversation(state.conversationExtras, action.payload) };
+    case 'ARCHIVE_CONVERSATION':
+      return { ...state, conversationExtras: archiveConversation(state.conversationExtras, action.payload) };
+    case 'UNARCHIVE_CONVERSATION':
+      return { ...state, conversationExtras: unarchiveConversation(state.conversationExtras, action.payload) };
+    case 'SET_CONVERSATION_MODEL': {
+      // The allowlist is the configured models only — an unknown id is rejected
+      // and the old value stays, so a stale pick can never point a run nowhere.
+      const allowed = state.providers.map((provider) => provider.model);
+      const result = setPerChatModel(state.conversationExtras, action.payload.id, action.payload.model, allowed);
+      return result.ok ? { ...state, conversationExtras: result.extras } : state;
+    }
+    case 'SET_MESSAGE_FEEDBACK': {
+      // Toggle: voting the same way again clears the vote; a different vote
+      // switches it. A null vote clears it outright.
+      const vote = action.payload.vote;
+      const next =
+        vote === null
+          ? setFeedback(state.messageFeedback, action.payload.messageId, null)
+          : toggleFeedback(state.messageFeedback, action.payload.messageId, vote);
+      return { ...state, messageFeedback: next };
+    }
+    case 'EDIT_AND_RESEND': {
+      const active = state.conversations.find((c) => c.id === state.activeConversationId);
+      if (active === undefined) return state;
+      const result = editAndResend(active.messages, action.payload.messageId, action.payload.newText);
+      if (!result.ok) return state;
+      const conversations = state.conversations.map((c) =>
+        c.id === active.id ? { ...c, messages: result.messages, updatedAt: Date.now() } : c,
+      );
+      return { ...state, conversations, chatMessages: result.messages };
+    }
     case 'SET_THINKING':
       return { ...state, isThinking: action.payload.isThinking, thinkingStage: action.payload.stage || '' };
     case 'SET_CONVERSATION': {
       const conversation = state.conversations.find(c => c.id === action.payload);
       if (!conversation) return { ...state, activeConversationId: action.payload };
       return { ...state, activeConversationId: conversation.id, chatMessages: conversation.messages };
+    }
+    case 'IMPORT_CONVERSATION': {
+      const imported = action.payload;
+      // A duplicate id (the same file imported twice) gets a fresh id; the messages
+      // are capped like any conversation, and the import becomes the active one.
+      const id = state.conversations.some(c => c.id === imported.id)
+        ? `conv-import-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+        : imported.id;
+      const conversation: Conversation = { ...imported, id, messages: imported.messages.slice(-MAX_MESSAGES_PER_CONVERSATION) };
+      const conversations = [conversation, ...state.conversations].slice(0, MAX_CONVERSATIONS);
+      return { ...state, conversations, activeConversationId: id, chatMessages: conversation.messages };
     }
     case 'OPEN_SETTINGS':
       return { ...state, settingsOpen: true, settingsTab: action.payload ?? state.settingsTab };
@@ -1414,6 +1573,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       next.maxIterations = Math.min(100, Math.max(4, Math.round(next.maxIterations || DEFAULT_AGENT_PREFS.maxIterations)));
       next.maxUsd = Math.min(100, Math.max(0.05, Number(next.maxUsd) || DEFAULT_AGENT_PREFS.maxUsd));
       if (!AGENT_MODES.includes(next.mode)) next.mode = DEFAULT_AGENT_PREFS.mode;
+      if (!AGENT_SPEEDS.includes(next.speed)) next.speed = DEFAULT_AGENT_PREFS.speed;
       return { ...state, agentPrefs: next };
     }
     case 'OPEN_PALETTE':

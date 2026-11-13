@@ -101,7 +101,7 @@ function noop(): void {}
 
 /** The 16 ANSI colours on the dark background. */
 const DARK_ANSI = {
-  black: '#1e1e1e',
+  black: '#222222',
   red: '#ef4444',
   green: '#22c55e',
   yellow: '#eab308',
@@ -144,11 +144,11 @@ export function terminalTheme(read: (name: string) => string = cssVariable, sche
   const v = (name: string, fallback: string) => read(name).trim() || fallback
   const light = scheme === 'light'
   return {
-    background: v('--bg-primary', light ? '#ffffff' : '#121212'),
-    foreground: v('--text-primary', light ? '#1f1f1f' : '#f5f5f5'),
-    cursor: v('--accent', '#f97316'),
-    cursorAccent: v('--bg-primary', light ? '#ffffff' : '#121212'),
-    selectionBackground: light ? 'rgba(234, 88, 12, 0.22)' : 'rgba(249, 115, 22, 0.35)',
+    background: v('--bg-primary', light ? '#ffffff' : '#141414'),
+    foreground: v('--text-primary', light ? '#1f1f1f' : '#eeeeec'),
+    cursor: v('--accent', '#f58a50'),
+    cursorAccent: v('--bg-primary', light ? '#ffffff' : '#141414'),
+    selectionBackground: light ? 'rgba(234, 88, 12, 0.22)' : 'rgba(245, 138, 80, 0.35)',
     ...(light ? LIGHT_ANSI : DARK_ANSI),
   }
 }

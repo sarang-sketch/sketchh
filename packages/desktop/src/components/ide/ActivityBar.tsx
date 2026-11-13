@@ -43,6 +43,10 @@ import {
   Database,
   Users,
   Clock,
+  Shield,
+  Eye,
+  Globe,
+  Bug,
   MoreHorizontal,
   X,
 } from '../Icons';
@@ -83,6 +87,12 @@ const SECONDARY: ActivityItem[] = [
   { id: 'agents', icon: Users, label: 'AI Team', hint: 'Strategies, roles and grading' },
   { id: 'team', icon: Layers, label: 'Build Team', hint: 'Frontend, backend and database chats' },
   { id: 'mcp', icon: Server, label: 'MCP Tools', hint: 'Curated servers and what they need' },
+  { id: 'rescue', icon: Shield, label: 'Project Rescue', hint: 'Health findings for the open files' },
+  { id: 'ui-doctor', icon: Eye, label: 'UI Doctor', hint: 'Accessibility and markup checks on this page' },
+  { id: 'api-lab', icon: Globe, label: 'API Lab', hint: 'Send real HTTP requests' },
+  { id: 'hooks', icon: Zap, label: 'Hooks', hint: 'Local commands that run around tools' },
+  { id: 'debugger', icon: Bug, label: 'Debugger', hint: 'Breakpoints and inspector launch — no stepping yet' },
+  { id: 'briefing', icon: Clock, label: 'Daily briefing', hint: 'Runs, costs, tasks and chats for today' },
 ];
 
 export default function ActivityBar() {

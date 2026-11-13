@@ -403,7 +403,7 @@ describe('the terminal palette', () => {
   it("follows the window's CSS variables and falls back when they are missing", () => {
     const theme = terminalTheme((name) => (name === '--bg-primary' ? '#000011' : ''))
     expect(theme.background).toBe('#000011')
-    expect(theme.foreground).toBe('#f5f5f5')
+    expect(theme.foreground).toBe('#eeeeec')
   })
 
   it('has colours that read on white in the light theme', () => {

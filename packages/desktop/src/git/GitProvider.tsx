@@ -57,6 +57,8 @@ export interface GitState {
   unstage(paths: string[]): Promise<void>
   /** Resolves true when the commit was made. */
   commit(message: string): Promise<boolean>
+  /** Start tracking this folder with `git init`. Resolves true when it worked. */
+  init(): Promise<boolean>
   /** A unified diff for one path. Rejects nothing: a failure lands in `error`. */
   diff(params: { path?: string; staged?: boolean }): Promise<string | null>
   /** Throw away working-tree edits to tracked files. */
@@ -237,6 +239,14 @@ export function GitProvider({ children }: { children: ReactNode }) {
       },
       commit: async (message) =>
         mutate(async (root) => (await client.gitCommit({ root, message })).status),
+      init: async () => {
+        const call = client.gitInit
+        if (call === undefined) {
+          setError('this transport cannot initialise a repository')
+          return false
+        }
+        return mutate((root) => call.call(client, { root }))
+      },
       diff: async ({ path, staged }) => {
         const root = projectRoot
         if (root === null) return null

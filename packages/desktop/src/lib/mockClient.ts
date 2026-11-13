@@ -267,6 +267,10 @@ export class MockSketchClient implements SketchClient {
     return this.noRepository('git-commit')
   }
 
+  async gitInit(): Promise<never> {
+    return this.noRepository('git-init')
+  }
+
   // ── provider settings ─────────────────────────────────────────────────────
   //
   // Same rule as git: no engine, no answer, and it says so. Returning a fabricated

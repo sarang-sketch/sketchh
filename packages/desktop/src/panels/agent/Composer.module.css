@@ -6,12 +6,63 @@
 
 .modeGroup {
   display: inline-flex;
+  /* The mode pills read left to right, always: an ancestor's direction or a
+   * flex reversal must never flip Ask / Agent / Auto. */
+  flex-direction: row;
+  direction: ltr;
   align-items: center;
   gap: 2px;
   padding: 2px;
   border: 1px solid var(--border, #262626);
   border-radius: 999px;
-  background: var(--bg-secondary, #171717);
+  background: var(--bg-secondary, #191919);
+}
+
+/* Normal / Turbo speed. Same shape as the mode pills, same left-to-right rule:
+ * Normal first, Turbo second, in DOM order and in sight. */
+.speedGroup {
+  display: inline-flex;
+  flex-direction: row;
+  direction: ltr;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border, #262626);
+  border-radius: 999px;
+  background: var(--bg-secondary, #191919);
+}
+
+.speedBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--text-muted, #737373);
+  padding: 4px 9px;
+  border-radius: 999px;
+  transition: background 0.15s ease, color 0.15s ease;
+  white-space: nowrap;
+}
+
+.speedBtn:hover {
+  color: var(--text-primary, #f5f5f5);
+}
+
+.speedBtn:focus-visible {
+  outline: 2px solid var(--accent, #f58a50);
+  outline-offset: 1px;
+}
+
+.speed_normal {
+  color: var(--accent);
+  background: var(--accent-subtle);
+}
+
+.speed_turbo {
+  color: #fff;
+  background: var(--accent-fill);
+  font-weight: 600;
 }
 
 .modeBtn {
@@ -31,7 +82,7 @@
 }
 
 .modeBtn:focus-visible {
-  outline: 2px solid var(--accent, #f97316);
+  outline: 2px solid var(--accent, #f58a50);
   outline-offset: 1px;
 }
 

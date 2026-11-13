@@ -42,6 +42,7 @@ import {
   rejectedPayload,
 } from '../review/proposals'
 import { useAppDispatch, useAppState, type AgentPrefs, type AppState, type ChatMessage } from '../state/AppState'
+import { editAndResend, getExtras } from '../state/conversationExtras'
 import { useOptionalEventPublisher, useSketchClient, useSketchEvents } from './ClientProvider'
 import type { RunOptions } from './client'
 import type { SketchEvent } from './contracts'
@@ -76,6 +77,12 @@ export interface SendOptions {
   display?: string
   /** Run this one message in a different mode (e.g. `/review` is always read-only). */
   mode?: AgentPrefs['mode']
+  /**
+   * History to send instead of the live transcript. Edit-and-resend uses it:
+   * the reducer replaces the messages a tick later, and a run started in the
+   * same tick must see the edited history, not the stale one.
+   */
+  history?: ChatMessage[]
 }
 
 export interface AgentSessionValue {
@@ -105,6 +112,13 @@ export interface AgentSessionValue {
    * second concurrent run or an empty one.
    */
   retry(message: ChatMessage): void
+  /**
+   * Edit one of your messages and re-run from it. The message is replaced and
+   * everything after it is dropped (see `EDIT_AND_RESEND`), then ONE fresh run
+   * starts from the edited text without adding a second copy of it to the
+   * transcript. A no-op while a run is in flight or when the edit is rejected.
+   */
+  resendEdited(messageId: string, newText: string): void
   /** The user prompt that a given agent reply answered, or null when none is found. */
   promptBehind(message: ChatMessage): string | null
   approve(decision: ApprovalDecision): void
@@ -125,19 +139,24 @@ export const AUTO_CONTINUE_LIMIT = 2
 /**
  * The run options a mode implies. One function, so the composer's label and what the
  * engine is actually asked to do cannot drift apart.
+ *
+ * Speed caps the run, whatever the mode: Turbo keeps Ask/Agent at 10 turns and Auto
+ * at 20, instead of the configured (or Auto's minimum 50) turn count. It never
+ * changes the model or the permissions — only how long the run may go on.
  */
 export function modeRunOptions(prefs: AgentPrefs): RunOptions {
+  const cap = (base: number) => (prefs.speed === 'turbo' ? Math.min(base, prefs.mode === 'auto' ? 20 : 10) : base)
   switch (prefs.mode) {
     case 'ask':
       // Read-only in the ENGINE; no command tool; nothing to verify because nothing changes.
-      return { readOnly: true, reviewEdits: false, maxIterations: prefs.maxIterations }
+      return { readOnly: true, reviewEdits: false, maxIterations: cap(prefs.maxIterations) }
     case 'auto': {
       const maxIterations = Math.max(prefs.maxIterations, 50)
       return {
         commands: 'auto',
         autonomous: true,
         reviewEdits: false,
-        maxIterations,
+        maxIterations: cap(maxIterations),
         ...(prefs.verifyChanges ? { verifyPolicy: true } : {}),
       }
     }
@@ -146,13 +165,20 @@ export function modeRunOptions(prefs: AgentPrefs): RunOptions {
       return {
         commands: 'ask',
         reviewEdits: !prefs.autoApply,
-        maxIterations: prefs.maxIterations,
+        maxIterations: cap(prefs.maxIterations),
         // Checking proposals that were never written would test the old code, so the
         // project's checks run only for edits the run actually applied.
         ...(prefs.autoApply && prefs.verifyChanges ? { verifyPolicy: true } : {}),
       }
   }
 }
+
+/** How many turns of history a run is given: Normal reads more, Turbo reads less. */
+export const NORMAL_MAX_TURNS = 12
+export const TURBO_MAX_TURNS = 6
+/** The token budget a run is given: Turbo is lighter as well as shorter. */
+export const NORMAL_MAX_TOKENS = 400_000
+export const TURBO_MAX_TOKENS = 150_000
 
 /** A typed answer to an approval: anything that is not clearly a yes is a no. */
 export function parseApprovalText(text: string): ApprovalDecision {
@@ -188,13 +214,13 @@ function messageOf(err: unknown): string {
 }
 
 /** The conversation so far, as plain turns: user prompts and agent replies only. */
-export function historyFrom(messages: readonly ChatMessage[]): Array<{ role: 'user' | 'assistant'; content: string }> {
+export function historyFrom(messages: readonly ChatMessage[], maxTurns: number = NORMAL_MAX_TURNS): Array<{ role: 'user' | 'assistant'; content: string }> {
   const turns: Array<{ role: 'user' | 'assistant'; content: string }> = []
   for (const message of messages) {
     if (message.role === 'system' || message.content.trim() === '') continue
     turns.push({ role: message.role === 'user' ? 'user' : 'assistant', content: message.content })
   }
-  return turns.slice(-12)
+  return turns.slice(-maxTurns)
 }
 
 /** Why a send would not work, judged from state alone. */
@@ -330,15 +356,23 @@ export function AgentSessionProvider({ children }: { children: ReactNode }) {
         say('system', 'The selected model is no longer configured. Pick another one, or connect a model.')
         return
       }
+      // Per-chat model wins over the global pick: a conversation with its own
+      // model runs on it, anything else falls back to the global model.
+      const active = snapshot.conversations.find((c) => c.id === snapshot.activeConversationId)
+      const chatModel = active !== undefined ? getExtras(snapshot.conversationExtras, active.id).model ?? null : null
+      const effectiveModel = chatModel ?? snapshot.selectedModel
       // The picker can choose a different model of the same provider for this run.
       const provider =
         selected === undefined
           ? undefined
-          : snapshot.selectedModel !== null && snapshot.selectedModel !== selected.model
-            ? { ...selected, model: snapshot.selectedModel }
+          : effectiveModel !== null && effectiveModel !== selected.model
+            ? { ...selected, model: effectiveModel }
             : selected
 
-      const history = historyFrom(snapshot.chatMessages)
+      const history = historyFrom(
+        options.history ?? snapshot.chatMessages,
+        snapshot.agentPrefs.speed === 'turbo' ? TURBO_MAX_TURNS : NORMAL_MAX_TURNS,
+      )
       const attached = (options.files ?? []).filter((path) => path.trim() !== '')
       const fullPrompt =
         attached.length === 0
@@ -361,7 +395,6 @@ export function AgentSessionProvider({ children }: { children: ReactNode }) {
       // Composer's guard), so it never reaches here with a wrong root. With no active
       // conversation root, or none inside the workspace, the run uses the workspace root.
       const workspaceRoot = snapshot.projectRoot
-      const active = snapshot.conversations.find((c) => c.id === snapshot.activeConversationId)
       const convRoot = active?.root ? canonicalPath(active.root) : null
       // A conversation rooted INSIDE the workspace runs against its own root; anything
       // else (none, or outside) runs against the workspace root. A conversation rooted
@@ -405,11 +438,13 @@ export function AgentSessionProvider({ children }: { children: ReactNode }) {
               ...(root !== undefined ? { root } : {}),
               ...mode,
               maxIterations,
-              budget: { maxCalls: Math.max(40, maxIterations + 10), maxTokens: 400_000, maxUsd: prefs.maxUsd, onBreach: 'stop' },
+              budget: { maxCalls: Math.max(40, maxIterations + 10), maxTokens: prefs.speed === 'turbo' ? TURBO_MAX_TOKENS : NORMAL_MAX_TOKENS, maxUsd: prefs.maxUsd, onBreach: 'stop' },
               ...(history.length > 0 ? { history } : {}),
               // The user's own MCP servers they switched on for chats. The engine still
               // refuses an unapproved project server and every server in Offline Mode.
               ...(prefs.mcpServers !== undefined && prefs.mcpServers.length > 0 ? { userMcpServers: prefs.mcpServers } : {}),
+              // Hooks, only when the user enabled them through the Hooks panel.
+              ...(prefs.hooksEnabled === true ? { hooksEnabled: true } : {}),
             }),
           ),
         )
@@ -533,6 +568,34 @@ export function AgentSessionProvider({ children }: { children: ReactNode }) {
       send(prompt)
     },
     [promptBehind, say, send],
+  )
+
+  const resendEdited = useCallback(
+    (messageId: string, newText: string) => {
+      // Never start a second concurrent run.
+      if (activeRef.current !== null) return
+      const snapshot = latest.current
+      const active = snapshot.conversations.find((c) => c.id === snapshot.activeConversationId)
+      if (active === undefined) return
+      const result = editAndResend(active.messages, messageId, newText)
+      if (!result.ok) {
+        say('system', result.reason)
+        return
+      }
+      const blocked = sendBlocker(snapshot)
+      if (blocked !== null) {
+        say('system', blocked.reason)
+        if (blocked.action === 'connect') dispatch({ type: 'OPEN_CONNECT' })
+        return
+      }
+      dispatch({ type: 'EDIT_AND_RESEND', payload: { messageId, newText } })
+      // display: null — the edited message is already in the transcript via
+      // EDIT_AND_RESEND, so the run must not add a second copy of it. The
+      // history override is the edited list: the reducer's state update lands
+      // a tick later, and this run must not see the stale transcript.
+      startRun(newText, null, { history: result.messages }, 0)
+    },
+    [dispatch, say, startRun],
   )
 
   /** Re-read open, unedited buffers after files changed on disk underneath them. */
@@ -671,8 +734,8 @@ export function AgentSessionProvider({ children }: { children: ReactNode }) {
   const blocker = sendBlocker(state)
 
   const value = useMemo<AgentSessionValue>(
-    () => ({ activeRunId, pendingQuestion, pendingApproval, liveEvents, blocker, send, retry, promptBehind, wasStopped, approve, stop, undo, acceptProposals, rejectProposals }),
-    [activeRunId, pendingQuestion, pendingApproval, liveEvents, blocker, send, retry, promptBehind, wasStopped, approve, stop, undo, acceptProposals, rejectProposals],
+    () => ({ activeRunId, pendingQuestion, pendingApproval, liveEvents, blocker, send, retry, resendEdited, promptBehind, wasStopped, approve, stop, undo, acceptProposals, rejectProposals }),
+    [activeRunId, pendingQuestion, pendingApproval, liveEvents, blocker, send, retry, resendEdited, promptBehind, wasStopped, approve, stop, undo, acceptProposals, rejectProposals],
   )
 
   return <AgentSessionContext.Provider value={value}>{children}</AgentSessionContext.Provider>
