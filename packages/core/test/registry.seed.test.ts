@@ -13,8 +13,10 @@
 //    installer, into a real temp project, verified against the real committed
 //    digests, read back by the real loader.
 //
-// Requirement 11.3 asks for six specific packs. The last test asserts every pack
-// is represented, so "we shipped a registry" cannot mean "we shipped one skill".
+// Requirement 11.3 asks for six specific packs (a seventh, `egm`, was added
+// later for Google's Elephant-Goldfish Model). The last test asserts every
+// pack is represented, so "we shipped a registry" cannot mean "we shipped
+// one skill".
 //
 // Validates: Requirements 11.1, 11.2, 11.3, 11.4
 
@@ -94,7 +96,7 @@ describe('the committed manifest is current', () => {
 })
 
 describe('the seeded skills (Requirement 11.3)', () => {
-  it('covers all six packs', async () => {
+  it('covers every pack', async () => {
     const { manifest } = await loadManifest(REGISTRY_DIR)
     const packs = new Set(manifest.entries.map((entry) => entry.pack))
     for (const pack of SKILL_PACKS) {

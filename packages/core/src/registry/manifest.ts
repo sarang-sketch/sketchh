@@ -39,7 +39,9 @@ export const MANIFEST_VERSION = 1
 /** Filename of the pinned manifest inside a registry directory. */
 export const MANIFEST_FILENAME = 'registry.json'
 
-/** The six packs Requirement 11.3 names. `pack` is a curation label, not a scope. */
+/** The six packs Requirement 11.3 names, plus the `egm` pack (Google's
+ * Elephant-Goldfish Model, added 2026-11-13). `pack` is a curation label, not
+ * a scope. */
 export const SKILL_PACKS = [
   'context-packing',
   'web-data',
@@ -47,6 +49,7 @@ export const SKILL_PACKS = [
   'frontend-design',
   'research',
   'finance-quant',
+  'egm',
 ] as const
 
 export type SkillPack = (typeof SKILL_PACKS)[number]

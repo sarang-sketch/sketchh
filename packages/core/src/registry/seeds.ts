@@ -1,4 +1,6 @@
-// The seeded curated registry: six packs, six skills, all local-only.
+// The seeded curated registry: six packs, six skills, all local-only — plus
+// the EGM pack below (seven skills, also local-only, Apache-2.0, adapted from
+// Google's elephant-goldfish-model; see the EGM entries).
 //
 // ── WHY THESE ARE WRITTEN HERE AND NOT VENDORED ─────────────────────────────
 //
@@ -54,6 +56,25 @@ export const SEED_REGISTRY_DIR = 'registry'
  *
  * `version` is `1.0.0` across the board because they are published together for
  * the first time; they version independently from here.
+ *
+ * ── THE EGM PACK (added 2026-11-13) ─────────────────────────────────────────
+ *
+ * Seven more seeds, one per skill of Google's Elephant-Goldfish Model (EGM):
+ * brainstorm, draft, review, resolve, bootstrap, drift-report, review-loop.
+ * They are ADAPTED, not vendored verbatim: the prompts were rewritten for
+ * Sketch's mechanics (slash commands, fresh review sessions, `docs/designs/`)
+ * while keeping EGM's workflow, file conventions, and the Goldfish
+ * fresh-context rule. Each SKILL.md carries its attribution header (Apache-2.0,
+ * https://github.com/google/elephant-goldfish-model, upstream commit
+ * 270b10326bf366d823bc76fd662cf83808d5781e). `source` is `egm` so the catalog
+ * can tell adapted third-party skills from Sketch-written ones; `license`
+ * stays Apache-2.0, which is EGM's license.
+ *
+ * Grants are the same minimum the frontmatter asks for, asserted by the seed
+ * test. All seven read the project and write design/review artifacts inside
+ * it (`fs:read:project`, `fs:write:project`); brainstorm and draft also read
+ * git config for the document author (`git:read`). None holds a sensitive
+ * capability: no home-directory access, no process spawn, no credential read.
  */
 export const SEED_SKILLS: readonly SeedMetadata[] = [
   {
@@ -129,6 +150,80 @@ export const SEED_SKILLS: readonly SeedMetadata[] = [
     path: 'skills/finance-quant',
     capabilities: ['fs:read:project'],
     source: 'sketch',
+    license: 'Apache-2.0',
+  },
+  // ── EGM pack ──────────────────────────────────────────────────────────────
+  // Adapted from Google's elephant-goldfish-model (Apache-2.0). See the header
+  // comment on SEED_SKILLS above for provenance and the per-skill attribution
+  // in each SKILL.md.
+  {
+    name: 'egm-brainstorm',
+    version: '1.0.0',
+    pack: 'egm',
+    summary: 'Test an idea with clarifying questions and a fresh-eyes Goldfish review, and save the agreed direction as concepts_brief.md.',
+    path: 'skills/egm-brainstorm',
+    capabilities: ['fs:read:project', 'fs:write:project', 'git:read'],
+    source: 'egm',
+    license: 'Apache-2.0',
+  },
+  {
+    name: 'egm-draft',
+    version: '1.0.0',
+    pack: 'egm',
+    summary: 'Turn a concept brief or notes into a design document, section by section, pausing for approval after each section.',
+    path: 'skills/egm-draft',
+    capabilities: ['fs:read:project', 'fs:write:project', 'git:read'],
+    source: 'egm',
+    license: 'Apache-2.0',
+  },
+  {
+    name: 'egm-review',
+    version: '1.0.0',
+    pack: 'egm',
+    summary: 'Review a design document with fresh-eyes Goldfish reviewers across five stages, in a fresh session with no prior chat history.',
+    path: 'skills/egm-review',
+    capabilities: ['fs:read:project', 'fs:write:project'],
+    source: 'egm',
+    license: 'Apache-2.0',
+  },
+  {
+    name: 'egm-resolve',
+    version: '1.0.0',
+    pack: 'egm',
+    summary: 'Work through Goldfish review findings — contest, escalate, propose fixes, or decline — and write goldfish_review_report.md.',
+    path: 'skills/egm-resolve',
+    capabilities: ['fs:read:project', 'fs:write:project'],
+    source: 'egm',
+    license: 'Apache-2.0',
+  },
+  {
+    name: 'egm-bootstrap',
+    version: '1.0.0',
+    pack: 'egm',
+    summary: 'Document an existing codebase bottom-up — a README contract per directory, rolled up into parent blueprints — without changing any code.',
+    path: 'skills/egm-bootstrap',
+    capabilities: ['fs:read:project', 'fs:write:project'],
+    source: 'egm',
+    license: 'Apache-2.0',
+  },
+  {
+    name: 'egm-drift-report',
+    version: '1.0.0',
+    pack: 'egm',
+    summary: 'Compare design documents in a directory with the current source code and report where they diverge.',
+    path: 'skills/egm-drift-report',
+    capabilities: ['fs:read:project', 'fs:write:project'],
+    source: 'egm',
+    license: 'Apache-2.0',
+  },
+  {
+    name: 'egm-review-loop',
+    version: '1.0.0',
+    pack: 'egm',
+    summary: 'Run a configured group of Goldfish reviewers against a document, resolve the findings, and repeat until the review converges.',
+    path: 'skills/egm-review-loop',
+    capabilities: ['fs:read:project', 'fs:write:project'],
+    source: 'egm',
     license: 'Apache-2.0',
   },
 ]

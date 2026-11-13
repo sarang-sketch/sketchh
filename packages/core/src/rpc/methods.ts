@@ -75,6 +75,7 @@ import {
 import type { RegistryManifest } from '../registry/index.js'
 import { materializeEmbeddedRegistry } from '../registry/materialize.js'
 import { runTask } from '../loop/index.js'
+import { buildGoldfishContext } from '../egm/index.js'
 import { DiskFileWriter, SnapshottingFileWriter, restoreSnapshot } from '../orchestrator/file-writer.js'
 import { PlanWriter } from '../plan/index.js'
 import {
@@ -3351,6 +3352,26 @@ async function skillsCatalog(params: Record<string, unknown>, ctx: MethodContext
 }
 
 /**
+ * The Goldfish context for an EGM review: the target document plus the files
+ * it links to inside the project — and nothing else. Read-only.
+ *
+ * This is the deterministic half of the Goldfish fresh-context rule. The
+ * other half is the session: a review run starts with an empty history (the
+ * EGM panel sends it with `history: []`), so the reviewers never see the
+ * drafting conversation. This method lets the panel show the user, before a
+ * review runs, exactly what the reviewers will see — and that
+ * `priorChatTurns` is 0. A missing target or a target outside the project
+ * returns `{ ok: false, error }` rather than an empty context: a review of
+ * nothing is not a review.
+ */
+async function egmGoldfishContext(params: Record<string, unknown>, ctx: MethodContext): Promise<unknown> {
+  const root = resolve(optionalString(params, 'root', 'params.root') ?? ctx.cwd())
+  const target = readString(params, 'target', 'params.target')
+  const extraContext = optionalStringArray(params['extraContext'], 'params.extraContext')
+  return buildGoldfishContext({ projectRoot: root, targetFile: target, extraContext })
+}
+
+/**
  * Install one pinned skill into a project. Verifies first; refuses on mismatch.
  *
  * There is no `force`. An escape hatch on the hash check is the same thing as not
@@ -4243,6 +4264,9 @@ export const METHODS: Readonly<Record<string, MethodHandler>> = {
   'skill-uninstall': skillUninstall,
   'skill-train': skillTrain,
   'skill-promote': skillPromote,
+  // EGM (Elephant-Goldfish Model): the Goldfish context for a review — the
+  // target document plus its linked files, no chat history. Read-only.
+  'egm-goldfish-context': egmGoldfishContext,
   // Task 7.3's curated MCP layer. READ-ONLY: this reports what the catalog offers and
   // what each entry is missing. Nothing here starts a server — that happens inside a
   // run, from `params.mcpServers`, and only for a capability the run's grant covers.

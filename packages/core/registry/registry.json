@@ -45,6 +45,155 @@
       ]
     },
     {
+      "name": "egm-bootstrap",
+      "version": "1.0.0",
+      "pack": "egm",
+      "summary": "Document an existing codebase bottom-up — a README contract per directory, rolled up into parent blueprints — without changing any code.",
+      "path": "skills/egm-bootstrap",
+      "digest": "sha256:13f485c3f1e6dab7add636c41b33111f319bc56f76241c271bfbd9abe63a50e2",
+      "capabilities": [
+        "fs:read:project",
+        "fs:write:project"
+      ],
+      "source": "egm",
+      "license": "Apache-2.0",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "digest": "sha256:4b100b5ab3c4a0c32f55d1a76c04b2d604404e821117d4ad01cd3276bb2470bc",
+          "bytes": 4376
+        }
+      ]
+    },
+    {
+      "name": "egm-brainstorm",
+      "version": "1.0.0",
+      "pack": "egm",
+      "summary": "Test an idea with clarifying questions and a fresh-eyes Goldfish review, and save the agreed direction as concepts_brief.md.",
+      "path": "skills/egm-brainstorm",
+      "digest": "sha256:eeabbfaa5af23e5ea2f1c8b9389486b3d9b52dcb27553b52b0e55a58ec6d66c1",
+      "capabilities": [
+        "fs:read:project",
+        "fs:write:project",
+        "git:read"
+      ],
+      "source": "egm",
+      "license": "Apache-2.0",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "digest": "sha256:fa0e65005a31c194f93ab6414094d1d7f7af39baed6ef3469779f508f363c110",
+          "bytes": 5472
+        }
+      ]
+    },
+    {
+      "name": "egm-draft",
+      "version": "1.0.0",
+      "pack": "egm",
+      "summary": "Turn a concept brief or notes into a design document, section by section, pausing for approval after each section.",
+      "path": "skills/egm-draft",
+      "digest": "sha256:211c4dffacd8ba71ade6ae0b58b794c26ee68e8def0ae2d9f4d5a8ee7d4a98ad",
+      "capabilities": [
+        "fs:read:project",
+        "fs:write:project",
+        "git:read"
+      ],
+      "source": "egm",
+      "license": "Apache-2.0",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "digest": "sha256:2dd1911e6cb8db59cda4609e054de484e3435895e38f728987bee3227337f198",
+          "bytes": 5857
+        }
+      ]
+    },
+    {
+      "name": "egm-drift-report",
+      "version": "1.0.0",
+      "pack": "egm",
+      "summary": "Compare design documents in a directory with the current source code and report where they diverge.",
+      "path": "skills/egm-drift-report",
+      "digest": "sha256:77d07c6a9d744e0398c2aef022f2e3a6ac63460817140789b9a45c89186881ad",
+      "capabilities": [
+        "fs:read:project",
+        "fs:write:project"
+      ],
+      "source": "egm",
+      "license": "Apache-2.0",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "digest": "sha256:db9781d085cf98213231e05e683aae71e23c1473cf953a26b896cbde5681d5f2",
+          "bytes": 3146
+        }
+      ]
+    },
+    {
+      "name": "egm-resolve",
+      "version": "1.0.0",
+      "pack": "egm",
+      "summary": "Work through Goldfish review findings — contest, escalate, propose fixes, or decline — and write goldfish_review_report.md.",
+      "path": "skills/egm-resolve",
+      "digest": "sha256:4d09d0d294d885c7631d9d77e08b51c2a4d995c3b75c8134731a4e0bda527ce3",
+      "capabilities": [
+        "fs:read:project",
+        "fs:write:project"
+      ],
+      "source": "egm",
+      "license": "Apache-2.0",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "digest": "sha256:1b580fc0eeb97dd0c58eb6556e14dbc0a969aacc99e494474a36adb50672d9c9",
+          "bytes": 5170
+        }
+      ]
+    },
+    {
+      "name": "egm-review",
+      "version": "1.0.0",
+      "pack": "egm",
+      "summary": "Review a design document with fresh-eyes Goldfish reviewers across five stages, in a fresh session with no prior chat history.",
+      "path": "skills/egm-review",
+      "digest": "sha256:ba784f3f32dc797eb5721b50aa91ecb3580684440443043d9da236c9e7f9083f",
+      "capabilities": [
+        "fs:read:project",
+        "fs:write:project"
+      ],
+      "source": "egm",
+      "license": "Apache-2.0",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "digest": "sha256:93464a8a8b5d641a79faff2f88f4b06fe05e53fd3c930049b881207fc6818394",
+          "bytes": 7187
+        }
+      ]
+    },
+    {
+      "name": "egm-review-loop",
+      "version": "1.0.0",
+      "pack": "egm",
+      "summary": "Run a configured group of Goldfish reviewers against a document, resolve the findings, and repeat until the review converges.",
+      "path": "skills/egm-review-loop",
+      "digest": "sha256:ec9efe3551b44a70fa8389b6c8b1b154a669091ddcb16b52f72782f0eef62a0c",
+      "capabilities": [
+        "fs:read:project",
+        "fs:write:project"
+      ],
+      "source": "egm",
+      "license": "Apache-2.0",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "digest": "sha256:e92d9bdc9c9d73412e7a7d9c35e5efa4188de2292facebfd5becc6b3e76ea54e",
+          "bytes": 5560
+        }
+      ]
+    },
+    {
       "name": "finance-quant",
       "version": "1.0.0",
       "pack": "finance-quant",
