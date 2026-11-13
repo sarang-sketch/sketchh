@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Sketch</string>
+    <string name="title_activity_main">Sketch</string>
+    <string name="package_name">dev.sketch.mobile</string>
+    <string name="custom_url_scheme">dev.sketch.mobile</string>
+</resources>

@@ -31,7 +31,7 @@ export function seedProject(now = Date.now()): MobileFile[] {
       id: newId(),
       path: 'index.html',
       content:
-        '<!doctype html>\n<html>\n  <head><meta charset="utf-8"><title>Hello from Sketch</title></head>\n  <body style="font-family: sans-serif; background: #141414; color: #eeeeec; padding: 24px;">\n    <h1>Hello from Sketch 👋</h1>\n    <p>Edit this file, then open Preview to see it change.</p>\n  </body>\n</html>\n',
+        '<!doctype html>\n<html>\n  <head><meta charset="utf-8"><title>Hello from Sketch</title></head>\n  <body style="font-family: sans-serif; background: #141414; color: #eeeeec; padding: 24px;">\n    <h1>Hello from Sketch</h1>\n    <p>Edit this file, then open Preview to see it change.</p>\n  </body>\n</html>\n',
       updatedAt: now,
     },
     {
@@ -71,9 +71,11 @@ export function saveFiles(files: readonly MobileFile[], storage: Storage = local
   }
 }
 
-/** A new file, named so it never collides with an existing path. */
+/** A new file, named so it never collides with an existing path. A blank
+ *  name creates nothing — the UI never silently creates an "untitled" file. */
 export function createFile(files: readonly MobileFile[], name: string): MobileFile[] {
-  const clean = name.trim().replace(/^\/+/, '') || 'untitled.txt'
+  const clean = name.trim().replace(/^\/+/, '')
+  if (clean === '') return [...files]
   let path = clean
   let n = 2
   while (files.some((f) => f.path === path)) {
@@ -82,6 +84,72 @@ export function createFile(files: readonly MobileFile[], name: string): MobileFi
     n += 1
   }
   return [...files, { id: newId(), path, content: '', updatedAt: Date.now() }]
+}
+
+/** Build the path for a new file: the typed name, with the chosen extension
+ *  added when the name has no extension yet. Returns '' for a blank name. */
+export function buildFilePath(name: string, ext: string): string {
+  const clean = name.trim().replace(/^\/+/, '')
+  if (clean === '') return ''
+  if (/\.[a-z0-9]+$/i.test(clean)) return clean
+  return `${clean}.${ext}`
+}
+
+/** Byte length of a string as UTF-8. */
+export function byteLength(text: string): number {
+  return new TextEncoder().encode(text).length
+}
+
+export function fileBytes(file: MobileFile): number {
+  return byteLength(file.content)
+}
+
+export function fileLines(file: MobileFile): number {
+  return file.content === '' ? 0 : file.content.split('\n').length
+}
+
+/** Human size: 12 B, 1.2 KB, 3.4 MB. */
+export function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+export function formatTokens(tokens: number): string {
+  if (tokens < 1000) return `${tokens}`
+  return `${(tokens / 1000).toFixed(1)}k`
+}
+
+/** Relative time: "just now", "5m ago", "2h ago", "3d ago", or a short date. */
+export function timeAgo(ts: number, now = Date.now()): string {
+  const diff = Math.max(0, now - ts)
+  const minute = 60 * 1000
+  const hour = 60 * minute
+  const day = 24 * hour
+  if (diff < minute) return 'just now'
+  if (diff < hour) return `${Math.floor(diff / minute)}m ago`
+  if (diff < day) return `${Math.floor(diff / hour)}h ago`
+  if (diff < 7 * day) return `${Math.floor(diff / day)}d ago`
+  return new Date(ts).toLocaleDateString()
+}
+
+export interface ProjectStats {
+  files: number
+  lines: number
+  bytes: number
+}
+
+export function projectStats(files: readonly MobileFile[]): ProjectStats {
+  return {
+    files: files.length,
+    lines: files.reduce((sum, f) => sum + fileLines(f), 0),
+    bytes: files.reduce((sum, f) => sum + fileBytes(f), 0),
+  }
+}
+
+/** The starter template: the same three files a fresh project starts with. */
+export function starterFiles(now = Date.now()): MobileFile[] {
+  return seedProject(now)
 }
 
 export function updateFile(files: readonly MobileFile[], id: string, content: string): MobileFile[] {
